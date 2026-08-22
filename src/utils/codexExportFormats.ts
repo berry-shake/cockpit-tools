@@ -1,6 +1,6 @@
 import type { CodexAccount } from '../types/codex';
 
-export type CodexExportFormat = 'cockpit_tools' | 'codex' | 'sub2api' | 'cpa';
+export type CodexExportFormat = 'cockpit_tools' | 'auth_json' | 'sub2api' | 'cpa';
 
 type JsonRecord = Record<string, unknown>;
 const INVALID_FILE_CHARS_REGEX = /[<>:"/\\|?*\x00-\x1F]/g;
@@ -616,7 +616,7 @@ export function transformCodexExportJson(
     );
   }
 
-  if (format === 'codex') {
+  if (format === 'auth_json') {
     if (accounts.length !== 1) {
       throw new Error('Codex auth.json format requires exactly one account per document');
     }
@@ -649,6 +649,9 @@ export function buildCodexExportFileNameBase(
 ): string {
   if (format === 'cockpit_tools') {
     return baseName;
+  }
+  if (format === 'auth_json') {
+    return `${baseName}_auth`;
   }
   return `${baseName}_${format}`;
 }
@@ -686,13 +689,26 @@ export function buildCodexExportContent(
 ): CodexExportContent {
   const fileNameBase = buildCodexExportFileNameBase(baseName, format);
   const accounts = parseCockpitToolsCodexExport(rawJson);
+  const splitPerAccount = format === 'cpa' || format === 'auth_json';
 
-  const usesPerAccountDocuments = format === 'cpa' || format === 'codex';
-  if (!usesPerAccountDocuments || accounts.length <= 1) {
+  if (!splitPerAccount || accounts.length <= 1) {
     return {
       type: 'single',
       fileNameBase,
       jsonContent: transformCodexExportJson(rawJson, format, options),
+    };
+  }
+
+  if (format === 'auth_json') {
+    return {
+      type: 'multiple',
+      fileNameBase,
+      documents: accounts.map((account, index) => ({
+        id: `${account.id || resolveAccountId(account) || 'auth_account'}_${index}`,
+        label: resolveAccountDocumentLabel(account, index),
+        fileNameBase: buildAccountDocumentFileNameBase(fileNameBase, account, index),
+        jsonContent: JSON.stringify(toOfficialCodexAuthStorage(account), null, 2),
+      })),
     };
   }
 
@@ -703,13 +719,7 @@ export function buildCodexExportContent(
       id: `${account.id || resolveAccountId(account) || `${format}_account`}_${index}`,
       label: resolveAccountDocumentLabel(account, index),
       fileNameBase: buildAccountDocumentFileNameBase(fileNameBase, account, index),
-      jsonContent: JSON.stringify(
-        format === 'codex'
-          ? toOfficialCodexAuthStorage(account)
-          : toPortableTokenStorage(account, options),
-        null,
-        2,
-      ),
+      jsonContent: JSON.stringify(toPortableTokenStorage(account, options), null, 2),
     })),
   };
 }
