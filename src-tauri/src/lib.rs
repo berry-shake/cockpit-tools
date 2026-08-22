@@ -26,7 +26,9 @@ pub fn get_app_handle() -> Option<&'static tauri::AppHandle> {
 #[cfg(test)]
 mod tests {
     use super::{
-        should_hide_startup_minimized_window, should_preserve_main_window_for_menu_bar_refresh,
+        should_apply_startup_minimized, should_hide_startup_minimized_window,
+        should_preserve_main_window_for_menu_bar_refresh,
+        should_prevent_exit_after_main_window_destroyed, should_show_macos_dock,
     };
     use crate::modules::config::UserConfig;
 
@@ -49,12 +51,27 @@ mod tests {
     }
 
     #[test]
-    fn startup_minimized_does_not_hide_when_dock_icon_is_available() {
+    fn startup_minimized_hides_on_macos_even_when_dock_icon_is_available() {
         let mut config = UserConfig::default();
         config.startup_minimized = true;
         config.hide_dock_icon = false;
 
-        assert!(!should_hide_startup_minimized_window(&config, true));
+        assert!(should_hide_startup_minimized_window(&config, true));
+    }
+
+    #[test]
+    fn startup_minimized_uses_native_minimize_outside_macos() {
+        let mut config = UserConfig::default();
+        config.startup_minimized = true;
+
+        assert!(!should_hide_startup_minimized_window(&config, false));
+    }
+
+    #[test]
+    fn macos_keeps_main_window_visible_when_tray_creation_fails() {
+        assert!(!should_apply_startup_minimized(false, true));
+        assert!(should_apply_startup_minimized(true, true));
+        assert!(should_apply_startup_minimized(false, false));
     }
 
     #[test]
@@ -80,6 +97,41 @@ mod tests {
     fn menu_bar_refresh_does_not_change_non_macos_close_behavior() {
         assert!(!should_preserve_main_window_for_menu_bar_refresh(
             false, true
+        ));
+    }
+
+    #[test]
+    fn macos_close_to_tray_always_hides_dock() {
+        assert!(!should_show_macos_dock(false, false));
+        assert!(!should_show_macos_dock(false, true));
+    }
+
+    #[test]
+    fn macos_visible_main_window_respects_dock_preference() {
+        assert!(should_show_macos_dock(true, false));
+        assert!(!should_show_macos_dock(true, true));
+    }
+
+    #[test]
+    fn destroyed_tray_window_keeps_alive_only_for_non_programmatic_exit() {
+        assert!(should_prevent_exit_after_main_window_destroyed(
+            None, true, false
+        ));
+        assert!(!should_prevent_exit_after_main_window_destroyed(
+            Some(0),
+            true,
+            false,
+        ));
+        assert!(!should_prevent_exit_after_main_window_destroyed(
+            Some(tauri::RESTART_EXIT_CODE),
+            true,
+            false,
+        ));
+        assert!(!should_prevent_exit_after_main_window_destroyed(
+            None, false, false
+        ));
+        assert!(!should_prevent_exit_after_main_window_destroyed(
+            None, true, true
         ));
     }
 }
@@ -135,7 +187,7 @@ fn should_hide_startup_minimized_window(
     config: &modules::config::UserConfig,
     is_macos: bool,
 ) -> bool {
-    config.startup_minimized && is_macos && config.hide_dock_icon
+    config.startup_minimized && is_macos
 }
 
 fn should_preserve_main_window_for_menu_bar_refresh(
@@ -143,6 +195,14 @@ fn should_preserve_main_window_for_menu_bar_refresh(
     menu_bar_quota_enabled: bool,
 ) -> bool {
     is_macos && menu_bar_quota_enabled
+}
+
+fn should_apply_startup_minimized(tray_created: bool, is_macos: bool) -> bool {
+    tray_created || !is_macos
+}
+
+fn should_show_macos_dock(main_window_visible: bool, hide_dock_icon: bool) -> bool {
+    main_window_visible && !hide_dock_icon
 }
 
 fn apply_startup_minimized(app: &tauri::AppHandle) {
@@ -158,43 +218,68 @@ fn apply_startup_minimized(app: &tauri::AppHandle) {
     };
 
     let (result, action_label) = if should_hide {
-        (window.hide(), "隐藏")
+        let native_window = window.as_ref().window();
+        (
+            modules::floating_card_window::hide_main_window_to_tray(&native_window),
+            "静默隐藏到状态栏",
+        )
     } else {
-        (window.minimize(), "最小化")
+        (window.minimize().map_err(|err| err.to_string()), "最小化")
     };
 
     match result {
         Ok(()) => logger::log_info(&format!("[Window] 启动后已自动{}主窗口", action_label)),
-        Err(err) => logger::log_warn(&format!("[Window] 启动后自动最小化失败: {}", err)),
+        Err(err) => logger::log_warn(&format!("[Window] 启动后自动调整窗口状态失败: {}", err)),
     }
 }
 
+fn should_prevent_exit_after_main_window_destroyed(
+    exit_code: Option<i32>,
+    should_keep_alive: bool,
+    shutdown_started: bool,
+) -> bool {
+    exit_code.is_none() && should_keep_alive && !shutdown_started
+}
+
 #[cfg(target_os = "macos")]
-fn apply_macos_activation_policy(app: &tauri::AppHandle) {
+pub(crate) fn apply_macos_activation_policy_for_window_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    main_window_visible: bool,
+) {
     let config = modules::config::get_user_config();
-    let (policy, dock_visible, policy_label) = if config.hide_dock_icon {
-        (ActivationPolicy::Accessory, false, "hidden")
+    let dock_visible = should_show_macos_dock(main_window_visible, config.hide_dock_icon);
+    let (policy, policy_label) = if dock_visible {
+        (ActivationPolicy::Regular, "visible")
     } else {
-        (ActivationPolicy::Regular, true, "visible")
+        (ActivationPolicy::Accessory, "hidden")
     };
 
     if let Err(err) = app.set_activation_policy(policy) {
         logger::log_warn(&format!("[Window] 设置 macOS 激活策略失败: {}", err));
-        return;
     }
 
     if let Err(err) = app.set_dock_visibility(dock_visible) {
         logger::log_warn(&format!("[Window] 设置 macOS Dock 可见性失败: {}", err));
     }
 
-    if dock_visible {
-        let _ = app.show();
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-        }
-    }
+    info!(
+        "[Window] 已应用 macOS Dock 图标策略: {}, main_window_visible={}",
+        policy_label, main_window_visible
+    );
+}
 
-    info!("[Window] 已应用 macOS Dock 图标策略: {}", policy_label);
+#[cfg(target_os = "macos")]
+pub(crate) fn apply_macos_activation_policy<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let main_window_visible = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+    apply_macos_activation_policy_for_window_state(app, main_window_visible);
+}
+
+#[cfg(target_os = "macos")]
+pub(crate) fn hide_macos_dock_for_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    apply_macos_activation_policy_for_window_state(app, false);
 }
 
 fn handle_zcode_oauth_deep_links(args: &[String]) -> bool {
@@ -291,6 +376,11 @@ pub fn run() {
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
+
+            // Restore geometry before applying the initial window state later in setup.
+            if let Some(main) = app.get_webview_window("main") {
+                modules::main_window_state::restore_to_window(&main);
+            }
 
             if let Err(err) = modules::app_lifecycle::install_system_shutdown_listener() {
                 logger::log_warn(&format!("[Lifecycle] 安装系统关机监听失败: {}", err));
@@ -407,9 +497,6 @@ pub fn run() {
                 });
             }
 
-            #[cfg(target_os = "macos")]
-            apply_macos_activation_policy(&app.handle());
-
             #[cfg(any(windows, target_os = "linux"))]
             {
                 let app_handle = app.handle().clone();
@@ -477,10 +564,24 @@ pub fn run() {
                 });
             }
 
-            // 创建骨架托盘（无账号文件 I/O，秒出）
-            if let Err(e) = modules::tray::create_tray_skeleton(app.handle()) {
-                logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", e));
+            // 创建骨架托盘（无账号文件 I/O，秒出）。macOS 只有在托盘可用后才
+            // 隐藏启动窗口，避免托盘创建失败时留下无法恢复的后台进程。
+            let tray_created = match modules::tray::create_tray_skeleton(app.handle()) {
+                Ok(_) => true,
+                Err(err) => {
+                    logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", err));
+                    false
+                }
+            };
+
+            if should_apply_startup_minimized(tray_created, cfg!(target_os = "macos")) {
+                apply_startup_minimized(&app.handle());
+            } else if modules::config::get_user_config().startup_minimized {
+                logger::log_warn("[Window] 托盘创建失败，保留主窗口以便恢复应用");
             }
+
+            #[cfg(target_os = "macos")]
+            apply_macos_activation_policy(&app.handle());
 
             #[cfg(target_os = "macos")]
             {
@@ -523,12 +624,6 @@ pub fn run() {
                 startup_external_import_handled
             ));
 
-            // Restore last main-window size/position before optional startup minimize (#948 / #1132).
-            if let Some(main) = app.get_webview_window("main") {
-                modules::main_window_state::restore_to_window(&main);
-            }
-
-            apply_startup_minimized(&app.handle());
             modules::workbuddy_auto_checkin::start_auto_checkin_scheduler(app.handle().clone());
 
             Ok(())
@@ -551,7 +646,9 @@ pub fn run() {
                         ) {
                             // Keep the WebView alive so its configured quota refresh
                             // scheduler can continue updating the native menu bar.
-                            if let Err(err) = window.hide() {
+                            if let Err(err) =
+                                modules::floating_card_window::hide_main_window_to_tray(window)
+                            {
                                 modules::logger::log_warn(&format!(
                                     "[Window] 隐藏主窗口失败，回退为销毁 WebView: {}",
                                     err
@@ -578,16 +675,20 @@ pub fn run() {
                                 "[Window] 销毁主窗口 WebView 失败，回退为隐藏: {}",
                                 err
                             ));
-                            let _ = window.hide();
-                            modules::process_memory::trim_idle_process_memory();
+                            match modules::floating_card_window::hide_main_window_to_tray(window) {
+                                Ok(()) => modules::process_memory::trim_idle_process_memory(),
+                                Err(hide_err) => modules::logger::log_warn(&format!(
+                                    "[Window] 隐藏主窗口回退也失败: {}",
+                                    hide_err
+                                )),
+                            }
                         } else {
                             info!("[Window] 窗口已关闭到托盘");
                         }
                     }
                     CloseWindowBehavior::Quit => {
-                        modules::floating_card_window::request_app_exit();
                         info!("[Window] 用户选择退出应用");
-                        window.app_handle().exit(0);
+                        modules::floating_card_window::exit_app(window.app_handle(), 0);
                     }
                     CloseWindowBehavior::Ask => {
                         api.prevent_close();
@@ -1341,10 +1442,12 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         match &event {
-            RunEvent::ExitRequested { api, .. } => {
-                if modules::floating_card_window::should_keep_alive_after_main_window_destroyed()
-                    && !modules::app_lifecycle::is_shutdown_started()
-                {
+            RunEvent::ExitRequested { code, api, .. } => {
+                if should_prevent_exit_after_main_window_destroyed(
+                    *code,
+                    modules::floating_card_window::should_keep_alive_after_main_window_destroyed(),
+                    modules::app_lifecycle::is_shutdown_started(),
+                ) {
                     api.prevent_exit();
                     modules::logger::log_info("[Window] 主窗口已销毁，应用继续在托盘运行");
                 } else {

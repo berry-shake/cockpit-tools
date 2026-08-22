@@ -2237,6 +2237,7 @@
     "exportFormat": {
       "label": "导出格式",
       "cockpitTools": "Cockpit Tools",
+      "codex": "Codex auth.json",
       "sub2api": "sub2api 格式",
       "cpa": "cpa 格式",
       "agentIdentityCpaUnsupported": "Agent Identity 账号不支持 cpa 格式，请使用 Cockpit Tools 或 sub2api 格式导出。",

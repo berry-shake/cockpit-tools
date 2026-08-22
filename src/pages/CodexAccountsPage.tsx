@@ -2100,6 +2100,10 @@ export function CodexAccountsPage() {
         label: t("codex.exportFormat.cockpitTools", "Cockpit Tools"),
       },
       {
+        value: "codex",
+        label: t("codex.exportFormat.codex", "Codex auth.json"),
+      },
+      {
         value: "sub2api",
         label: t("codex.exportFormat.sub2api", "sub2api"),
       },
@@ -2228,7 +2232,8 @@ export function CodexAccountsPage() {
   }, [exportJsonContent]);
 
   const formattedExportResult = useMemo(() => {
-    const exportFormatSupportsSensitiveNotes = exportFormat !== "sub2api";
+    const exportFormatSupportsSensitiveNotes =
+      exportFormat !== "sub2api" && exportFormat !== "codex";
     const exportOptions = {
       includeSensitiveNotes:
         includeExportSensitiveNotes && exportFormatSupportsSensitiveNotes,
@@ -2300,7 +2305,9 @@ export function CodexAccountsPage() {
     return hasCodexExportSensitiveNotes(exportJsonContent);
   }, [exportJsonContent]);
   const exportCanIncludeSensitiveNotes =
-    exportHasSensitiveNotes && exportFormat !== "sub2api";
+    exportHasSensitiveNotes &&
+    exportFormat !== "sub2api" &&
+    exportFormat !== "codex";
 
   const formattedExportJsonContent = useMemo(() => {
     return formattedExportContent.type === "single"

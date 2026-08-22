@@ -109,6 +109,10 @@ pub struct CodexAccount {
     pub auth_mode: CodexAuthMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openai_api_key: Option<String>,
+    /// Optional API key returned by the ChatGPT OAuth token exchange.
+    /// Kept separate from `openai_api_key` so OAuth accounts are not treated as API-key accounts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth_exchange_api_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,
     #[serde(default)]
@@ -457,6 +461,7 @@ impl CodexAccount {
             email,
             auth_mode: CodexAuthMode::OAuth,
             openai_api_key: None,
+            oauth_exchange_api_key: None,
             api_base_url: None,
             api_provider_mode: CodexApiProviderMode::OpenaiBuiltin,
             api_provider_id: None,

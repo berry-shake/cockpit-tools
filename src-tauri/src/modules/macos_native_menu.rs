@@ -749,7 +749,8 @@ mod imp {
             }
             "quit" => {
                 if let Some(app) = crate::get_app_handle() {
-                    app.exit(0);
+                    modules::logger::log_info("[Tray] 用户从 macOS 原生菜单选择退出应用");
+                    modules::floating_card_window::exit_app(app, 0);
                 }
             }
             _ => {}

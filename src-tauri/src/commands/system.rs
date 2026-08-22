@@ -3982,14 +3982,18 @@ pub fn handle_window_close(
         "minimize" => {
             if let Err(err) = modules::floating_card_window::destroy_main_window_to_tray(&window) {
                 modules::logger::log_warn(&format!("[Window] 销毁主窗口失败，回退隐藏: {}", err));
-                let _ = window.hide();
-                modules::process_memory::trim_idle_process_memory();
+                match modules::floating_card_window::hide_main_window_to_tray(&window) {
+                    Ok(()) => modules::process_memory::trim_idle_process_memory(),
+                    Err(hide_err) => modules::logger::log_warn(&format!(
+                        "[Window] 隐藏主窗口回退也失败: {}",
+                        hide_err
+                    )),
+                }
             }
             modules::logger::log_info("[Window] 窗口已关闭到托盘");
         }
         "quit" => {
-            modules::floating_card_window::request_app_exit();
-            window.app_handle().exit(0);
+            modules::floating_card_window::exit_app(window.app_handle(), 0);
         }
         _ => {
             return Err("无效的操作".to_string());

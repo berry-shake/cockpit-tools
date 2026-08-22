@@ -2237,6 +2237,7 @@
     "exportFormat": {
       "label": "Export Format",
       "cockpitTools": "Cockpit Tools",
+      "codex": "Codex auth.json",
       "sub2api": "sub2api",
       "cpa": "cpa",
       "agentIdentityCpaUnsupported": "Agent Identity accounts cannot be exported as cpa. Choose Cockpit Tools or sub2api.",

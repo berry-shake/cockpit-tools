@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { CodexAccount } from '../types/codex.ts';
 import {
+  buildCodexExportContent,
   hasCodexExportAgentIdentity,
   transformCodexExportJson,
 } from './codexExportFormats.ts';
@@ -101,6 +102,151 @@ test('regular token accounts keep their existing Cockpit Tools export shape', ()
   assert.equal(exported[0].access_token, 'access-token-fixture');
   assert.equal(exported[0].refresh_token, 'refresh-token-fixture');
   assert.equal(exported[0].agent_identity, undefined);
+});
+
+test('Codex export writes the official ChatGPT auth.json shape', () => {
+  const account: CodexAccount = {
+    id: 'codex-official-oauth',
+    email: 'official@example.com',
+    account_id: 'account-official',
+    oauth_exchange_api_key: 'sk-exchange-result',
+    token_updated_at: 1_700_000_000,
+    tokens: {
+      id_token: 'id-token-official',
+      access_token: 'access-token-official',
+      refresh_token: 'refresh-token-official',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+
+  const exported = JSON.parse(
+    transformCodexExportJson(JSON.stringify([account]), 'codex'),
+  ) as Record<string, unknown>;
+
+  assert.deepEqual(exported, {
+    auth_mode: 'chatgpt',
+    OPENAI_API_KEY: 'sk-exchange-result',
+    tokens: {
+      id_token: 'id-token-official',
+      access_token: 'access-token-official',
+      refresh_token: 'refresh-token-official',
+      account_id: 'account-official',
+    },
+    last_refresh: '2023-11-14T22:13:20.000Z',
+  });
+});
+
+test('Codex export keeps the official null API key and personal token shapes', () => {
+  const oauth: CodexAccount = {
+    id: 'codex-official-null-key',
+    email: 'null-key@example.com',
+    tokens: {
+      id_token: 'id-token',
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+  const oauthExport = JSON.parse(
+    transformCodexExportJson(JSON.stringify([oauth]), 'codex'),
+  ) as Record<string, unknown>;
+  assert.equal(oauthExport.auth_mode, 'chatgpt');
+  assert.equal(oauthExport.OPENAI_API_KEY, null);
+  assert.equal(oauthExport.type, undefined);
+  assert.equal(oauthExport.email, undefined);
+
+  const personalToken: CodexAccount = {
+    id: 'codex-official-pat',
+    email: 'pat@example.com',
+    tokens: {
+      id_token: '',
+      access_token: 'at-personal-token',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+  const personalTokenExport = JSON.parse(
+    transformCodexExportJson(JSON.stringify([personalToken]), 'codex'),
+  ) as Record<string, unknown>;
+  assert.deepEqual(personalTokenExport, {
+    auth_mode: 'personalAccessToken',
+    OPENAI_API_KEY: null,
+    personal_access_token: 'at-personal-token',
+  });
+});
+
+test('Codex export supports official API key and Agent Identity shapes', () => {
+  const apiKey: CodexAccount = {
+    id: 'codex-official-api-key',
+    email: 'API Key',
+    auth_mode: 'apikey',
+    openai_api_key: 'sk-official',
+    tokens: { id_token: '', access_token: '' },
+    created_at: 1,
+    last_used: 1,
+  };
+  assert.deepEqual(
+    JSON.parse(transformCodexExportJson(JSON.stringify([apiKey]), 'codex')),
+    {
+      auth_mode: 'apikey',
+      OPENAI_API_KEY: 'sk-official',
+    },
+  );
+
+  const agentIdentityExport = JSON.parse(
+    transformCodexExportJson(
+      JSON.stringify([agentIdentityAccount()]),
+      'codex',
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(agentIdentityExport.auth_mode, 'agentIdentity');
+  assert.equal(agentIdentityExport.type, undefined);
+  assert.equal(agentIdentityExport.OPENAI_API_KEY, undefined);
+  assert.equal(
+    (agentIdentityExport.agent_identity as Record<string, unknown>).agent_runtime_id,
+    'runtime-fixture',
+  );
+});
+
+test('Codex export splits multiple accounts into one auth document per account', () => {
+  const first: CodexAccount = {
+    id: 'codex-first',
+    email: 'first@example.com',
+    tokens: {
+      id_token: 'id-first',
+      access_token: 'access-first',
+      refresh_token: 'refresh-first',
+    },
+    created_at: 1,
+    last_used: 1,
+  };
+  const second: CodexAccount = {
+    ...first,
+    id: 'codex-second',
+    email: 'second@example.com',
+    tokens: {
+      id_token: 'id-second',
+      access_token: 'access-second',
+      refresh_token: 'refresh-second',
+    },
+  };
+
+  const content = buildCodexExportContent(
+    JSON.stringify([first, second]),
+    'codex',
+    'codex_accounts',
+  );
+  assert.equal(content.type, 'multiple');
+  if (content.type !== 'multiple') return;
+  assert.equal(content.documents.length, 2);
+  assert.equal(content.documents[0].label, 'first@example.com');
+  assert.equal(
+    JSON.parse(content.documents[1].jsonContent).auth_mode,
+    'chatgpt',
+  );
+  assert.match(content.documents[1].fileNameBase, /second@example\.com/);
 });
 
 test('sub2api OAuth export preserves official expiry and login-provider fields', () => {

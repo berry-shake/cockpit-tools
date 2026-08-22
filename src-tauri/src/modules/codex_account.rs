@@ -37,7 +37,8 @@ const COCKPIT_API_LOGIN_PLAN_TYPE: &str = "Cockpit Api";
 const COCKPIT_API_DEFAULT_ACCOUNT_NAME: &str = "Codex API";
 const API_KEY_EMAIL_PREFIX: &str = "api-key";
 const API_KEY_AUTH_MODE: &str = "apikey";
-const CODEX_AUTH_TYPE: &str = "codex";
+const CHATGPT_AUTH_MODE: &str = "chatgpt";
+const PERSONAL_ACCESS_TOKEN_AUTH_MODE: &str = "personalAccessToken";
 const CODEX_ACCOUNT_GROUPS_FILE: &str = "codex_account_groups.json";
 const CODEX_CONFIG_FILE_NAME: &str = "config.toml";
 const CODEX_CONFIG_CLI_AUTH_CREDENTIALS_STORE_KEY: &str = "cli_auth_credentials_store";
@@ -6798,15 +6799,6 @@ fn get_current_account_from_loaded(
     Some(account)
 }
 
-fn mark_codex_auth_type(value: &mut serde_json::Value) {
-    if let Some(obj) = value.as_object_mut() {
-        obj.insert(
-            "type".to_string(),
-            serde_json::Value::String(CODEX_AUTH_TYPE.to_string()),
-        );
-    }
-}
-
 fn is_codex_auth_token_payload_key(key: &str) -> bool {
     matches!(
         key.to_ascii_lowercase().as_str(),
@@ -6912,12 +6904,10 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
     }
 
     if let Some(identity) = account.agent_identity.clone() {
-        let mut value = serde_json::json!({
+        return Ok(serde_json::json!({
             "auth_mode": "agentIdentity",
             "agent_identity": normalize_agent_identity(identity)?,
-        });
-        mark_codex_auth_type(&mut value);
-        return Ok(value);
+        }));
     }
 
     if account.tokens.access_token.trim().is_empty() {
@@ -6929,17 +6919,23 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
     if account.tokens.id_token.trim().is_empty()
         && normalize_optional_ref(account.tokens.refresh_token.as_deref()).is_none()
     {
-        let mut value = serde_json::json!({
+        return Ok(serde_json::json!({
+            "auth_mode": PERSONAL_ACCESS_TOKEN_AUTH_MODE,
             "OPENAI_API_KEY": null,
             "personal_access_token": account.tokens.access_token,
-        });
-        mark_codex_auth_type(&mut value);
-        return Ok(value);
+        }));
     }
 
-    let mut value = serde_json::to_value(CodexAuthFile {
-        auth_mode: None,
-        openai_api_key: Some(serde_json::Value::Null),
+    serde_json::to_value(CodexAuthFile {
+        auth_mode: Some(CHATGPT_AUTH_MODE.to_string()),
+        openai_api_key: Some(
+            account
+                .oauth_exchange_api_key
+                .as_ref()
+                .map_or(serde_json::Value::Null, |api_key| {
+                    serde_json::Value::String(api_key.clone())
+                }),
+        ),
         base_url: None,
         tokens: Some(CodexAuthTokens {
             id_token: account.tokens.id_token.clone(),
@@ -6961,9 +6957,7 @@ fn build_auth_file_value(account: &CodexAccount) -> Result<serde_json::Value, St
                 .to_string(),
         )),
     })
-    .map_err(|e| format!("auth.json 序列化失败: {}", e))?;
-    mark_codex_auth_type(&mut value);
-    Ok(value)
+    .map_err(|e| format!("auth.json 序列化失败: {}", e))
 }
 
 #[cfg(all(target_os = "macos", not(test)))]
@@ -8339,7 +8333,7 @@ pub fn import_from_local() -> Result<CodexAccount, String> {
     }
 
     if let Some(tokens) = auth_file.tokens {
-        return upsert_account_from_auth_tokens(tokens);
+        return upsert_account_from_auth_tokens(tokens, fallback_api_key);
     }
 
     if let Some(api_key) = fallback_api_key {
@@ -8449,6 +8443,11 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
     let mut imported = upsert_account(account.tokens)?;
     let mut changed = apply_auth_file_plan_type(&mut imported, imported_auth_file_plan_type);
 
+    if imported.oauth_exchange_api_key != account.oauth_exchange_api_key {
+        imported.oauth_exchange_api_key = account.oauth_exchange_api_key;
+        changed = true;
+    }
+
     if let Some(tags) = account.tags {
         imported.tags = Some(tags);
         changed = true;
@@ -8481,7 +8480,10 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
     Ok(imported)
 }
 
-fn upsert_account_from_auth_tokens(tokens: CodexAuthTokens) -> Result<CodexAccount, String> {
+fn upsert_account_from_auth_tokens(
+    tokens: CodexAuthTokens,
+    oauth_exchange_api_key: Option<String>,
+) -> Result<CodexAccount, String> {
     let account_id_hint = tokens.account_id.clone();
     let tokens = CodexTokens {
         id_token: tokens.id_token,
@@ -8492,16 +8494,22 @@ fn upsert_account_from_auth_tokens(tokens: CodexAuthTokens) -> Result<CodexAccou
     if normalize_optional_ref(Some(&tokens.id_token)).is_none()
         && is_importable_access_token(&tokens.access_token)
     {
-        return upsert_account_from_access_token_with_hints(
+        let mut account = upsert_account_from_access_token_with_hints(
             tokens.access_token,
             CodexAccessTokenImportHints {
                 account_id: account_id_hint,
                 ..Default::default()
             },
-        );
+        )?;
+        account.oauth_exchange_api_key = oauth_exchange_api_key;
+        save_account(&account)?;
+        return Ok(account);
     }
 
-    upsert_account_with_hints(tokens, account_id_hint, None)
+    let mut account = upsert_account_with_hints(tokens, account_id_hint, None)?;
+    account.oauth_exchange_api_key = oauth_exchange_api_key;
+    save_account(&account)?;
+    Ok(account)
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
@@ -9819,7 +9827,7 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
         }
 
         if let Some(tokens) = auth_file.tokens {
-            let mut account = upsert_account_from_auth_tokens(tokens)?;
+            let mut account = upsert_account_from_auth_tokens(tokens, fallback_api_key)?;
             if let Some(value) = raw_value.as_ref() {
                 save_account_note_update_if_present(
                     &mut account,
@@ -11501,10 +11509,7 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("agentIdentity")
         );
-        assert_eq!(
-            projected.get("type").and_then(serde_json::Value::as_str),
-            Some("codex")
-        );
+        assert!(projected.get("type").is_none());
         assert_eq!(
             projected
                 .pointer("/agent_identity/task_id")
@@ -12395,13 +12400,16 @@ mod tests {
             Some("")
         );
         assert_eq!(
-            auth_file.get("type").and_then(serde_json::Value::as_str),
-            Some("codex")
+            auth_file
+                .get("auth_mode")
+                .and_then(serde_json::Value::as_str),
+            Some("chatgpt")
         );
+        assert!(auth_file.get("type").is_none());
     }
 
     #[test]
-    fn build_auth_file_value_marks_oauth_and_pat_as_codex_type() {
+    fn build_auth_file_value_writes_official_auth_modes_without_custom_type() {
         let mut oauth = CodexAccount::new(
             "codex-oauth-type".to_string(),
             "oauth@type.example".to_string(),
@@ -12412,12 +12420,22 @@ mod tests {
             },
         );
         oauth.account_id = Some("acc-oauth".to_string());
+        oauth.oauth_exchange_api_key = Some("sk-exchange-result".to_string());
         let oauth_file = build_auth_file_value(&oauth).expect("build oauth auth file");
         assert_eq!(
-            oauth_file.get("type").and_then(serde_json::Value::as_str),
-            Some("codex")
+            oauth_file
+                .get("auth_mode")
+                .and_then(serde_json::Value::as_str),
+            Some("chatgpt")
         );
+        assert!(oauth_file.get("type").is_none());
         assert!(oauth_file.get("personal_access_token").is_none());
+        assert_eq!(
+            oauth_file
+                .get("OPENAI_API_KEY")
+                .and_then(serde_json::Value::as_str),
+            Some("sk-exchange-result")
+        );
 
         let pat = CodexAccount::new(
             "codex-pat-type".to_string(),
@@ -12430,9 +12448,12 @@ mod tests {
         );
         let pat_file = build_auth_file_value(&pat).expect("build pat auth file");
         assert_eq!(
-            pat_file.get("type").and_then(serde_json::Value::as_str),
-            Some("codex")
+            pat_file
+                .get("auth_mode")
+                .and_then(serde_json::Value::as_str),
+            Some("personalAccessToken")
         );
+        assert!(pat_file.get("type").is_none());
         assert_eq!(
             pat_file
                 .get("personal_access_token")
@@ -12489,12 +12510,12 @@ mod tests {
         let next = build_auth_file_value(&account).expect("build next auth file");
         let merged = merge_existing_auth_file_value(existing, next);
 
-        assert_eq!(
-            merged.get("type").and_then(serde_json::Value::as_str),
-            Some("codex")
-        );
+        assert!(merged.get("type").is_none());
         assert!(merged.get("email").is_none());
-        assert!(merged.get("auth_mode").is_none());
+        assert_eq!(
+            merged.get("auth_mode").and_then(serde_json::Value::as_str),
+            Some("chatgpt")
+        );
         assert!(merged.get("personal_access_token").is_none());
         assert_eq!(merged.get("OPENAI_API_KEY"), Some(&serde_json::Value::Null));
         assert_eq!(
@@ -12549,9 +12570,10 @@ mod tests {
             Some("keep-me")
         );
         assert!(auth.get("email").is_none());
+        assert!(auth.get("type").is_none());
         assert_eq!(
-            auth.get("type").and_then(serde_json::Value::as_str),
-            Some("codex")
+            auth.get("auth_mode").and_then(serde_json::Value::as_str),
+            Some("chatgpt")
         );
         assert_eq!(auth.get("OPENAI_API_KEY"), Some(&serde_json::Value::Null));
         assert_eq!(
@@ -13276,12 +13298,15 @@ mod tests {
             }
         }));
 
-        let account = upsert_account_from_auth_tokens(CodexAuthTokens {
-            id_token: String::new(),
-            access_token: access_token.clone(),
-            refresh_token: None,
-            account_id: None,
-        })
+        let account = upsert_account_from_auth_tokens(
+            CodexAuthTokens {
+                id_token: String::new(),
+                access_token: access_token.clone(),
+                refresh_token: None,
+                account_id: None,
+            },
+            Some("sk-exchange-result".to_string()),
+        )
         .expect("empty id_token auth tokens should import from accessToken");
 
         assert_eq!(account.email, "auth-access@example.com");
@@ -13291,6 +13316,10 @@ mod tests {
         assert_eq!(account.tokens.id_token, "");
         assert_eq!(account.tokens.access_token, access_token);
         assert_eq!(account.tokens.refresh_token, None);
+        assert_eq!(
+            account.oauth_exchange_api_key.as_deref(),
+            Some("sk-exchange-result")
+        );
     }
 
     #[test]
@@ -15459,7 +15488,12 @@ supports_websockets = false
             &fs::read_to_string(profile_dir.join("auth.json")).expect("read auth file"),
         )
         .expect("parse auth file");
-        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file
+                .get("auth_mode")
+                .and_then(serde_json::Value::as_str),
+            Some("chatgpt")
+        );
         assert_eq!(
             auth_file.get("OPENAI_API_KEY"),
             Some(&serde_json::Value::Null)
@@ -15535,7 +15569,12 @@ supports_websockets = false
             auth_file.get("tokens").is_some(),
             "auth.json should keep bound OAuth tokens"
         );
-        assert!(auth_file.get("auth_mode").is_none());
+        assert_eq!(
+            auth_file
+                .get("auth_mode")
+                .and_then(serde_json::Value::as_str),
+            Some("chatgpt")
+        );
 
         let _ = remove_accounts(&[oauth_account.id]);
     }

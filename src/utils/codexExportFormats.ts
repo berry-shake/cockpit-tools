@@ -1,6 +1,6 @@
 import type { CodexAccount } from '../types/codex';
 
-export type CodexExportFormat = 'cockpit_tools' | 'sub2api' | 'cpa';
+export type CodexExportFormat = 'cockpit_tools' | 'codex' | 'sub2api' | 'cpa';
 
 type JsonRecord = Record<string, unknown>;
 const INVALID_FILE_CHARS_REGEX = /[<>:"/\\|?*\x00-\x1F]/g;
@@ -522,6 +522,58 @@ function toCockpitToolsPortableStorage(
   return toPortableTokenStorage(account, options);
 }
 
+function toOfficialCodexAuthStorage(account: CodexAccount): JsonRecord {
+  if (hasAgentIdentity(account)) {
+    return {
+      auth_mode: 'agentIdentity',
+      agent_identity: buildAgentIdentityCredentials(account),
+    };
+  }
+
+  if (isCodexApiKeyAccount(account)) {
+    const apiKey = account.openai_api_key?.trim();
+    if (!apiKey) {
+      throw new Error('CODEX_API_KEY_MISSING');
+    }
+    return {
+      auth_mode: 'apikey',
+      OPENAI_API_KEY: apiKey,
+    };
+  }
+
+  const accessToken = account.tokens.access_token?.trim();
+  if (!accessToken) {
+    throw new Error('CODEX_ACCESS_TOKEN_MISSING');
+  }
+
+  const idToken = account.tokens.id_token?.trim() || '';
+  const refreshToken = account.tokens.refresh_token?.trim() || '';
+  if (!idToken && !refreshToken) {
+    return {
+      auth_mode: 'personalAccessToken',
+      OPENAI_API_KEY: null,
+      personal_access_token: accessToken,
+    };
+  }
+
+  const tokens: JsonRecord = {
+    id_token: idToken,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  };
+  const accountId = resolveAccountId(account);
+  if (accountId) {
+    tokens.account_id = accountId;
+  }
+
+  return {
+    auth_mode: 'chatgpt',
+    OPENAI_API_KEY: account.oauth_exchange_api_key?.trim() || null,
+    tokens,
+    last_refresh: resolveLastRefresh(account),
+  };
+}
+
 export function parseCockpitToolsCodexExport(rawJson: string): CodexAccount[] {
   const parsed = JSON.parse(rawJson) as unknown;
   if (Array.isArray(parsed)) {
@@ -564,6 +616,13 @@ export function transformCodexExportJson(
     );
   }
 
+  if (format === 'codex') {
+    if (accounts.length !== 1) {
+      throw new Error('Codex auth.json format requires exactly one account per document');
+    }
+    return JSON.stringify(toOfficialCodexAuthStorage(accounts[0]), null, 2);
+  }
+
   if (format === 'sub2api') {
     const payload: Sub2apiBatchCreatePayload = {
       exported_at: formatSub2apiExportedAt(),
@@ -594,7 +653,7 @@ export function buildCodexExportFileNameBase(
   return `${baseName}_${format}`;
 }
 
-function resolveCpaDocumentLabel(account: CodexAccount, index: number): string {
+function resolveAccountDocumentLabel(account: CodexAccount, index: number): string {
   return (
     account.email?.trim() ||
     resolveAccountId(account) ||
@@ -604,7 +663,7 @@ function resolveCpaDocumentLabel(account: CodexAccount, index: number): string {
   );
 }
 
-function buildCpaDocumentFileNameBase(
+function buildAccountDocumentFileNameBase(
   baseName: string,
   account: CodexAccount,
   index: number,
@@ -628,7 +687,8 @@ export function buildCodexExportContent(
   const fileNameBase = buildCodexExportFileNameBase(baseName, format);
   const accounts = parseCockpitToolsCodexExport(rawJson);
 
-  if (format !== 'cpa' || accounts.length <= 1) {
+  const usesPerAccountDocuments = format === 'cpa' || format === 'codex';
+  if (!usesPerAccountDocuments || accounts.length <= 1) {
     return {
       type: 'single',
       fileNameBase,
@@ -640,10 +700,16 @@ export function buildCodexExportContent(
     type: 'multiple',
     fileNameBase,
     documents: accounts.map((account, index) => ({
-      id: `${account.id || resolveAccountId(account) || 'cpa_account'}_${index}`,
-      label: resolveCpaDocumentLabel(account, index),
-      fileNameBase: buildCpaDocumentFileNameBase(fileNameBase, account, index),
-      jsonContent: JSON.stringify(toPortableTokenStorage(account, options), null, 2),
+      id: `${account.id || resolveAccountId(account) || `${format}_account`}_${index}`,
+      label: resolveAccountDocumentLabel(account, index),
+      fileNameBase: buildAccountDocumentFileNameBase(fileNameBase, account, index),
+      jsonContent: JSON.stringify(
+        format === 'codex'
+          ? toOfficialCodexAuthStorage(account)
+          : toPortableTokenStorage(account, options),
+        null,
+        2,
+      ),
     })),
   };
 }

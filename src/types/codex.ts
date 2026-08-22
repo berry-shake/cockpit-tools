@@ -42,6 +42,7 @@ export interface CodexAccount {
   email: string;
   auth_mode?: string;
   openai_api_key?: string;
+  oauth_exchange_api_key?: string;
   api_base_url?: string;
   api_provider_mode?: CodexApiProviderMode;
   api_provider_id?: string;

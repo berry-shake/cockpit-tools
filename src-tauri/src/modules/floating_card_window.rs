@@ -533,13 +533,35 @@ pub fn take_pending_main_window_navigation() -> Result<Option<String>, String> {
         .map(|mut pending| pending.take())
 }
 
-pub fn request_app_exit() {
+fn request_app_exit() {
     APP_EXIT_REQUESTED.store(true, Ordering::SeqCst);
+}
+
+fn run_explicit_app_exit(mark_exit_requested: impl FnOnce(), exit_app: impl FnOnce()) {
+    mark_exit_requested();
+    exit_app();
+}
+
+/// Exit the application through an explicit user action.
+///
+/// The marker must be set before `AppHandle::exit` emits `ExitRequested`, otherwise
+/// the tray keep-alive guard can mistake a real Quit action for a destroyed window.
+pub fn exit_app<R: Runtime>(app: &AppHandle<R>, code: i32) {
+    run_explicit_app_exit(request_app_exit, || app.exit(code));
 }
 
 pub fn should_keep_alive_after_main_window_destroyed() -> bool {
     MAIN_WINDOW_DESTROYED_TO_TRAY.load(Ordering::SeqCst)
         && !APP_EXIT_REQUESTED.load(Ordering::SeqCst)
+}
+
+/// Hide the main window while keeping the tray process alive.
+/// On macOS, also switch to accessory mode so the closed app leaves the Dock.
+pub fn hide_main_window_to_tray<R: Runtime>(window: &Window<R>) -> Result<(), String> {
+    window.hide().map_err(|err| err.to_string())?;
+    #[cfg(target_os = "macos")]
+    crate::hide_macos_dock_for_tray(window.app_handle());
+    Ok(())
 }
 
 /// Destroy the main WebView when minimizing to tray (community #686 full behavior).
@@ -552,6 +574,8 @@ pub fn destroy_main_window_to_tray<R: Runtime>(window: &Window<R>) -> Result<(),
         MAIN_WINDOW_DESTROYED_TO_TRAY.store(false, Ordering::SeqCst);
         return Err(err.to_string());
     }
+    #[cfg(target_os = "macos")]
+    crate::hide_macos_dock_for_tray(window.app_handle());
     // Defer working-set trim so WebView2 can finish teardown before a later recreate.
     std::thread::spawn(|| {
         std::thread::sleep(std::time::Duration::from_millis(300));
@@ -618,6 +642,9 @@ fn show_main_window_internal<R: Runtime>(app: &AppHandle<R>) -> Result<bool, Str
 
     window.show().map_err(|err| err.to_string())?;
     window.unminimize().map_err(|err| err.to_string())?;
+
+    #[cfg(target_os = "macos")]
+    crate::apply_macos_activation_policy_for_window_state(app, true);
 
     if let Err(err) = window.set_focus() {
         logger::log_warn(&format!("[Window] WebView 主窗口聚焦失败: {}", err));
@@ -729,7 +756,9 @@ fn send_hidden_notification<R: Runtime>(app: &AppHandle<R>) {
 
 #[cfg(test)]
 mod tests {
-    use super::must_recreate_main_window;
+    use std::cell::RefCell;
+
+    use super::{must_recreate_main_window, run_explicit_app_exit};
 
     #[test]
     fn recreates_when_window_missing() {
@@ -746,5 +775,17 @@ mod tests {
     fn force_recreates_stale_handle_after_tray_destroy() {
         // Windows/WebView2 may still resolve `main` after destroy; flag wins.
         assert!(must_recreate_main_window(true, true));
+    }
+
+    #[test]
+    fn explicit_exit_marks_intent_before_requesting_runtime_exit() {
+        let calls = RefCell::new(Vec::new());
+
+        run_explicit_app_exit(
+            || calls.borrow_mut().push("mark"),
+            || calls.borrow_mut().push("exit"),
+        );
+
+        assert_eq!(*calls.borrow(), ["mark", "exit"]);
     }
 }
