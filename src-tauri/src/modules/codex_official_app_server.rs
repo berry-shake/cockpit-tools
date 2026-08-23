@@ -16,64 +16,6 @@ const CODEX_APP_SERVER_MACOS_EXECUTABLES: &[&str] = &[
 ];
 const CODEX_APP_SERVER_EXECUTABLE_ENV: &str = "CODEX_APP_SERVER_EXECUTABLE";
 const APP_SERVER_RESPONSE_TIMEOUT: Duration = Duration::from_secs(20);
-const APP_SERVER_DAEMON_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
-
-/// 停止指定 CODEX_HOME 的官方 app-server daemon。
-/// 切号必须在覆盖 auth 存储前调用，避免旧 AuthManager 用旧账号内存态校验新账号凭证。
-pub fn stop_daemon(codex_home: &Path, timeout: Duration) -> Result<(), String> {
-    let executable = official_app_server_executable()?;
-    let mut child = build_daemon_stop_command(&executable, codex_home)
-        .spawn()
-        .map_err(|error| {
-            format!(
-                "启动官方 Codex app-server daemon stop 失败 ({} / CODEX_HOME={}): {}",
-                executable.display(),
-                codex_home.display(),
-                error
-            )
-        })?;
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) if status.success() => {
-                crate::modules::logger::log_info(&format!(
-                    "[Codex Official AppServer] daemon stopped: codex_home={}, elapsed_ms={}",
-                    codex_home.display(),
-                    started.elapsed().as_millis()
-                ));
-                return Ok(());
-            }
-            Ok(Some(status)) => {
-                return Err(format!(
-                    "官方 Codex app-server daemon stop 失败: status={}, CODEX_HOME={}",
-                    status,
-                    codex_home.display()
-                ));
-            }
-            Ok(None) if started.elapsed() < timeout => {
-                std::thread::sleep(APP_SERVER_DAEMON_STOP_POLL_INTERVAL);
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!(
-                    "官方 Codex app-server daemon stop 超时: timeout_ms={}, CODEX_HOME={}",
-                    timeout.as_millis(),
-                    codex_home.display()
-                ));
-            }
-            Err(error) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!(
-                    "等待官方 Codex app-server daemon stop 失败: CODEX_HOME={}, error={}",
-                    codex_home.display(),
-                    error
-                ));
-            }
-        }
-    }
-}
 
 pub fn rebuild_thread_metadata(codex_home: &Path) -> Result<(), String> {
     let flow_started = Instant::now();
@@ -321,6 +263,11 @@ fn app_server_executable_from_codex_launch_path(path: &Path) -> Option<PathBuf> 
         return Some(contents_dir.join("Resources").join("codex"));
     }
 
+    let resolved = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    if path_file_name_eq(&resolved, "chatgpt") && parent_file_name_eq(&resolved, "chatgpt") {
+        return Some(resolved.parent()?.join("resources").join("codex"));
+    }
+
     if path_file_name_eq(path, "codex.exe") {
         return Some(path.parent()?.join("resources").join("codex.exe"));
     }
@@ -363,25 +310,6 @@ fn build_app_server_command(executable: &Path, codex_home: &Path) -> Command {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-
-    #[cfg(windows)]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    command
-}
-
-fn build_daemon_stop_command(executable: &Path, codex_home: &Path) -> Command {
-    let mut command = Command::new(executable);
-    crate::modules::process::apply_managed_proxy_env_to_command(&mut command);
-    command
-        .args(["app-server", "daemon", "stop"])
-        .env("CODEX_HOME", codex_home)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
 
     #[cfg(windows)]
     {
@@ -536,21 +464,11 @@ mod tests {
     }
 
     #[test]
-    fn daemon_stop_command_uses_official_cli_and_target_codex_home() {
-        let executable = PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex");
-        let codex_home = PathBuf::from("/tmp/codex-home");
-        let command = build_daemon_stop_command(&executable, &codex_home);
-
-        assert_eq!(command.get_program(), executable.as_os_str());
+    fn maps_linux_chatgpt_binary_to_resources_app_server() {
+        let launch_path = PathBuf::from("/usr/lib/chatgpt/ChatGPT");
         assert_eq!(
-            command
-                .get_args()
-                .map(|value| value.to_string_lossy().to_string())
-                .collect::<Vec<_>>(),
-            vec!["app-server", "daemon", "stop"]
+            app_server_executable_from_codex_launch_path(&launch_path),
+            Some(PathBuf::from("/usr/lib/chatgpt/resources/codex"))
         );
-        assert!(command
-            .get_envs()
-            .any(|(key, value)| { key == "CODEX_HOME" && value == Some(codex_home.as_os_str()) }));
     }
 }
