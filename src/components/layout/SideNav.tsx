@@ -149,7 +149,6 @@ export function SideNav({
   const [showMore, setShowMore] = useState(false);
   const [classicAdaptiveScale, setClassicAdaptiveScale] = useState(1);
   const [classicNavNeedsScroll, setClassicNavNeedsScroll] = useState(false);
-  const [classicHandleTop, setClassicHandleTop] = useState<number | null>(null);
   const [morePopoverPosition, setMorePopoverPosition] = useState({
     top: 120,
     left: 210,
@@ -567,16 +566,9 @@ export function SideNav({
 
   const classicMainIconSize = Math.max(14, Math.round(20 * classicAdaptiveScale));
   const classicBrandLogoIconSize = Math.max(14, Math.round(20 * classicAdaptiveScale));
-  const classicHandleIconSize = Math.max(12, Math.round(16 * classicAdaptiveScale));
-
   const classicScaleStyle = isClassicLayout
     ? ({ '--side-nav-classic-adaptive-scale': classicAdaptiveScale } as CSSProperties)
     : undefined;
-
-  const classicHandleStyle = ({
-    '--side-nav-classic-adaptive-scale': classicAdaptiveScale,
-    ...(classicHandleTop == null ? {} : { top: `${classicHandleTop}px` }),
-  } as CSSProperties);
 
   const handleClassicLayoutEntryClick = useCallback(() => {
     if (hideClassicSwitchPrompt) {
@@ -624,39 +616,6 @@ export function SideNav({
       ],
     });
   }, [hideClassicSwitchPrompt, setHideClassicSwitchPrompt, setSideNavLayoutMode, showModal, t]);
-
-  useLayoutEffect(() => {
-    if (!isClassicLayout || typeof window === 'undefined') {
-      setClassicHandleTop(null);
-      return;
-    }
-
-    const updateClassicHandleTop = () => {
-      const rect = logoRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      setClassicHandleTop(rect.top + rect.height / 2);
-    };
-
-    updateClassicHandleTop();
-    const rafId = window.requestAnimationFrame(updateClassicHandleTop);
-    const resizeObserver = typeof ResizeObserver !== 'undefined' && logoRef.current
-      ? new ResizeObserver(() => {
-        updateClassicHandleTop();
-      })
-      : null;
-
-    if (resizeObserver && logoRef.current) {
-      resizeObserver.observe(logoRef.current);
-    }
-
-    window.addEventListener('resize', updateClassicHandleTop);
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', updateClassicHandleTop);
-      resizeObserver?.disconnect();
-    };
-  }, [isClassicLayout, isClassicCollapsed, shouldShowUpdateActionEntry]);
 
   const handleLogoClick = useCallback(() => {
     if (hasBreakoutSession) {
@@ -1029,6 +988,32 @@ export function SideNav({
               <span className="nav-item-text">{t('nav.settings')}</span>
             ) : null}
           </button>
+
+          <button
+            type="button"
+            className="nav-item"
+            onClick={toggleClassicCollapsed}
+            title={
+              classicCollapsed
+                ? t('nav.expandSidebar', '展开侧边栏')
+                : t('nav.collapseSidebar', '收起侧边栏')
+            }
+            aria-label={
+              classicCollapsed
+                ? t('nav.expandSidebar', '展开侧边栏')
+                : t('nav.collapseSidebar', '收起侧边栏')
+            }
+            aria-expanded={!classicCollapsed}
+          >
+            {classicCollapsed
+              ? <PanelLeftOpen size={classicMainIconSize} />
+              : <PanelLeftClose size={classicMainIconSize} />}
+            {showClassicLabels ? (
+              <span className="nav-item-text">
+                {t('nav.collapseSidebar', '收起侧边栏')}
+              </span>
+            ) : null}
+          </button>
         </div>
       )}
 
@@ -1058,29 +1043,6 @@ export function SideNav({
       )}
 
       </nav>
-
-      {isClassicLayout && (
-        <button
-          type="button"
-          className={`side-nav-classic-handle${isClassicCollapsed ? ' side-nav-classic-handle-collapsed' : ''}`}
-          onClick={toggleClassicCollapsed}
-          style={classicHandleStyle}
-          title={
-            classicCollapsed
-              ? t('nav.expandSidebar', '展开侧边栏')
-              : t('nav.collapseSidebar', '收起侧边栏')
-          }
-          aria-label={
-            classicCollapsed
-              ? t('nav.expandSidebar', '展开侧边栏')
-              : t('nav.collapseSidebar', '收起侧边栏')
-          }
-        >
-          {classicCollapsed
-            ? <PanelLeftOpen size={classicHandleIconSize} />
-            : <PanelLeftClose size={classicHandleIconSize} />}
-        </button>
-      )}
     </>
   );
 }
