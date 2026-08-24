@@ -1010,7 +1010,7 @@ export function SideNav({
               : <PanelLeftClose size={classicMainIconSize} />}
             {showClassicLabels ? (
               <span className="nav-item-text">
-                {t('nav.collapseSidebar', '收起侧边栏')}
+                {t('common.collapse', '收起')}
               </span>
             ) : null}
           </button>
