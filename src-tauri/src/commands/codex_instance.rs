@@ -16,7 +16,44 @@ use crate::modules;
 const DEFAULT_INSTANCE_ID: &str = "__default__";
 const CODEX_INSTANCE_LAUNCH_PROGRESS_EVENT: &str = "codex:instance-launch-progress";
 static CODEX_INSTANCE_STARTS_IN_PROGRESS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static CODEX_INSTANCE_START_CANCEL_REQUESTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static CODEX_INSTANCE_START_FLOW_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+fn request_codex_instance_start_cancel(instance_id: &str) {
+    CODEX_INSTANCE_START_CANCEL_REQUESTS
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .insert(instance_id.to_string());
+}
+
+fn clear_codex_instance_start_cancel(instance_id: &str) {
+    CODEX_INSTANCE_START_CANCEL_REQUESTS
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .remove(instance_id);
+}
+
+fn codex_instance_start_cancelled(instance_id: &str) -> bool {
+    CODEX_INSTANCE_START_CANCEL_REQUESTS
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .contains(instance_id)
+}
+
+fn ensure_codex_instance_start_not_cancelled(instance_id: &str) -> Result<(), String> {
+    if codex_instance_start_cancelled(instance_id) {
+        Err("CODEX_START_CANCELLED".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+fn should_skip_launch_step(skip_failed_step: Option<&str>, step: &str) -> bool {
+    skip_failed_step.is_some_and(|value| value == step || value == "all")
+}
 
 fn launch_mode_uses_desktop_runtime(launch_mode: &InstanceLaunchMode) -> bool {
     *launch_mode == InstanceLaunchMode::App
@@ -57,6 +94,7 @@ struct CodexInstanceStartTarget {
     user_data_dir: PathBuf,
     bind_account_id: Option<String>,
     is_default: bool,
+    launch_operation: Option<String>,
 }
 
 fn emit_codex_instance_launch_progress(
@@ -81,6 +119,9 @@ fn emit_codex_instance_launch_progress(
         "isDefault".to_string(),
         serde_json::json!(target.is_default),
     );
+    if let Some(operation) = target.launch_operation.as_deref() {
+        payload.insert("operation".to_string(), serde_json::json!(operation));
+    }
     let _ = app.emit(
         CODEX_INSTANCE_LAUNCH_PROGRESS_EVENT,
         serde_json::Value::Object(payload),
@@ -120,6 +161,7 @@ fn resolve_codex_instance_start_target(
             user_data_dir: modules::codex_instance::get_default_codex_home()?,
             bind_account_id: resolve_default_account_id(&settings),
             is_default: true,
+            launch_operation: None,
         });
     }
 
@@ -135,6 +177,7 @@ fn resolve_codex_instance_start_target(
         user_data_dir: PathBuf::from(instance.user_data_dir),
         bind_account_id: instance.bind_account_id,
         is_default: false,
+        launch_operation: None,
     })
 }
 
@@ -642,6 +685,18 @@ mod tests {
         CodexInstanceStartGuard::acquire("guard-test-a")
             .expect("the guard should be released when the start finishes");
         drop(other);
+    }
+
+    #[test]
+    fn instance_start_cancel_request_is_scoped_and_clearable() {
+        let instance_id = "cancel-test-instance";
+        clear_codex_instance_start_cancel(instance_id);
+        assert!(!codex_instance_start_cancelled(instance_id));
+        request_codex_instance_start_cancel(instance_id);
+        assert!(codex_instance_start_cancelled(instance_id));
+        assert!(ensure_codex_instance_start_not_cancelled(instance_id).is_err());
+        clear_codex_instance_start_cancel(instance_id);
+        assert!(ensure_codex_instance_start_not_cancelled(instance_id).is_ok());
     }
 
     #[test]
@@ -1806,16 +1861,23 @@ pub async fn codex_delete_instance(instance_id: String) -> Result<(), String> {
     modules::codex_instance::delete_instance(&instance_id)
 }
 
+/// 执行默认实例和多开实例共用的完整启动事务。
+///
+/// 调用方传入实例 ID、profile 是否已经由上游准备、启动来源等差异参数；本方法统一完成
+/// Token 预检/刷新、profile 写入、provider gateway 准备和客户端启动，并按需发出统一进度事件。
 async fn codex_start_instance_internal(
     app: AppHandle,
     instance_id: String,
     skip_default_bind_account_injection: bool,
     _transfer_conflicting_account: bool,
-    _skip_official_account_check: bool,
+    skip_failed_step: Option<&str>,
     emit_launch_progress: bool,
+    launch_operation: Option<&str>,
 ) -> Result<CodexInstanceProfileView, String> {
     let _start_guard = CodexInstanceStartGuard::acquire(&instance_id)?;
-    let launch_target = resolve_codex_instance_start_target(&instance_id)?;
+    clear_codex_instance_start_cancel(&instance_id);
+    let mut launch_target = resolve_codex_instance_start_target(&instance_id)?;
+    launch_target.launch_operation = launch_operation.map(str::to_owned);
     emit_codex_instance_launch_progress(
         &app,
         emit_launch_progress,
@@ -1838,6 +1900,7 @@ async fn codex_start_instance_internal(
     let start_flow_lock =
         CODEX_INSTANCE_START_FLOW_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
     let _start_flow_guard = start_flow_lock.lock().await;
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     emit_codex_instance_launch_step(
         &app,
         emit_launch_progress,
@@ -1849,6 +1912,7 @@ async fn codex_start_instance_internal(
             "userDataDir": launch_target.user_data_dir,
         }),
     );
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     emit_codex_instance_launch_step(
         &app,
         emit_launch_progress,
@@ -1874,17 +1938,14 @@ async fn codex_start_instance_internal(
             modules::codex_account::oauth_account_id_for_runtime_dir(&launch_target.user_data_dir)
         })
     };
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     let oauth_account = oauth_account_id
         .as_deref()
         .and_then(modules::codex_account::load_account);
     let oauth_access_token_refresh_due = oauth_account.as_ref().is_some_and(|account| {
         modules::codex_oauth::is_token_expired(&account.tokens.access_token)
     });
-    let oauth_id_token_refresh_due = oauth_account.as_ref().is_some_and(|account| {
-        modules::codex_account::account_has_refresh_token(account)
-            && modules::codex_oauth::is_id_token_refresh_due(&account.tokens.id_token)
-    });
-    let oauth_refresh_required = oauth_access_token_refresh_due || oauth_id_token_refresh_due;
+    let oauth_refresh_required = oauth_access_token_refresh_due;
     let oauth_token_generation_before = oauth_account
         .as_ref()
         .map(|account| account.token_generation)
@@ -1913,19 +1974,28 @@ async fn codex_start_instance_internal(
                     &account.tokens.access_token,
                 )
             }),
-            "idTokenExpiresAt": oauth_account.as_ref().and_then(|account| {
-                modules::codex_oauth::jwt_token_expiration_timestamp(&account.tokens.id_token)
-            }),
             "accessTokenRefreshDue": oauth_access_token_refresh_due,
-            "idTokenRefreshDue": oauth_id_token_refresh_due,
             "refreshRequired": oauth_refresh_required,
             "hasRefreshToken": oauth_has_refresh_token,
             "tokenGenerationBefore": oauth_token_generation_before,
-            "remoteCheckPending": oauth_account.is_some(),
         }),
     );
     if let Some(account_id) = oauth_account_id.as_deref() {
-        modules::codex_account::prepare_account_for_instance_launch_preflight(account_id).await?;
+        if skip_failed_step == Some("checkAccount") {
+            emit_codex_instance_launch_step(
+                &app,
+                emit_launch_progress,
+                &launch_target,
+                "checkAccount",
+                "skipped",
+                20,
+                serde_json::json!({ "skippedByUser": true }),
+            );
+        } else {
+            modules::codex_account::prepare_account_for_instance_launch_preflight(account_id)
+                .await?;
+            ensure_codex_instance_start_not_cancelled(&instance_id)?;
+        }
         let checked_account = modules::codex_account::load_account(account_id)
             .ok_or_else(|| format!("账号不存在: {}", account_id))?;
         emit_codex_instance_launch_step(
@@ -1933,7 +2003,11 @@ async fn codex_start_instance_internal(
             emit_launch_progress,
             &launch_target,
             "checkAccount",
-            "completed",
+            if skip_failed_step == Some("checkAccount") {
+                "skipped"
+            } else {
+                "completed"
+            },
             20,
             serde_json::json!({
                 "accountId": checked_account.id,
@@ -1941,15 +2015,7 @@ async fn codex_start_instance_internal(
                 "accessTokenExpiresAt": modules::codex_oauth::jwt_token_expiration_timestamp(
                     &checked_account.tokens.access_token,
                 ),
-                "idTokenExpiresAt": modules::codex_oauth::jwt_token_expiration_timestamp(
-                    &checked_account.tokens.id_token,
-                ),
                 "accessTokenRefreshDue": false,
-                "idTokenRefreshDue": modules::codex_account::account_has_refresh_token(
-                    &checked_account,
-                ) && modules::codex_oauth::is_id_token_refresh_due(
-                    &checked_account.tokens.id_token,
-                ),
                 "refreshRequired": oauth_refresh_required,
                 "hasRefreshToken": modules::codex_account::account_has_refresh_token(
                     &checked_account,
@@ -1957,7 +2023,9 @@ async fn codex_start_instance_internal(
                 "tokenGenerationBefore": oauth_token_generation_before,
                 "tokenGenerationChanged": checked_account.token_generation
                     > oauth_token_generation_before,
-                "localCredentialsValidated": true,
+                "localCredentialsValidated": skip_failed_step != Some("checkAccount"),
+                "skippedByUser": skip_failed_step == Some("checkAccount"),
+                "clientAuthStatus": checked_account.client_auth_status.clone(),
             }),
         );
     }
@@ -1970,6 +2038,7 @@ async fn codex_start_instance_internal(
         22,
         serde_json::json!({}),
     );
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     // 同一 OAuth 账号可以被默认实例、多开实例和 API Key 绑定同时使用。
     // 启动前的 Token Authority 已从运行态 profile 回收最新凭据，因此这里不再
     // 以“账号占用”为由阻断，也不会关闭其它正在运行的实例。
@@ -2033,6 +2102,7 @@ async fn codex_start_instance_internal(
             "cli-no-desktop"
         };
         modules::codex_local_access::stop_provider_gateways_for_profile(&default_dir).await;
+        ensure_codex_instance_start_not_cancelled(&instance_id)?;
         modules::logger::log_info(&format!(
             "[Codex Start] default close phase finished, mode={}, elapsed_ms={}",
             close_mode,
@@ -2064,19 +2134,33 @@ async fn codex_start_instance_internal(
             serde_json::json!({
                 "refreshRequired": oauth_refresh_required,
                 "accessTokenRefreshDue": oauth_access_token_refresh_due,
-                "idTokenRefreshDue": oauth_id_token_refresh_due,
                 "hasRefreshToken": oauth_has_refresh_token,
                 "tokenGenerationBefore": oauth_token_generation_before,
             }),
         );
         if let Some(ref account_id) = default_bind_account_id {
-            if skip_default_bind_account_injection {
+            if should_skip_launch_step(skip_failed_step, "prepareCredentials") {
+                modules::logger::log_warn(&format!(
+                    "[Codex Start] 用户选择跳过凭据准备步骤: instance_id={}, account_id={}",
+                    instance_id, account_id
+                ));
+                emit_codex_instance_launch_step(
+                    &app,
+                    emit_launch_progress,
+                    &launch_target,
+                    "prepareCredentials",
+                    "skipped",
+                    62,
+                    serde_json::json!({ "skippedByUser": true }),
+                );
+            } else if skip_default_bind_account_injection {
                 modules::logger::log_info(&format!(
                     "[Codex Start] skip default bind-account injection because upstream already prepared profile: account_id={}",
                     account_id
                 ));
             } else {
                 inject_preflighted_bound_account_to_profile(&default_dir, account_id).await?;
+                ensure_codex_instance_start_not_cancelled(&instance_id)?;
             }
         } else {
             modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
@@ -2107,14 +2191,6 @@ async fn codex_start_instance_internal(
                 "tokenGenerationChanged": refreshed_oauth_account.as_ref().is_some_and(|account| {
                     account.token_generation > oauth_token_generation_before
                 }),
-                "accessTokenExpiresAt": refreshed_oauth_account.as_ref().and_then(|account| {
-                    modules::codex_oauth::jwt_token_expiration_timestamp(
-                        &account.tokens.access_token,
-                    )
-                }),
-                "idTokenExpiresAt": refreshed_oauth_account.as_ref().and_then(|account| {
-                    modules::codex_oauth::jwt_token_expiration_timestamp(&account.tokens.id_token)
-                }),
             }),
         );
         emit_codex_instance_launch_step(
@@ -2127,8 +2203,25 @@ async fn codex_start_instance_internal(
             serde_json::json!({}),
         );
         let provider_gateway_started = Instant::now();
-        ensure_provider_gateway_for_bind_account(&default_dir, default_bind_account_id.as_deref())
+        if should_skip_launch_step(skip_failed_step, "writeProfile") {
+            modules::logger::log_warn("[Codex Start] 用户选择跳过 provider gateway 准备步骤");
+            emit_codex_instance_launch_step(
+                &app,
+                emit_launch_progress,
+                &launch_target,
+                "writeProfile",
+                "skipped",
+                70,
+                serde_json::json!({ "skippedByUser": true }),
+            );
+        } else {
+            ensure_provider_gateway_for_bind_account(
+                &default_dir,
+                default_bind_account_id.as_deref(),
+            )
             .await?;
+            ensure_codex_instance_start_not_cancelled(&instance_id)?;
+        }
         modules::logger::log_info(&format!(
             "[Codex Start] default provider gateway phase finished: elapsed_ms={}, total_ms={}",
             provider_gateway_started.elapsed().as_millis(),
@@ -2155,20 +2248,29 @@ async fn codex_start_instance_internal(
             ));
         }
         let sanitize_started = Instant::now();
-        sanitize_codex_config_before_launch(&default_dir)?;
+        if should_skip_launch_step(skip_failed_step, "writeProfile") {
+            modules::logger::log_warn("[Codex Start] 用户选择跳过配置清理步骤");
+        } else {
+            sanitize_codex_config_before_launch(&default_dir)?;
+        }
         modules::logger::log_info(&format!(
             "[Codex Start] default sanitize phase finished: elapsed_ms={}, total_ms={}",
             sanitize_started.elapsed().as_millis(),
             flow_started.elapsed().as_millis()
         ));
         let visibility_repair_started = Instant::now();
-        repair_session_visibility_for_selected_instance(
-            DEFAULT_INSTANCE_ID,
-            "默认实例",
-            &default_dir,
-        )
-        .await
-        .map_err(|error| format!("Codex 启动已取消: {}", error))?;
+        if should_skip_launch_step(skip_failed_step, "writeProfile") {
+            modules::logger::log_warn("[Codex Start] 用户选择跳过会话可见性修复步骤");
+        } else {
+            repair_session_visibility_for_selected_instance(
+                DEFAULT_INSTANCE_ID,
+                "默认实例",
+                &default_dir,
+            )
+            .await
+            .map_err(|error| format!("Codex 启动已取消: {}", error))?;
+            ensure_codex_instance_start_not_cancelled(&instance_id)?;
+        }
         modules::logger::log_info(&format!(
             "[Codex Start] default session visibility repair phase finished: elapsed_ms={}, total_ms={}",
             visibility_repair_started.elapsed().as_millis(),
@@ -2224,11 +2326,16 @@ async fn codex_start_instance_internal(
             serde_json::json!({ "launchMode": "app" }),
         );
         let launch_started = Instant::now();
+        ensure_codex_instance_start_not_cancelled(&instance_id)?;
         let pid = if skip_default_bind_account_injection {
             modules::process::start_codex_default_fast_after_close(&injection_plan.args)?
         } else {
             modules::process::start_codex_default(&injection_plan.args)?
         };
+        if codex_instance_start_cancelled(&instance_id) {
+            let _ = modules::process::close_pid(pid, 5);
+            return Err("CODEX_START_CANCELLED".to_string());
+        }
         modules::logger::log_info(&format!(
             "[Codex Start] default launch phase finished, pid={}, elapsed_ms={}, total_ms={}",
             pid,
@@ -2333,13 +2440,29 @@ async fn codex_start_instance_internal(
         serde_json::json!({
             "refreshRequired": oauth_refresh_required,
             "accessTokenRefreshDue": oauth_access_token_refresh_due,
-            "idTokenRefreshDue": oauth_id_token_refresh_due,
             "hasRefreshToken": oauth_has_refresh_token,
             "tokenGenerationBefore": oauth_token_generation_before,
         }),
     );
     if let Some(ref account_id) = instance.bind_account_id {
-        inject_preflighted_bound_account_to_profile(instance_dir, account_id).await?;
+        if should_skip_launch_step(skip_failed_step, "prepareCredentials") {
+            modules::logger::log_warn(&format!(
+                "[Codex Start] 用户选择跳过凭据准备步骤: instance_id={}, account_id={}",
+                instance.id, account_id
+            ));
+            emit_codex_instance_launch_step(
+                &app,
+                emit_launch_progress,
+                &launch_target,
+                "prepareCredentials",
+                "skipped",
+                62,
+                serde_json::json!({ "skippedByUser": true }),
+            );
+        } else {
+            inject_preflighted_bound_account_to_profile(instance_dir, account_id).await?;
+            ensure_codex_instance_start_not_cancelled(&instance_id)?;
+        }
     } else {
         modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(
             instance_dir,
@@ -2370,14 +2493,6 @@ async fn codex_start_instance_internal(
             "tokenGenerationChanged": refreshed_oauth_account.as_ref().is_some_and(|account| {
                 account.token_generation > oauth_token_generation_before
             }),
-            "accessTokenExpiresAt": refreshed_oauth_account.as_ref().and_then(|account| {
-                modules::codex_oauth::jwt_token_expiration_timestamp(
-                    &account.tokens.access_token,
-                )
-            }),
-            "idTokenExpiresAt": refreshed_oauth_account.as_ref().and_then(|account| {
-                modules::codex_oauth::jwt_token_expiration_timestamp(&account.tokens.id_token)
-            }),
         }),
     );
     emit_codex_instance_launch_step(
@@ -2390,8 +2505,22 @@ async fn codex_start_instance_internal(
         serde_json::json!({}),
     );
     let provider_gateway_started = Instant::now();
-    ensure_provider_gateway_for_bind_account(instance_dir, instance.bind_account_id.as_deref())
-        .await?;
+    if should_skip_launch_step(skip_failed_step, "writeProfile") {
+        modules::logger::log_warn("[Codex Start] 用户选择跳过 provider gateway 准备步骤");
+        emit_codex_instance_launch_step(
+            &app,
+            emit_launch_progress,
+            &launch_target,
+            "writeProfile",
+            "skipped",
+            70,
+            serde_json::json!({ "skippedByUser": true }),
+        );
+    } else {
+        ensure_provider_gateway_for_bind_account(instance_dir, instance.bind_account_id.as_deref())
+            .await?;
+        ensure_codex_instance_start_not_cancelled(&instance_id)?;
+    }
     modules::logger::log_info(&format!(
         "[Codex Start] instance provider gateway phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,
@@ -2415,7 +2544,11 @@ async fn codex_start_instance_internal(
         flow_started.elapsed().as_millis()
     ));
     let sanitize_started = Instant::now();
-    sanitize_codex_config_before_launch(instance_dir)?;
+    if should_skip_launch_step(skip_failed_step, "writeProfile") {
+        modules::logger::log_warn("[Codex Start] 用户选择跳过配置清理步骤");
+    } else {
+        sanitize_codex_config_before_launch(instance_dir)?;
+    }
     modules::logger::log_info(&format!(
         "[Codex Start] instance sanitize phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,
@@ -2423,9 +2556,14 @@ async fn codex_start_instance_internal(
         flow_started.elapsed().as_millis()
     ));
     let visibility_repair_started = Instant::now();
-    repair_session_visibility_for_selected_instance(&instance.id, &instance.name, instance_dir)
-        .await
-        .map_err(|error| format!("Codex 启动已取消: {}", error))?;
+    if should_skip_launch_step(skip_failed_step, "writeProfile") {
+        modules::logger::log_warn("[Codex Start] 用户选择跳过会话可见性修复步骤");
+    } else {
+        repair_session_visibility_for_selected_instance(&instance.id, &instance.name, instance_dir)
+            .await
+            .map_err(|error| format!("Codex 启动已取消: {}", error))?;
+        ensure_codex_instance_start_not_cancelled(&instance_id)?;
+    }
     modules::logger::log_info(&format!(
         "[Codex Start] instance session visibility repair phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
         instance.id,
@@ -2482,8 +2620,13 @@ async fn codex_start_instance_internal(
         serde_json::json!({ "launchMode": "app" }),
     );
     let launch_started = Instant::now();
+    ensure_codex_instance_start_not_cancelled(&instance_id)?;
     let pid =
         modules::process::start_codex_with_args(&instance.user_data_dir, &injection_plan.args)?;
+    if codex_instance_start_cancelled(&instance_id) {
+        let _ = modules::process::close_pid(pid, 5);
+        return Err("CODEX_START_CANCELLED".to_string());
+    }
     modules::logger::log_info(&format!(
         "[Codex Start] instance launch phase finished: instance_id={}, pid={}, elapsed_ms={}, total_ms={}",
         instance.id,
@@ -2530,38 +2673,74 @@ async fn codex_start_instance_internal(
     ))
 }
 
-/// 调用方必须在整个“凭据写入 + 默认实例启动”事务期间持有默认 profile 写入租约。
-/// 同一 OAuth 可继续由其它 profile 使用；启动预检只把最新运行态凭据回收到账号库。
+/// 启动已经由账号切换或 API 服务激活流程准备好 profile 的默认实例。
+///
+/// 本方法调用 `codex_start_instance_internal` 复用多开实例的启动事务；调用方必须在整个
+/// “凭据写入 + 默认实例启动”期间持有默认 profile 写入租约。`launch_operation` 仅用于标识
+/// 启动来源并关联前端进度状态，不改变 Token Authority 和 profile 落盘规则。
 pub(crate) async fn codex_start_default_with_prepared_profile(
     app: AppHandle,
-    skip_official_account_check: bool,
     emit_launch_progress: bool,
+    launch_operation: Option<&str>,
+    skip_failed_step: Option<&str>,
 ) -> Result<CodexInstanceProfileView, String> {
-    let launch_target = emit_launch_progress
-        .then(|| resolve_codex_instance_start_target(DEFAULT_INSTANCE_ID))
-        .transpose()?;
+    let mut launch_target = resolve_codex_instance_start_target(DEFAULT_INSTANCE_ID)?;
+    launch_target.launch_operation = launch_operation.map(str::to_owned);
     let result = codex_start_instance_internal(
         app.clone(),
         DEFAULT_INSTANCE_ID.to_string(),
         true,
         false,
-        skip_official_account_check,
+        skip_failed_step,
         emit_launch_progress,
+        launch_operation,
     )
     .await;
-    if let (Some(target), Err(error)) = (&launch_target, &result) {
+    let result = match result {
+        Ok(profile) => Ok(profile),
+        Err(error) => {
+            let auth_account_id = if launch_target
+                .bind_account_id
+                .as_deref()
+                .is_some_and(modules::codex_instance::is_api_service_bind_account_id)
+            {
+                modules::codex_local_access::bound_oauth_account_id_for_instance_start()
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                modules::codex_account::oauth_account_id_for_runtime_binding(
+                    launch_target.bind_account_id.as_deref(),
+                )
+                .or_else(|| {
+                    modules::codex_account::oauth_account_id_for_runtime_dir(
+                        &launch_target.user_data_dir,
+                    )
+                })
+            };
+            Err(auth_account_id
+                .as_deref()
+                .map(|account_id| {
+                    modules::codex_account::format_account_switch_error(account_id, error.clone())
+                })
+                .unwrap_or(error))
+        }
+    };
+    if let Err(error) = &result {
+        let cancelled = error == "CODEX_START_CANCELLED";
         emit_codex_instance_launch_progress(
             &app,
-            true,
-            target,
+            emit_launch_progress,
+            &launch_target,
             serde_json::json!({
-                "type": "error",
+                "type": if cancelled { "cancelled" } else { "error" },
                 "error": error,
-                "canRetry": true,
-                "canSkipOfficialCheck": false,
+                "cancelled": cancelled,
+                "canRetry": !cancelled && !error.starts_with("CODEX_SWITCH_AUTH_REQUIRED:"),
             }),
         );
     }
+    clear_codex_instance_start_cancel(DEFAULT_INSTANCE_ID);
     result
 }
 
@@ -2570,7 +2749,7 @@ pub async fn codex_start_instance(
     app: AppHandle,
     instance_id: String,
     transfer_conflicting_account: Option<bool>,
-    skip_official_account_check: Option<bool>,
+    skip_failed_step: Option<String>,
 ) -> Result<CodexInstanceProfileView, String> {
     let launch_target = resolve_codex_instance_start_target(&instance_id)?;
     let _profile_lease = modules::codex_account::try_acquire_profile_mutation_lease(
@@ -2582,8 +2761,9 @@ pub async fn codex_start_instance(
         instance_id,
         false,
         transfer_conflicting_account.unwrap_or(false),
-        skip_official_account_check.unwrap_or(false),
+        skip_failed_step.as_deref(),
         true,
+        None,
     )
     .await;
     if let Err(error) = &result {
@@ -2608,20 +2788,44 @@ pub async fn codex_start_instance(
                 modules::codex_account::format_account_switch_error(account_id, error.clone())
             })
             .unwrap_or_else(|| error.clone());
+        let cancelled = error == "CODEX_START_CANCELLED";
         emit_codex_instance_launch_progress(
             &app,
             true,
             &launch_target,
             serde_json::json!({
-                "type": "error",
+                "type": if cancelled { "cancelled" } else { "error" },
                 "error": error_for_ui,
-                "canRetry": true,
-                "canSkipOfficialCheck": false,
+                "cancelled": cancelled,
+                "canRetry": !cancelled,
                 "oauthRuntimePolicy": "latest-runtime-wins",
             }),
         );
     }
+    clear_codex_instance_start_cancel(&launch_target.instance_id);
     result
+}
+
+/// 请求停止指定实例的启动事务。取消不会关闭弹框，由前端收到 cancelled 事件后决定是否关闭。
+#[tauri::command]
+pub async fn codex_cancel_instance_start(
+    app: AppHandle,
+    instance_id: String,
+) -> Result<(), String> {
+    let target = resolve_codex_instance_start_target(&instance_id)?;
+    request_codex_instance_start_cancel(&instance_id);
+    emit_codex_instance_launch_progress(
+        &app,
+        true,
+        &target,
+        serde_json::json!({
+            "type": "cancelled",
+            "progress": 0,
+            "error": "CODEX_START_CANCELLED",
+            "cancelled": true,
+        }),
+    );
+    Ok(())
 }
 
 #[tauri::command]
