@@ -239,7 +239,10 @@
         "weekly": "Chat messages",
         "resetAt": "Reset: {{time}}",
         "expiresAt": "Expires at: {{time}}",
-        "leftPercent": "{{value}}% left"
+        "unlimited": "Unlimited",
+        "leftPercent": "{{value}}% left",
+        "cachedRefreshFailed": "Refresh failed; showing the last successful data",
+        "lastSuccessfulQuery": "Last successful: {{time}}"
       },
       "subtitle": "Monitor quota status for all accounts in real time.",
       "time": {
@@ -729,6 +732,25 @@
           "contextWindowInvalid": "Context window must be an integer greater than 0.",
           "autoCompactInvalid": "Auto-compact limit must be an integer greater than 0."
         }
+      },
+      "modelRouting": {
+        "title": "Third-party API routing",
+        "summary": "Unprefixed models use the current subscription; prefixed models such as cpa/gpt-5.5 are forwarded to a third-party API. Both depend on the local routing service.",
+        "rowSummary": "Unprefixed models use the current subscription; prefixed models such as cpa/gpt-5.5 are forwarded to a third-party API. Both depend on the local routing service.",
+        "confirmEnableTitle": "Enable third-party API routing?",
+        "confirmEnableMessage": "Codex model requests will be routed through the local Cockpit Tools service. If the service is not running, both subscription and third-party models may be unavailable. Launch at login will be enabled when you save.\n\nEnable routing?",
+        "confirmEnableAction": "Enable",
+        "confirmDisableTitle": "Disable third-party API routing?",
+        "confirmDisableMessage": "After this change takes effect, the local gateway will stop, native subscription access will be restored, and third-party models will be unavailable.\n\nDisable routing?",
+        "confirmDisableAction": "Disable",
+        "modalTip": "Subscription and third-party models both pass through the local routing service. Keep Cockpit Tools running in the background. The service recovers automatically and falls back to the official configuration after repeated failures.",
+        "modelRequired": "Each enabled API route must include at least one model.",
+        "runningSaveTitle": "When should routing take effect?",
+        "runningSaveMessage": "This Codex instance is running. Replacing the local service now will interrupt the current conversation.\n\nChoose Save and restart Codex to apply now, or Save for later to keep the current session unchanged.",
+        "saveAndRestart": "Save and restart Codex",
+        "saveForLater": "Save for later",
+        "restartRollbackFailed": "The new route failed to start and the original configuration could not be restarted: ",
+        "restartRolledBack": "The new route failed to start. The original configuration was restored and Codex restarted: {{error}}"
       },
       "nameRequired": "Please enter an instance name",
       "pathRequired": "Please select an instance directory",
@@ -2731,18 +2753,18 @@
         "empty": "No quota stats yet"
       },
       "accountPoolHealth": {
-        "title": "Account Pool",
+        "title": "Account Status",
         "allAvailable": "All OK {{count}}",
         "availableRatio": "OK {{available}}/{{total}}",
-        "issueSummary": "Bad {{abnormal}} · Pool {{poolUnavailable}} · Cool {{cooldown}}",
-        "detail": "OK {{available}}/{{total}}, bad {{abnormal}}, pool {{poolUnavailable}}, cooldown {{cooldown}}, missing {{missing}}, auth {{authError}}, quota {{quotaLimited}}",
-        "openDetails": "View account pool issues",
+        "issueSummary": "Bad {{abnormal}} · Cool {{cooldown}}",
+        "detail": "OK {{available}}/{{total}}, bad {{abnormal}}, cooldown {{cooldown}}, missing {{missing}}, auth {{authError}}, quota {{quotaLimited}}",
+        "openDetails": "View account issues",
         "recover": "Recover account status",
         "recoverSuccess": "Recovery requested for {{count}} account(s)",
         "dialog": {
-          "title": "Account Pool Issues",
-          "description": "These Sidecar scheduler states include account issues and pool-level failures that happen before an account is selected.",
-          "noIssues": "No account pool issues",
+          "title": "Account Issues",
+          "description": "Each account is shown with its model, unavailable reason, and available recovery action.",
+          "noIssues": "No account issues",
           "unscopedApiKey": "Current API Key",
           "poolUnavailable": "No available pool account",
           "poolUnavailableDetail": "No available account was selected for model {{model}}",
@@ -5123,6 +5145,11 @@
       "desc": "Manage Cursor accounts by importing from local Cursor installation, pasting a JWT token, or signing in via OAuth.",
       "reason": "Permission scope: read and write Cursor local auth storage (state.vscdb) for account import and token injection (account switching).",
       "storage": "Network scope: when refreshing quota, the JWT is sent to cursor.com official APIs to fetch usage, user info, and subscription data. No data is sent to any third-party server."
+    },
+    "filters": {
+      "quotaFailed": "Quota query failed ({{count}})",
+      "cleanQuotaFailedAction": "Delete quota-failed accounts ({{count}})",
+      "cleanQuotaFailedConfirm": "Delete all {{count}} account(s) with quota query failures?"
     }
   },
   "breakout": {
@@ -5732,8 +5759,8 @@
     },
     "flowNotice": {
       "title": "WorkBuddy Account Info (click to expand/collapse)",
-      "desc": "Account switching writes the local sign-in file using the latest official WorkBuddy client layout; local import reads the same file. Data is processed locally only.",
-      "permission": "Permission scope: read and write the WorkBuddy sign-in file (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) for local import and account switching; the legacy state.vscdb is no longer read or modified.",
+      "desc": "Account switching writes the local WorkBuddy sign-in file using the current official client layout; local import reads the same file. Data is processed locally only. If an opaque official encryption wrapper is detected, the original file is preserved and the overwrite is stopped.",
+      "permission": "Permission scope: read and write the WorkBuddy sign-in file (CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info) for local import and account switching; the legacy state.vscdb is no longer read or modified. Files with an official encryption wrapper are not overwritten without its key.",
       "network": "Network scope: OAuth login and token refresh require network requests to WorkBuddy; quota queries call billing APIs. Local sign-in files and raw credentials are not uploaded."
     },
     "nickname": "Nickname",

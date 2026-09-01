@@ -239,7 +239,10 @@
         "weekly": "Chat messages",
         "resetAt": "重置：{{time}}",
         "expiresAt": "到期时间：{{time}}",
-        "leftPercent": "剩余 {{value}}%"
+        "unlimited": "无限额度",
+        "leftPercent": "剩余 {{value}}%",
+        "cachedRefreshFailed": "刷新失败，以下为上次成功数据",
+        "lastSuccessfulQuery": "上次成功：{{time}}"
       },
       "subtitle": "实时监控所有账号的配额状态。",
       "time": {
@@ -729,6 +732,25 @@
           "contextWindowInvalid": "上下文窗口必须是大于 0 的整数",
           "autoCompactInvalid": "自动压缩阈值必须是大于 0 的整数"
         }
+      },
+      "modelRouting": {
+        "title": "第三方 API 路由",
+        "summary": "普通模型使用当前订阅；带前缀模型（如 cpa/gpt-5.5）转发到第三方 API。两者都依赖本地分流服务。",
+        "rowSummary": "普通模型使用当前订阅；带前缀模型（如 cpa/gpt-5.5）转发到第三方 API。两者都依赖本地分流服务。",
+        "confirmEnableTitle": "开启第三方 API 路由？",
+        "confirmEnableMessage": "开启后，Codex 的模型请求将通过 Cockpit Tools 本地服务分流。服务未运行时，官方订阅和第三方模型都可能无法使用。保存时将默认启用开机自启。\n\n确认开启吗？",
+        "confirmEnableAction": "确认开启",
+        "confirmDisableTitle": "关闭第三方 API 路由？",
+        "confirmDisableMessage": "关闭并生效后将停止本地网关、恢复官方原生直连，所有第三方模型将不可用。\n\n确认关闭吗？",
+        "confirmDisableAction": "确认关闭",
+        "modalTip": "开启后，官方订阅和第三方模型都会经过本地分流服务。请保持 Cockpit Tools 后台运行；服务异常时会自动恢复，连续失败则回退官方配置。",
+        "modelRequired": "每个已启用的 API 路由至少需要选择一个模型。",
+        "runningSaveTitle": "路由配置何时生效？",
+        "runningSaveMessage": "此 Codex 实例正在运行。立即替换本地服务会中断当前对话。\n\n选择“保存并重启 Codex”立即生效；选择“仅保存，稍后生效”不会影响当前会话。",
+        "saveAndRestart": "保存并重启 Codex",
+        "saveForLater": "仅保存，稍后生效",
+        "restartRollbackFailed": "新路由启动失败，恢复原配置后仍无法启动：",
+        "restartRolledBack": "新路由启动失败，已恢复原配置并重新启动 Codex：{{error}}"
       },
       "nameRequired": "请输入实例名称",
       "pathRequired": "请选择实例目录",
@@ -2731,18 +2753,18 @@
         "empty": "暂无额度统计"
       },
       "accountPoolHealth": {
-        "title": "账号池",
+        "title": "账号状态",
         "allAvailable": "全部可用 {{count}}",
         "availableRatio": "可用 {{available}}/{{total}}",
-        "issueSummary": "异常 {{abnormal}} · 池异常 {{poolUnavailable}} · 冷却 {{cooldown}}",
-        "detail": "可用 {{available}}/{{total}}，异常 {{abnormal}}，池异常 {{poolUnavailable}}，冷却 {{cooldown}}，缺失 {{missing}}，鉴权 {{authError}}，额度 {{quotaLimited}}",
-        "openDetails": "查看账号池异常详情",
+        "issueSummary": "异常 {{abnormal}} · 冷却 {{cooldown}}",
+        "detail": "可用 {{available}}/{{total}}，异常 {{abnormal}}，冷却 {{cooldown}}，缺失 {{missing}}，鉴权 {{authError}}，额度 {{quotaLimited}}",
+        "openDetails": "查看账号异常详情",
         "recover": "恢复账号状态",
         "recoverSuccess": "已提交 {{count}} 个账号的恢复操作",
         "dialog": {
-          "title": "账号池异常",
-          "description": "以下状态来自 Sidecar 账号调度器，包括账号异常和请求尚未选中账号时的池级异常。",
-          "noIssues": "账号池当前无异常",
+          "title": "账号异常",
+          "description": "以下状态按账号显示，包含对应模型、不可用原因和可执行的恢复操作。",
+          "noIssues": "当前没有异常账号",
           "unscopedApiKey": "当前 API Key",
           "poolUnavailable": "账号池无可用账号",
           "poolUnavailableDetail": "模型 {{model}} 的请求没有选出可用账号",
@@ -5123,6 +5145,11 @@
       "desc": "支持从本地 Cursor 安装导入、粘贴 JWT 令牌或 OAuth 授权登录来管理 Cursor 账号。",
       "reason": "权限范围：读取并写入 Cursor 本地认证存储（state.vscdb），用于账号导入与令牌注入（切号）。",
       "storage": "网络请求范围：刷新配额时携带 JWT 向 cursor.com 官方接口请求使用量、用户信息及订阅信息；不向任何第三方服务器上传数据。"
+    },
+    "filters": {
+      "quotaFailed": "配额查询失败 ({{count}})",
+      "cleanQuotaFailedAction": "删除配额查询失败账号 ({{count}})",
+      "cleanQuotaFailedConfirm": "确定要删除全部 {{count}} 个配额查询失败的账号吗？"
     }
   },
   "breakout": {
@@ -5732,8 +5759,8 @@
     },
     "flowNotice": {
       "title": "WorkBuddy 账号管理说明（点击展开/收起）",
-      "desc": "切换账号会按新版 WorkBuddy 官方客户端规则写入本机登录文件；本机导入读取同一登录文件，数据仅在本地处理。",
-      "permission": "权限范围：读取并写入 WorkBuddy 登录文件（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info），用于本机导入与账号切换；不再读取或修改旧版 state.vscdb。",
+      "desc": "切换账号会按当前 WorkBuddy 官方客户端登录文件布局写入本机；本机导入读取同一登录文件，数据仅在本地处理。若检测到无法解密的官方封装，会保留原文件并停止覆盖。",
+      "permission": "权限范围：读取并写入 WorkBuddy 登录文件（CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info），用于本机导入与账号切换；不再读取或修改旧版 state.vscdb。遇到官方加密封装且未取得密钥时不会覆盖原文件。",
       "network": "网络范围：OAuth 授权登录与 Token 刷新需联网请求 WorkBuddy；配额查询需调用计费 API。不上传本地登录文件或凭证原文。"
     },
     "nickname": "昵称",

@@ -3,25 +3,27 @@
 use crate::models::codex::{CodexAccount, CodexApiProviderMode, CodexAppSpeed, CodexAuthMode};
 use crate::models::codex_local_access::{
     CodexLocalAccessAccountCooldown, CodexLocalAccessAccountHealth,
-    CodexLocalAccessAccountPoolHealth, CodexLocalAccessAccountPoolMemberHealth,
-    CodexLocalAccessAccountModelRule, CodexLocalAccessAccountStats,
+    CodexLocalAccessAccountModelRule, CodexLocalAccessAccountPoolHealth,
+    CodexLocalAccessAccountPoolMemberHealth, CodexLocalAccessAccountStats,
     CodexLocalAccessAccountWindowQuery, CodexLocalAccessAccountWindowStats, CodexLocalAccessApiKey,
     CodexLocalAccessApiKeyStats, CodexLocalAccessAppendAccountSkipped,
     CodexLocalAccessAppendAccountsResult, CodexLocalAccessChatMessage, CodexLocalAccessChatResult,
     CodexLocalAccessClientBaseUrlHost, CodexLocalAccessCollection,
     CodexLocalAccessCustomRoutingRule, CodexLocalAccessGatewayMode,
-    CodexLocalAccessImageGenerationMode, CodexLocalAccessImageGenerationStatus,
-    CodexLocalAccessImageGenerationPolicy,
-    CodexLocalAccessModelAlias, CodexLocalAccessModelPricing, CodexLocalAccessModelStats,
-    CodexLocalAccessPortCleanupResult, CodexLocalAccessProfileAttachment,
-    CodexLocalAccessProviderGateway, CodexLocalAccessProviderGatewayModelCapability,
-    CodexLocalAccessQuotaReserve, CodexLocalAccessQuotaReserveStatus, CodexLocalAccessRequestKind,
+    CodexLocalAccessImageGenerationMode, CodexLocalAccessImageGenerationPolicy,
+    CodexLocalAccessImageGenerationStatus, CodexLocalAccessModelAlias,
+    CodexLocalAccessModelPricing, CodexLocalAccessModelRoute, CodexLocalAccessModelRouting,
+    CodexLocalAccessModelStats, CodexLocalAccessPortCleanupResult,
+    CodexLocalAccessProfileAttachment, CodexLocalAccessProviderGateway,
+    CodexLocalAccessProviderGatewayModelCapability, CodexLocalAccessQuotaReserve,
+    CodexLocalAccessQuotaReserveStatus, CodexLocalAccessRequestKind,
     CodexLocalAccessRoutingStrategy, CodexLocalAccessScope, CodexLocalAccessState,
     CodexLocalAccessStats, CodexLocalAccessStatsWindow, CodexLocalAccessTestFailure,
     CodexLocalAccessTestResult, CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts,
     CodexLocalAccessUsageEvent, CodexLocalAccessUsageEventPage, CodexLocalAccessUsageStats,
     CodexTokenBreakdown,
 };
+use crate::models::{CodexInstanceApiRoute, CodexInstanceModelRouting};
 use crate::modules::atomic_write::{write_string_atomic, write_string_atomic_if_hash_matches};
 use crate::modules::{
     account, codex_account, codex_agent_identity, codex_oauth, codex_protocol, codex_quota,
@@ -418,6 +420,7 @@ struct GatewayRuntime {
     collection_dirty: bool,
     stats: CodexLocalAccessStats,
     stats_dirty: bool,
+    stats_revision: u64,
     stats_flush_inflight: bool,
     response_affinity: HashMap<String, ResponseAffinityBinding>,
     model_cooldowns: HashMap<String, AccountModelCooldown>,
@@ -482,12 +485,17 @@ struct ProviderGatewayRuntime {
     actual_bind_host: Option<String>,
     task: Option<tokio::task::JoinHandle<()>>,
     sidecar_child: Option<Child>,
+    sidecar_dir: Option<PathBuf>,
+    collection: Option<CodexLocalAccessCollection>,
+    oauth_account_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ProviderGatewayProfileState {
     api_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    port: Option<u16>,
     created_at: i64,
     updated_at: i64,
 }
@@ -2280,7 +2288,7 @@ async fn schedule_stats_flush_if_needed() {
                     .flatten();
                 runtime.stats_dirty = false;
                 runtime.collection_dirty = false;
-                (runtime.stats.clone(), collection_snapshot)
+                (stats_snapshot_without_events(&runtime.stats), collection_snapshot)
             };
 
             if let Err(err) = save_stats_to_disk(&stats_snapshot) {

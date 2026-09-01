@@ -499,6 +499,7 @@ pub async fn reprice_local_access_request_logs() -> Result<CodexLocalAccessState
         let mut runtime = gateway_runtime().lock().await;
         runtime.stats = loaded_stats;
         runtime.stats_dirty = false;
+        runtime.stats_revision = runtime.stats_revision.wrapping_add(1);
         runtime.stats_flush_inflight = false;
     }
 
@@ -1245,6 +1246,7 @@ pub async fn clear_local_access_stats() -> Result<CodexLocalAccessState, String>
         let mut runtime = gateway_runtime().lock().await;
         runtime.stats = cleared;
         runtime.stats_dirty = true;
+        runtime.stats_revision = runtime.stats_revision.wrapping_add(1);
     }
     schedule_stats_flush_if_needed().await;
 
@@ -1422,6 +1424,8 @@ fn close_installed_sidecar_processes_by_path(timeout_secs: u64) -> Result<usize,
 
 async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
     let mut errors = Vec::new();
+    #[cfg(target_os = "windows")]
+    let preserve_running_mixed_gateway = has_running_persisted_mixed_model_gateway();
 
     let stopped_endpoint = stop_gateway().await;
     if let Some(endpoint) = stopped_endpoint {
@@ -1444,8 +1448,10 @@ async fn stop_all_sidecar_processes_for_app_shutdown() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        if let Err(error) = close_installed_sidecar_processes_by_path(5) {
-            errors.push(format!("关闭安装目录 sidecar 残留进程失败: {}", error));
+        if !preserve_running_mixed_gateway {
+            if let Err(error) = close_installed_sidecar_processes_by_path(5) {
+                errors.push(format!("关闭安装目录 sidecar 残留进程失败: {}", error));
+            }
         }
     }
 

@@ -232,7 +232,10 @@
         "weekly": "Wöchentliches Kontingent",
         "resetAt": "Zurücksetzung: {{time}}",
         "expiresAt": "Läuft ab am: {{time}}",
-        "leftPercent": "{{value}} % übrig"
+        "unlimited": "Unbegrenztes Kontingent",
+        "leftPercent": "{{value}} % übrig",
+        "cachedRefreshFailed": "Aktualisierung fehlgeschlagen; letzte erfolgreiche Daten werden angezeigt",
+        "lastSuccessfulQuery": "Letzter Erfolg: {{time}}"
       },
       "subtitle": "Verwalte deine GitHub Copilot-Konten",
       "time": {
@@ -525,7 +528,26 @@
       "appSpeed": "Tempo",
       "appSpeedDesc": "Schreibt das gewählte Tempo vor dem Start von Codex",
       "autoSyncThreads": "Sitzungen auto-syncen",
-      "autoSyncThreadsDesc": "Aus lässt Sitzungen mehrerer Instanzen getrennt. Wenn aktiviert, werden lokale Sitzungsdaten beim Starten oder Schließen einer Instanz automatisch zusammengeführt, aber nur nachdem alle Codex-Instanzen gestoppt sind."
+      "autoSyncThreadsDesc": "Aus lässt Sitzungen mehrerer Instanzen getrennt. Wenn aktiviert, werden lokale Sitzungsdaten beim Starten oder Schließen einer Instanz automatisch zusammengeführt, aber nur nachdem alle Codex-Instanzen gestoppt sind.",
+      "modelRouting": {
+        "title": "Drittanbieter-API-Routing",
+        "summary": "Präfixfreie Modelle nutzen das aktuelle Abonnement; Modelle mit Präfix wie cpa/gpt-5.5 werden an eine Drittanbieter-API weitergeleitet. Beide hängen vom lokalen Routing-Dienst ab.",
+        "rowSummary": "Präfixfreie Modelle nutzen das aktuelle Abonnement; Modelle mit Präfix wie cpa/gpt-5.5 werden an eine Drittanbieter-API weitergeleitet. Beide hängen vom lokalen Routing-Dienst ab.",
+        "confirmEnableTitle": "Drittanbieter-API-Routing aktivieren?",
+        "confirmEnableMessage": "Codex-Modellanfragen werden über den lokalen Cockpit Tools-Dienst weitergeleitet. Wenn der Dienst nicht läuft, sind möglicherweise sowohl Abonnement- als auch Drittanbietermodelle nicht verfügbar. Der Autostart bei der Anmeldung wird beim Speichern aktiviert.\n\nRouting aktivieren?",
+        "confirmEnableAction": "Aktivieren",
+        "confirmDisableTitle": "Drittanbieter-API-Routing deaktivieren?",
+        "confirmDisableMessage": "Sobald diese Änderung wirksam wird, wird das lokale Gateway gestoppt, der offizielle Direktzugriff wiederhergestellt und Drittanbietermodelle sind nicht mehr verfügbar.\n\nRouting deaktivieren?",
+        "confirmDisableAction": "Deaktivieren",
+        "modalTip": "Abonnement- und Drittanbietermodelle laufen beide über den lokalen Routing-Dienst. Lassen Sie Cockpit Tools im Hintergrund laufen. Der Dienst stellt sich automatisch wieder her und fällt bei wiederholten Fehlern auf die offizielle Konfiguration zurück.",
+        "modelRequired": "Jede aktivierte API-Route muss mindestens ein Modell enthalten.",
+        "runningSaveTitle": "Wann soll das Routing wirksam werden?",
+        "runningSaveMessage": "Diese Codex-Instanz wird ausgeführt. Das Ersetzen des lokalen Dienstes unterbricht die aktuelle Unterhaltung.\n\nWählen Sie „Speichern und Codex neu starten“, um die Änderungen jetzt anzuwenden, oder „Speichern für später“, um die aktuelle Sitzung unverändert beizubehalten.",
+        "saveAndRestart": "Speichern und Codex neu starten",
+        "saveForLater": "Speichern für später",
+        "restartRollbackFailed": "Die neue Route konnte nicht gestartet werden und die ursprüngliche Konfiguration konnte nicht neu gestartet werden: ",
+        "restartRolledBack": "Die neue Route konnte nicht gestartet werden. Die ursprüngliche Konfiguration wurde wiederhergestellt und Codex neu gestartet: {{error}}"
+      }
     },
     "quota": {
       "unbound": "Nicht gekoppelt",
@@ -2323,7 +2345,12 @@
       "summaryMeta": "{{count}} Konten · {{scope}}",
       "summaryMetaUnconfigured": "Nicht konfiguriert · {{scope}}",
       "memberTitle": "Sammlungsmitglieder",
-      "imagePolicy": { "label": "Bildrichtlinie", "inherit": "Bild: Automatisch", "enabled": "Bild: Aktiviert", "disabled": "Bild: Deaktiviert" },
+      "imagePolicy": {
+        "label": "Bildrichtlinie",
+        "inherit": "Bild: Automatisch",
+        "enabled": "Bild: Aktiviert",
+        "disabled": "Bild: Deaktiviert"
+      },
       "memberPriorityLabel": "Priorität",
       "memberPriorityLowest": "Niedrig",
       "memberPriorityNormal": "Regulär",
@@ -2529,18 +2556,18 @@
       "clientBaseUrlHostDesc": "Beeinflusst nur die Base URL, die in den Codex Provider geschrieben und an Clients kopiert wird; die Dienst-Adresse bleibt unverändert.",
       "clientBaseUrlHostSaveSuccess": "Client-Adresse wurde aktualisiert",
       "accountPoolHealth": {
-        "title": "Kontenpool",
+        "title": "Kontostatus",
         "allAvailable": "Alle OK {{count}}",
         "availableRatio": "Bereit {{available}}/{{total}}",
-        "issueSummary": "Fehler {{abnormal}} · Pool {{poolUnavailable}} · Pause {{cooldown}}",
-        "detail": "OK {{available}}/{{total}}, Fehler {{abnormal}}, Pool {{poolUnavailable}}, Pause {{cooldown}}, fehlt {{missing}}, Auth {{authError}}, Kontingent {{quotaLimited}}",
-        "openDetails": "Probleme des Kontenpools anzeigen",
+        "issueSummary": "Fehler {{abnormal}} · Pause {{cooldown}}",
+        "detail": "OK {{available}}/{{total}}, Fehler {{abnormal}}, Pause {{cooldown}}, fehlt {{missing}}, Auth {{authError}}, Kontingent {{quotaLimited}}",
+        "openDetails": "Kontoprobleme anzeigen",
         "recover": "Kontostatus wiederherstellen",
         "recoverSuccess": "Wiederherstellung für {{count}} Konto/Konten angefordert",
         "dialog": {
-          "title": "Probleme des Kontenpools",
-          "description": "Diese Sidecar-Planerzustände umfassen Konto- und Poolfehler, die vor der Kontoauswahl auftreten.",
-          "noIssues": "Keine Probleme im Kontenpool",
+          "title": "Kontoprobleme",
+      "description": "Jedes Konto wird mit Modell, Grund der Nichtverfügbarkeit und möglicher Wiederherstellung angezeigt.",
+          "noIssues": "Keine Kontoprobleme",
           "unscopedApiKey": "Aktueller API Key",
           "poolUnavailable": "Kein verfügbares Pool-Konto",
           "poolUnavailableDetail": "Für Modell {{model}} wurde kein verfügbares Konto ausgewählt",
@@ -4813,6 +4840,11 @@
     },
     "oauth": {
       "desc": "Klicken Sie auf die Schaltfläche unten und schließen Sie die Cursor-Autorisierung im Browser ab."
+    },
+    "filters": {
+      "quotaFailed": "Kontingentabfrage fehlgeschlagen ({{count}})",
+      "cleanQuotaFailedAction": "Kontingentabfrage-fehlgeschlagene Konten löschen ({{count}})",
+      "cleanQuotaFailedConfirm": "Alle {{count}} Konto/Konten mit fehlgeschlagener Kontingentabfrage löschen?"
     }
   },
   "breakout": {

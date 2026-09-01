@@ -227,7 +227,10 @@
         "weekly": "Hạn mức tuần",
         "resetAt": "Đặt lại: {{time}}",
         "expiresAt": "Hết hạn lúc: {{time}}",
-        "leftPercent": "Còn {{value}}%"
+        "unlimited": "Hạn mức không giới hạn",
+        "leftPercent": "Còn {{value}}%",
+        "cachedRefreshFailed": "Làm mới thất bại; đang hiển thị dữ liệu thành công gần nhất",
+        "lastSuccessfulQuery": "Lần thành công gần nhất: {{time}}"
       },
       "subtitle": "Quản lý các tài khoản GitHub Copilot",
       "time": {
@@ -525,7 +528,26 @@
       "appSpeed": "Tốc độ",
       "appSpeedDesc": "Ghi tốc độ đã chọn trước khi mở Codex chính thức",
       "autoSyncThreads": "Tự đồng bộ phiên",
-      "autoSyncThreadsDesc": "Tắt để giữ phiên của nhiều instance tách biệt. Khi bật, việc mở hoặc đóng instance sẽ tự gộp bản ghi phiên cục bộ chỉ sau khi mọi instance Codex đã dừng."
+      "autoSyncThreadsDesc": "Tắt để giữ phiên của nhiều instance tách biệt. Khi bật, việc mở hoặc đóng instance sẽ tự gộp bản ghi phiên cục bộ chỉ sau khi mọi instance Codex đã dừng.",
+      "modelRouting": {
+        "title": "Định tuyến API của bên thứ ba",
+        "summary": "Các mô hình không có tiền tố sử dụng gói đăng ký hiện tại; các mô hình có tiền tố như cpa/gpt-5.5 được chuyển tiếp đến API của bên thứ ba. Cả hai đều phụ thuộc vào dịch vụ định tuyến cục bộ.",
+        "rowSummary": "Các mô hình không có tiền tố sử dụng gói đăng ký hiện tại; các mô hình có tiền tố như cpa/gpt-5.5 được chuyển tiếp đến API của bên thứ ba. Cả hai đều phụ thuộc vào dịch vụ định tuyến cục bộ.",
+        "confirmEnableTitle": "Bật định tuyến API của bên thứ ba?",
+        "confirmEnableMessage": "Các yêu cầu mô hình Codex sẽ được định tuyến qua dịch vụ Cockpit Tools cục bộ. Nếu dịch vụ không chạy, cả mô hình đăng ký và bên thứ ba có thể không khả dụng. Khởi chạy khi đăng nhập sẽ được bật khi bạn lưu.\n\nBật định tuyến?",
+        "confirmEnableAction": "Bật",
+        "confirmDisableTitle": "Tắt định tuyến API của bên thứ ba?",
+        "confirmDisableMessage": "Sau khi thay đổi này có hiệu lực, cổng cục bộ sẽ dừng, quyền truy cập đăng ký chính thức sẽ được khôi phục và các mô hình của bên thứ ba sẽ không khả dụng.\n\nTắt định tuyến?",
+        "confirmDisableAction": "Tắt",
+        "modalTip": "Cả mô hình đăng ký và bên thứ ba đều đi qua dịch vụ định tuyến cục bộ. Vui lòng duy trì Cockpit Tools chạy ngầm. Dịch vụ tự động phục hồi và chuyển về cấu hình chính thức sau nhiều lần thất bại.",
+        "modelRequired": "Mỗi tuyến API được bật phải bao gồm ít nhất một mô hình.",
+        "runningSaveTitle": "Khi nào định tuyến có hiệu lực?",
+        "runningSaveMessage": "Phiên bản Codex này đang chạy. Thay thế dịch vụ cục bộ ngay bây giờ sẽ làm gián đoạn cuộc trò chuyện hiện tại.\n\nChọn «Lưu và khởi động lại Codex» để áp dụng ngay, hoặc «Lưu để dùng sau» để giữ nguyên phiên hiện tại.",
+        "saveAndRestart": "Lưu và khởi động lại Codex",
+        "saveForLater": "Lưu để dùng sau",
+        "restartRollbackFailed": "Không thể khởi động tuyến mới và không thể khởi động lại cấu hình gốc: ",
+        "restartRolledBack": "Không thể khởi động tuyến mới. Cấu hình gốc đã được khôi phục và Codex đã khởi động lại: {{error}}"
+      }
     },
     "quota": {
       "unbound": "Tài khoản chưa liên kết",
@@ -2323,7 +2345,12 @@
       "summaryMeta": "{{count}} tài khoản · {{scope}}",
       "summaryMetaUnconfigured": "Chưa cấu hình · {{scope}}",
       "memberTitle": "Thành viên bộ sưu tập",
-      "imagePolicy": { "label": "Chính sách hình ảnh", "inherit": "Hình ảnh: Tự động", "enabled": "Hình ảnh: Bật", "disabled": "Hình ảnh: Tắt" },
+      "imagePolicy": {
+        "label": "Chính sách hình ảnh",
+        "inherit": "Hình ảnh: Tự động",
+        "enabled": "Hình ảnh: Bật",
+        "disabled": "Hình ảnh: Tắt"
+      },
       "memberPriorityLabel": "Ưu tiên",
       "memberPriorityLowest": "Thấp nhất",
       "memberPriorityNormal": "Bình thường",
@@ -2529,18 +2556,18 @@
       "clientBaseUrlHostDesc": "Chỉ ảnh hưởng đến Base URL ghi vào Codex Provider và sao chép cho client; không đổi địa chỉ lắng nghe của dịch vụ.",
       "clientBaseUrlHostSaveSuccess": "Đã cập nhật địa chỉ client",
       "accountPoolHealth": {
-        "title": "Nhóm tài khoản",
+        "title": "Trạng thái tài khoản",
         "allAvailable": "Tất cả OK {{count}}",
         "availableRatio": "Tốt {{available}}/{{total}}",
-        "issueSummary": "Lỗi {{abnormal}} · Nhóm {{poolUnavailable}} · Chờ {{cooldown}}",
-        "detail": "OK {{available}}/{{total}}, lỗi {{abnormal}}, nhóm {{poolUnavailable}}, chờ {{cooldown}}, thiếu {{missing}}, auth {{authError}}, hạn mức {{quotaLimited}}",
-        "openDetails": "Xem lỗi nhóm tài khoản",
+        "issueSummary": "Lỗi {{abnormal}} · Chờ {{cooldown}}",
+        "detail": "OK {{available}}/{{total}}, lỗi {{abnormal}}, chờ {{cooldown}}, thiếu {{missing}}, auth {{authError}}, hạn mức {{quotaLimited}}",
+        "openDetails": "Xem lỗi tài khoản",
         "recover": "Khôi phục trạng thái",
         "recoverSuccess": "Đã yêu cầu khôi phục {{count}} tài khoản",
         "dialog": {
-          "title": "Lỗi nhóm tài khoản",
-          "description": "Các trạng thái Sidecar này gồm lỗi tài khoản và lỗi nhóm trước khi chọn tài khoản.",
-          "noIssues": "Nhóm tài khoản không có lỗi",
+          "title": "Lỗi tài khoản",
+      "description": "Mỗi tài khoản được hiển thị cùng model, lý do không khả dụng và thao tác khôi phục nếu có.",
+          "noIssues": "Tài khoản không có lỗi",
           "unscopedApiKey": "API Key hiện tại",
           "poolUnavailable": "Không có tài khoản khả dụng trong nhóm",
           "poolUnavailableDetail": "Không chọn được tài khoản khả dụng cho mô hình {{model}}",
@@ -4813,6 +4840,11 @@
     },
     "oauth": {
       "desc": "Nhấn nút bên dưới và hoàn tất ủy quyền Cursor trong trình duyệt."
+    },
+    "filters": {
+      "quotaFailed": "Truy vấn hạn ngạch thất bại ({{count}})",
+      "cleanQuotaFailedAction": "Xóa tài khoản có truy vấn hạn ngạch thất bại ({{count}})",
+      "cleanQuotaFailedConfirm": "Xóa tất cả {{count}} tài khoản có truy vấn hạn ngạch thất bại?"
     }
   },
   "breakout": {

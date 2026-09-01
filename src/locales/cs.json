@@ -227,7 +227,10 @@
         "weekly": "Týdenní kvóta",
         "resetAt": "Obnovení: {{time}}",
         "expiresAt": "Vyprší: {{time}}",
-        "leftPercent": "Zbývá {{value}} %"
+        "unlimited": "Neomezená kvóta",
+        "leftPercent": "Zbývá {{value}} %",
+        "cachedRefreshFailed": "Aktualizace selhala; zobrazují se poslední úspěšná data",
+        "lastSuccessfulQuery": "Poslední úspěch: {{time}}"
       },
       "subtitle": "Spravujte své účty GitHub Copilot",
       "time": {
@@ -525,7 +528,26 @@
       "appSpeed": "Rychlost",
       "appSpeedDesc": "Zapíše zvolenou rychlost před spuštěním oficiálního Codexu",
       "autoSyncThreads": "Auto sync relací",
-      "autoSyncThreadsDesc": "Vypnuto zachová relace více instancí oddělené. Po zapnutí se při spuštění nebo zavření instance automaticky sloučí místní záznamy relací, ale jen když jsou všechny instance Codex zastavené."
+      "autoSyncThreadsDesc": "Vypnuto zachová relace více instancí oddělené. Po zapnutí se při spuštění nebo zavření instance automaticky sloučí místní záznamy relací, ale jen když jsou všechny instance Codex zastavené.",
+      "modelRouting": {
+        "title": "Směrování API třetích stran",
+        "summary": "Modely bez předpony používají aktuální předplatné; modely s předponou jako cpa/gpt-5.5 jsou předávány do API třetích stran. Obojí závisí na místní službě směrování.",
+        "rowSummary": "Modely bez předpony používají aktuální předplatné; modely s předponou jako cpa/gpt-5.5 jsou předávány do API třetích stran. Obojí závisí na místní službě směrování.",
+        "confirmEnableTitle": "Povolit směrování API třetích stran?",
+        "confirmEnableMessage": "Požadavky na modely Codex budou směrovány přes místní službu Cockpit Tools. Pokud služba neběží, modely předplatného i modely třetích stran mohou být nedostupné. Spuštění při přihlášení bude povoleno při uložení.\n\nPovolit směrování?",
+        "confirmEnableAction": "Povolit",
+        "confirmDisableTitle": "Zakázat směrování API třetích stran?",
+        "confirmDisableMessage": "Jakmile tato změna vstoupí v platnost, místní brána se zastaví, obnoví se přímý přístup k oficiálnímu předplatnému a modely třetích stran nebudou k dispozici.\n\nZakázat směrování?",
+        "confirmDisableAction": "Zakázat",
+        "modalTip": "Modely předplatného i modely třetích stran procházejí místní službou směrování. Ponechte Cockpit Tools spuštěné na pozadí. Služba se automaticky obnoví a po opakovaných selháních se vrátí k oficiální konfiguraci.",
+        "modelRequired": "Každá povolená trasa API musí obsahovat alespoň jeden model.",
+        "runningSaveTitle": "Kdy má směrování vstoupit v platnost?",
+        "runningSaveMessage": "Tato instance Codexu je spuštěna. Nahrazení místní služby nyní přeruší probíhající konverzaci.\n\nZvolte „Uložit a restartovat Codex“ pro okamžité použití, nebo „Uložit na později“ pro zachování aktuální relace.",
+        "saveAndRestart": "Uložit a restartovat Codex",
+        "saveForLater": "Uložit na později",
+        "restartRollbackFailed": "Nová trasa se nepodařila spustit a původní konfiguraci nebylo možné restartovat: ",
+        "restartRolledBack": "Nová trasa se nepodařila spustit. Byla obnovena původní konfigurace a Codex byl restartován: {{error}}"
+      }
     },
     "quota": {
       "unbound": "Účet není propojen",
@@ -2323,7 +2345,12 @@
       "summaryMeta": "{{count}} účtů · {{scope}}",
       "summaryMetaUnconfigured": "Nenastaveno · {{scope}}",
       "memberTitle": "Členové kolekce",
-      "imagePolicy": { "label": "Zásady obrázků", "inherit": "Obrázky: automaticky", "enabled": "Obrázky: zapnuto", "disabled": "Obrázky: vypnuto" },
+      "imagePolicy": {
+        "label": "Zásady obrázků",
+        "inherit": "Obrázky: automaticky",
+        "enabled": "Obrázky: zapnuto",
+        "disabled": "Obrázky: vypnuto"
+      },
       "memberPriorityLabel": "Priorita",
       "memberPriorityLowest": "Nejnižší",
       "memberPriorityNormal": "Běžná",
@@ -2529,18 +2556,18 @@
       "clientBaseUrlHostDesc": "Ovlivňuje jen Base URL zapsanou do Codex Provideru a kopírovanou klientům; nemění adresu, na které služba naslouchá.",
       "clientBaseUrlHostSaveSuccess": "Adresa klienta byla aktualizována",
       "accountPoolHealth": {
-        "title": "Fond účtů",
+        "title": "Stav účtů",
         "allAvailable": "Vše OK {{count}}",
         "availableRatio": "V pořádku {{available}}/{{total}}",
-        "issueSummary": "Chyba {{abnormal}} · Fond {{poolUnavailable}} · Pauza {{cooldown}}",
-        "detail": "OK {{available}}/{{total}}, chyba {{abnormal}}, fond {{poolUnavailable}}, pauza {{cooldown}}, chybí {{missing}}, ověření {{authError}}, limit {{quotaLimited}}",
-        "openDetails": "Zobrazit problémy fondu účtů",
+        "issueSummary": "Chyba {{abnormal}} · Pauza {{cooldown}}",
+        "detail": "OK {{available}}/{{total}}, chyba {{abnormal}}, pauza {{cooldown}}, chybí {{missing}}, ověření {{authError}}, limit {{quotaLimited}}",
+        "openDetails": "Zobrazit problémy účtů",
         "recover": "Obnovit stav účtu",
         "recoverSuccess": "Obnova vyžádána pro {{count}} účtů",
         "dialog": {
-          "title": "Problémy fondu účtů",
-          "description": "Tyto stavy plánovače Sidecar zahrnují problémy účtů i fondu před výběrem účtu.",
-          "noIssues": "Fond účtů je bez problémů",
+          "title": "Problémy účtů",
+      "description": "Každý účet je zobrazen s modelem, důvodem nedostupnosti a dostupnou akcí obnovení.",
+          "noIssues": "Účty jsou bez problémů",
           "unscopedApiKey": "Aktuální API Key",
           "poolUnavailable": "Ve fondu není dostupný účet",
           "poolUnavailableDetail": "Pro model {{model}} nebyl vybrán žádný dostupný účet",
@@ -4813,6 +4840,11 @@
     },
     "oauth": {
       "desc": "Klikněte na tlačítko níže a dokončete autorizaci Cursor v prohlížeči."
+    },
+    "filters": {
+      "quotaFailed": "Dotaz kvóty selhal ({{count}})",
+      "cleanQuotaFailedAction": "Smazat účty s neúspěšným dotazem kvóty ({{count}})",
+      "cleanQuotaFailedConfirm": "Odstranit všech {{count}} účtů, u kterých selhal dotaz kvóty?"
     }
   },
   "breakout": {

@@ -681,6 +681,17 @@ func TestCodexClientModelsResponseGatesProviderGatewayImageInput(t *testing.T) {
 			supportsImage: true,
 		},
 		{
+			name: "deepseek vision model supports vision",
+			gateway: &providerGatewaySpec{
+				UpstreamModels: []string{"deepseek-v4-flash-vision-exp"},
+				ModelCapabilities: map[string]providerGatewayModelCapability{
+					"deepseek-v4-flash-vision-exp": {SupportsVision: true},
+				},
+			},
+			model:         "deepseek-v4-flash-vision-exp",
+			supportsImage: true,
+		},
+		{
 			name: "routes images to vision model",
 			gateway: &providerGatewaySpec{
 				UpstreamModels:     []string{"deepseek-v4-pro", "qwen-vl-plus"},
@@ -2648,5 +2659,110 @@ func TestAuthHookEmitsRequestScopedResultDiagnostics(t *testing.T) {
 	}
 	if payload.AuthAvailable == nil || *payload.AuthAvailable || payload.NextRetryAtMS <= time.Now().UnixMilli() || payload.AuthStateReason != "unauthorized" {
 		t.Fatalf("scheduler state should be preserved: %#v", payload)
+	}
+}
+
+func TestResolveModelRoutingSeparatesOAuthAndProviderModels(t *testing.T) {
+	gateway := &providerGatewaySpec{
+		BaseURL:        "https://provider.example/v1",
+		APIKey:         "secret",
+		UpstreamModels: []string{"gpt-5.5", "grok-4.6"},
+	}
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{
+		DefaultRoute:  "oauth",
+		FailurePolicy: "strict",
+		Routes: []modelRouteSpec{{
+			ID:              "route-cpa",
+			Namespace:       "cpa",
+			ProviderGateway: gateway,
+		}},
+	}}
+
+	if gotGateway, gotModel, status := resolveModelRouting(spec, "gpt-5.5"); gotGateway != nil || gotModel != "gpt-5.5" || status != "none" {
+		t.Fatalf("bare model should stay on OAuth: gateway=%v model=%q status=%q", gotGateway, gotModel, status)
+	}
+	if gotGateway, gotModel, status := resolveModelRouting(spec, "cpa/gpt-5.5"); gotGateway != gateway || gotModel != "gpt-5.5" || status != "matched" {
+		t.Fatalf("namespaced GPT should use provider: gateway=%v model=%q status=%q", gotGateway, gotModel, status)
+	}
+	if gotGateway, gotModel, status := resolveModelRouting(spec, "cpa/grok-4.6"); gotGateway != gateway || gotModel != "grok-4.6" || status != "matched" {
+		t.Fatalf("namespaced provider model should use provider: gateway=%v model=%q status=%q", gotGateway, gotModel, status)
+	}
+}
+
+func TestResolveModelRoutingNeverFallsBackForUnknownNamespaceOrModel(t *testing.T) {
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{
+		DefaultRoute:  "oauth",
+		FailurePolicy: "strict",
+		Routes: []modelRouteSpec{{
+			ID:        "route-cpa",
+			Namespace: "cpa",
+			ProviderGateway: &providerGatewaySpec{
+				BaseURL:        "https://provider.example/v1",
+				APIKey:         "secret",
+				UpstreamModels: []string{"gpt-5.5"},
+			},
+		}},
+	}}
+
+	for _, model := range []string{"missing/gpt-5.5", "cpa/grok-4.6", "cpa/"} {
+		if gateway, upstream, status := resolveModelRouting(spec, model); gateway != nil || upstream != "" || status != "missing" {
+			t.Fatalf("%s should fail strictly: gateway=%v model=%q status=%q", model, gateway, upstream, status)
+		}
+	}
+}
+
+func TestResolveModelRoutingEmptyCatalogRejectsNamespacedModel(t *testing.T) {
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{
+		DefaultRoute:  "oauth",
+		FailurePolicy: "strict",
+		Routes: []modelRouteSpec{{
+			ID:        "route-cpa",
+			Namespace: "cpa",
+			ProviderGateway: &providerGatewaySpec{
+				BaseURL: "https://provider.example/v1",
+				APIKey:  "secret",
+			},
+		}},
+	}}
+
+	gateway, upstream, status := resolveModelRouting(spec, "cpa/gpt-5.5")
+	if status != "missing" || gateway != nil || upstream != "" {
+		t.Fatalf("empty catalog should reject routing: gateway=%v model=%q status=%q", gateway, upstream, status)
+	}
+}
+
+func TestResolveModelRoutingRejectsRouteWithoutProviderGateway(t *testing.T) {
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{
+		DefaultRoute:  "oauth",
+		FailurePolicy: "strict",
+		Routes: []modelRouteSpec{{
+			ID:        "route-cpa",
+			Namespace: "cpa",
+		}},
+	}}
+
+	if gateway, upstream, status := resolveModelRouting(spec, "cpa/gpt-5.5"); gateway != nil || upstream != "" || status != "missing" {
+		t.Fatalf("route without provider gateway should fail strictly: gateway=%v model=%q status=%q", gateway, upstream, status)
+	}
+}
+
+func TestVisibleModelsForMixedRoutingIncludesNamespacedProviderModels(t *testing.T) {
+	m := &manifest{ModelIDs: []string{"gpt-5.5"}}
+	spec := &apiKeySpec{ModelRouting: &modelRoutingSpec{
+		DefaultRoute:  "oauth",
+		FailurePolicy: "strict",
+		Routes: []modelRouteSpec{{
+			ID:        "route-cpa",
+			Namespace: "cpa",
+			ProviderGateway: &providerGatewaySpec{
+				UpstreamModels: []string{"gpt-5.5", "grok-4.6"},
+			},
+		}},
+	}}
+
+	got := visibleModelsForAPIKey(m, spec)
+	want := []string{"gpt-5.5", "cpa/gpt-5.5", "cpa/grok-4.6"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("visible models = %#v, want %#v", got, want)
 	}
 }

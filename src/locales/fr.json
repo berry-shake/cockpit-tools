@@ -232,7 +232,10 @@
         "weekly": "Quota hebdomadaire",
         "resetAt": "Réinitialisation: {{time}}",
         "expiresAt": "Expire le : {{time}}",
-        "leftPercent": "{{value}} % restants"
+        "unlimited": "Quota illimité",
+        "leftPercent": "{{value}} % restants",
+        "cachedRefreshFailed": "Échec de l’actualisation ; affichage des dernières données réussies",
+        "lastSuccessfulQuery": "Dernière réussite : {{time}}"
       },
       "subtitle": "Gérez vos comptes GitHub Copilot",
       "time": {
@@ -525,7 +528,26 @@
       "appSpeed": "Vitesse",
       "appSpeedDesc": "Écrit la vitesse choisie avant de lancer Codex officiel",
       "autoSyncThreads": "Sync auto sessions",
-      "autoSyncThreadsDesc": "Désactivé, les sessions des instances restent isolées. Activé, le lancement ou la fermeture d'une instance fusionne automatiquement les sessions locales, uniquement lorsque toutes les instances Codex sont arrêtées."
+      "autoSyncThreadsDesc": "Désactivé, les sessions des instances restent isolées. Activé, le lancement ou la fermeture d'une instance fusionne automatiquement les sessions locales, uniquement lorsque toutes les instances Codex sont arrêtées.",
+      "modelRouting": {
+        "title": "Routage d'API tierce",
+        "summary": "Les modèles sans préfixe utilisent l'abonnement actuel ; les modèles avec préfixe tels que cpa/gpt-5.5 sont transférés vers une API tierce. Les deux dépendent du service de routage local.",
+        "rowSummary": "Les modèles sans préfixe utilisent l'abonnement actuel ; les modèles avec préfixe tels que cpa/gpt-5.5 sont transférés vers une API tierce. Les deux dépendent du service de routage local.",
+        "confirmEnableTitle": "Activer le routage d'API tierce ?",
+        "confirmEnableMessage": "Les requêtes de modèles Codex seront acheminées via le service local Cockpit Tools. Si le service n'est pas en cours d'exécution, les modèles d'abonnement et tiers peuvent être indisponibles. Le lancement au démarrage sera activé lors de l'enregistrement.\n\nActiver le routage ?",
+        "confirmEnableAction": "Activer",
+        "confirmDisableTitle": "Désactiver le routage d'API tierce ?",
+        "confirmDisableMessage": "Une fois cette modification appliquée, la passerelle locale s'arrêtera, l'accès direct à l'abonnement officiel sera restauré et les modèles tiers ne seront plus disponibles.\n\nDésactiver le routage ?",
+        "confirmDisableAction": "Désactiver",
+        "modalTip": "Les modèles d'abonnement et tiers passent tous deux par le service de routage local. Gardez Cockpit Tools en arrière-plan. Le service récupère automatiquement et bascule sur la configuration officielle en cas d'échecs répétés.",
+        "modelRequired": "Chaque route API activée doit inclure au moins un modèle.",
+        "runningSaveTitle": "Quand le routage doit-il prendre effet ?",
+        "runningSaveMessage": "Cette instance Codex est en cours d'exécution. Remplacer le service local maintenant interrompra la conversation en cours.\n\nChoisissez « Enregistrer et redémarrer Codex » pour appliquer maintenant, ou « Enregistrer pour plus tard » pour conserver la session actuelle inchangée.",
+        "saveAndRestart": "Enregistrer et redémarrer Codex",
+        "saveForLater": "Enregistrer pour plus tard",
+        "restartRollbackFailed": "La nouvelle route n'a pas pu démarrer et la configuration d'origine n'a pas pu être redémarrée : ",
+        "restartRolledBack": "La nouvelle route n'a pas pu démarrer. La configuration d'origine a été restaurée et Codex a redémarré : {{error}}"
+      }
     },
     "quota": {
       "unbound": "Compte non lié",
@@ -2323,7 +2345,12 @@
       "summaryMeta": "{{count}} comptes · {{scope}}",
       "summaryMetaUnconfigured": "Non configuré · {{scope}}",
       "memberTitle": "Membres de la collection",
-      "imagePolicy": { "label": "Politique d’image", "inherit": "Image : Auto", "enabled": "Image : Activée", "disabled": "Image : Désactivée" },
+      "imagePolicy": {
+        "label": "Politique d’image",
+        "inherit": "Image : Auto",
+        "enabled": "Image : Activée",
+        "disabled": "Image : Désactivée"
+      },
       "memberPriorityLabel": "Priorité",
       "memberPriorityLowest": "Basse",
       "memberPriorityNormal": "Normale",
@@ -2529,18 +2556,18 @@
       "clientBaseUrlHostDesc": "Affecte uniquement la Base URL écrite dans Codex Provider et copiée aux clients ; l’adresse d’écoute du service ne change pas.",
       "clientBaseUrlHostSaveSuccess": "Adresse client mise à jour",
       "accountPoolHealth": {
-        "title": "Pool de comptes",
+        "title": "État des comptes",
         "allAvailable": "Tout OK {{count}}",
         "availableRatio": "Valide {{available}}/{{total}}",
-        "issueSummary": "Erreur {{abnormal}} · Pool {{poolUnavailable}} · Pause {{cooldown}}",
-        "detail": "OK {{available}}/{{total}}, erreur {{abnormal}}, pool {{poolUnavailable}}, pause {{cooldown}}, manquant {{missing}}, auth {{authError}}, quota {{quotaLimited}}",
-        "openDetails": "Voir les problèmes du pool de comptes",
+        "issueSummary": "Erreur {{abnormal}} · Pause {{cooldown}}",
+        "detail": "OK {{available}}/{{total}}, erreur {{abnormal}}, pause {{cooldown}}, manquant {{missing}}, auth {{authError}}, quota {{quotaLimited}}",
+        "openDetails": "Voir les problèmes de comptes",
         "recover": "Rétablir l’état",
         "recoverSuccess": "Rétablissement demandé pour {{count}} compte(s)",
         "dialog": {
-          "title": "Problèmes du pool de comptes",
-          "description": "Ces états du planificateur Sidecar incluent les erreurs de compte et de pool avant la sélection d’un compte.",
-          "noIssues": "Aucun problème dans le pool de comptes",
+          "title": "Problèmes de comptes",
+      "description": "Chaque compte affiche son modèle, la raison de son indisponibilité et l’action de récupération disponible.",
+          "noIssues": "Aucun problème de comptes",
           "unscopedApiKey": "API Key actuelle",
           "poolUnavailable": "Aucun compte disponible dans le pool",
           "poolUnavailableDetail": "Aucun compte disponible n’a été sélectionné pour le modèle {{model}}",
@@ -4813,6 +4840,11 @@
     },
     "oauth": {
       "desc": "Cliquez sur le bouton ci-dessous et terminez l'autorisation Cursor dans le navigateur."
+    },
+    "filters": {
+      "quotaFailed": "Échec de la requête de quota ({{count}})",
+      "cleanQuotaFailedAction": "Supprimer les comptes dont la requête de quota a échoué ({{count}})",
+      "cleanQuotaFailedConfirm": "Supprimer les {{count}} compte(s) dont la requête de quota a échoué ?"
     }
   },
   "breakout": {

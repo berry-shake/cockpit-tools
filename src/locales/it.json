@@ -232,7 +232,10 @@
         "weekly": "Quota settimanale",
         "resetAt": "Reimpostazione: {{time}}",
         "expiresAt": "Scade il: {{time}}",
-        "leftPercent": "{{value}}% rimanente"
+        "unlimited": "Quota illimitata",
+        "leftPercent": "{{value}}% rimanente",
+        "cachedRefreshFailed": "Aggiornamento non riuscito; vengono mostrati gli ultimi dati validi",
+        "lastSuccessfulQuery": "Ultimo successo: {{time}}"
       },
       "subtitle": "Gestisci i tuoi account GitHub Copilot",
       "time": {
@@ -525,7 +528,26 @@
       "appSpeed": "Velocità",
       "appSpeedDesc": "Scrive la velocità scelta prima di avviare Codex ufficiale",
       "autoSyncThreads": "Sync auto sessioni",
-      "autoSyncThreadsDesc": "Disattivato mantiene isolate le sessioni multi-istanza. Se attivo, l'avvio o la chiusura di un'istanza unisce automaticamente i record locali delle sessioni solo dopo l'arresto di tutte le istanze Codex."
+      "autoSyncThreadsDesc": "Disattivato mantiene isolate le sessioni multi-istanza. Se attivo, l'avvio o la chiusura di un'istanza unisce automaticamente i record locali delle sessioni solo dopo l'arresto di tutte le istanze Codex.",
+      "modelRouting": {
+        "title": "Routing API di terze parti",
+        "summary": "I modelli senza prefisso utilizzano l'abbonamento corrente; i modelli con prefisso come cpa/gpt-5.5 vengono inoltrati a un'API di terze parti. Entrambi dipendono dal servizio di routing locale.",
+        "rowSummary": "I modelli senza prefisso utilizzano l'abbonamento corrente; i modelli con prefisso come cpa/gpt-5.5 vengono inoltrati a un'API di terze parti. Entrambi dipendono dal servizio di routing locale.",
+        "confirmEnableTitle": "Abilitare il routing API di terze parti?",
+        "confirmEnableMessage": "Le richieste dei modelli Codex verranno instradate tramite il servizio locale Cockpit Tools. Se il servizio non è in esecuzione, sia i modelli in abbonamento che quelli di terze parti potrebbero non essere disponibili. L'avvio al login verrà abilitato al salvataggio.\n\nAbilitare il routing?",
+        "confirmEnableAction": "Abilita",
+        "confirmDisableTitle": "Disabilitare il routing API di terze parti?",
+        "confirmDisableMessage": "Dopo che questa modifica avrà effetto, il gateway locale verrà arrestato, verrà ripristinato l'accesso nativo all'abbonamento e i modelli di terze parti non saranno disponibili.\n\nDisabilitare il routing?",
+        "confirmDisableAction": "Disabilita",
+        "modalTip": "Sia i modelli in abbonamento che quelli di terze parti passano attraverso il servizio di routing locale. Mantieni Cockpit Tools in esecuzione in background. Il servizio si ripristina automaticamente e torna alla configurazione ufficiale dopo ripetuti errori.",
+        "modelRequired": "Ogni route API abilitata deve includere almeno un modello.",
+        "runningSaveTitle": "Quando deve avere effetto il routing?",
+        "runningSaveMessage": "Questa istanza di Codex è in esecuzione. Sostituire il servizio locale ora interromperà la conversazione corrente.\n\nScegli «Salva e riavvia Codex» per applicare subito, oppure «Salva per dopo» per mantenere invariata la sessione corrente.",
+        "saveAndRestart": "Salva e riavvia Codex",
+        "saveForLater": "Salva per dopo",
+        "restartRollbackFailed": "Impossibile avviare la nuova route e impossibile riavviare la configurazione originale: ",
+        "restartRolledBack": "Impossibile avviare la nuova route. La configurazione originale è stata ripristinata e Codex è stato riavviato: {{error}}"
+      }
     },
     "quota": {
       "unbound": "Account non collegato",
@@ -2323,7 +2345,12 @@
       "summaryMeta": "{{count}} account · {{scope}}",
       "summaryMetaUnconfigured": "Non configurato · {{scope}}",
       "memberTitle": "Membri della raccolta",
-      "imagePolicy": { "label": "Politica immagini", "inherit": "Immagine: Automatica", "enabled": "Immagine: Attiva", "disabled": "Immagine: Disattiva" },
+      "imagePolicy": {
+        "label": "Politica immagini",
+        "inherit": "Immagine: Automatica",
+        "enabled": "Immagine: Attiva",
+        "disabled": "Immagine: Disattiva"
+      },
       "memberPriorityLabel": "Priorità",
       "memberPriorityLowest": "Minima",
       "memberPriorityNormal": "Normale",
@@ -2529,18 +2556,18 @@
       "clientBaseUrlHostDesc": "Influisce solo sulla Base URL scritta nel Codex Provider e copiata ai client; non cambia l’indirizzo di ascolto del servizio.",
       "clientBaseUrlHostSaveSuccess": "Indirizzo client aggiornato",
       "accountPoolHealth": {
-        "title": "Pool account",
+        "title": "Stato account",
         "allAvailable": "Tutti OK {{count}}",
         "availableRatio": "Pronti {{available}}/{{total}}",
-        "issueSummary": "Errore {{abnormal}} · Pool {{poolUnavailable}} · Pausa {{cooldown}}",
-        "detail": "OK {{available}}/{{total}}, errore {{abnormal}}, pool {{poolUnavailable}}, pausa {{cooldown}}, mancanti {{missing}}, auth {{authError}}, quota {{quotaLimited}}",
-        "openDetails": "Mostra problemi del pool account",
+        "issueSummary": "Errore {{abnormal}} · Pausa {{cooldown}}",
+        "detail": "OK {{available}}/{{total}}, errore {{abnormal}}, pausa {{cooldown}}, mancanti {{missing}}, auth {{authError}}, quota {{quotaLimited}}",
+        "openDetails": "Mostra problemi account",
         "recover": "Ripristina stato",
         "recoverSuccess": "Ripristino richiesto per {{count}} account",
         "dialog": {
-          "title": "Problemi del pool account",
-          "description": "Questi stati dello scheduler Sidecar includono problemi di account e del pool prima della selezione di un account.",
-          "noIssues": "Nessun problema nel pool di account",
+          "title": "Problemi account",
+      "description": "Ogni account mostra il modello, il motivo dell’indisponibilità e l’azione di ripristino disponibile.",
+          "noIssues": "Nessun problema negli account",
           "unscopedApiKey": "API Key corrente",
           "poolUnavailable": "Nessun account disponibile nel pool",
           "poolUnavailableDetail": "Non è stato selezionato un account disponibile per il modello {{model}}",
@@ -4813,6 +4840,11 @@
     },
     "oauth": {
       "desc": "Fai clic sul pulsante qui sotto e completa l'autorizzazione di Cursor nel browser."
+    },
+    "filters": {
+      "quotaFailed": "Query della quota non riuscita ({{count}})",
+      "cleanQuotaFailedAction": "Elimina account con query della quota non riuscita ({{count}})",
+      "cleanQuotaFailedConfirm": "Eliminare tutti i {{count}} account con query della quota non riuscita?"
     }
   },
   "breakout": {
