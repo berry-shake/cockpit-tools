@@ -781,6 +781,27 @@ pub async fn save_codex_quick_config(
 }
 
 #[tauri::command]
+pub async fn save_codex_model_catalog(
+    experimental_model_catalog_enabled: bool,
+    experimental_model_catalog_models: Vec<crate::models::codex::CodexExperimentalModelDefinition>,
+    experimental_model_catalog_default_model_id: Option<String>,
+) -> Result<CodexQuickConfig, String> {
+    let saved = tauri::async_runtime::spawn_blocking(move || {
+        let saved = codex_account::save_current_model_catalog_preserving_context(
+            experimental_model_catalog_enabled,
+            experimental_model_catalog_models,
+            experimental_model_catalog_default_model_id,
+        )?;
+        crate::modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        Ok::<CodexQuickConfig, String>(saved)
+    })
+    .await
+    .map_err(|error| format!("保存 Codex 可见模型后台任务失败: {}", error))??;
+    crate::modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    Ok(saved)
+}
+
+#[tauri::command]
 pub fn get_codex_app_speed_config() -> Result<CodexAppSpeedConfig, String> {
     codex_speed::get_app_speed_config()
 }
@@ -2414,6 +2435,23 @@ pub async fn codex_wakeup_run_enabled_tasks(
 ) -> Result<u32, String> {
     let trigger = trigger_type.unwrap_or_else(|| "startup".to_string());
     codex_wakeup_scheduler::run_enabled_tasks_now(Some(&app), &trigger).await
+}
+
+/// 启动时根据配置自动恢复可见模型目录与代理接管状态
+#[tauri::command]
+pub async fn restore_codex_active_takeover_if_enabled(app: AppHandle) -> Result<bool, String> {
+    let cfg = config::get_user_config();
+    if !cfg.codex_auto_restore_takeover_on_launch {
+        return Ok(false);
+    }
+    let base_dir = codex_account::get_codex_home();
+    let reapply_catalog_result =
+        codex_account::reapply_experimental_model_policy_if_enabled(&base_dir)?;
+    logger::log_info(&format!(
+        "[Codex Auto-Restore] restore_codex_active_takeover_if_enabled executed: reapply_catalog={}",
+        reapply_catalog_result
+    ));
+    Ok(reapply_catalog_result)
 }
 
 // ─── Codex 账号分组持久化 ────────────────────────────────────────────

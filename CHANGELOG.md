@@ -7,6 +7,23 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [Unreleased]
+
+## [1.3.36] - 2026-09-02
+
+### Added
+
+- **Automatic Codex takeover restoration on startup**: when enabled, Cockpit Tools restores the last active Codex proxy takeover and visible-model configuration during launch, with a Settings switch to control the behavior.
+
+### Fixed
+
+- **Fixed existing Codex context settings being removed when saving visible models, model routing, or a copied instance**: catalog-only and routing saves now preserve existing `model_context_window` and `model_auto_compact_token_limit` values in `config.toml`; profiles that did not configure them remain on the default behavior, and failed transactions restore the previous values.
+- **Fixed Provider Gateway cleanup affecting model catalogs and default models it did not own**: cleanup now runs only when Provider ownership state or an explicit legacy Provider catalog is present; enabled experimental catalogs are reapplied after routing is disabled, normal exit cleanup, startup rollback, or watchdog fallback. Enabling an experimental default also records the original `model` state first so disabling restores the prior value or the original unset state.
+
+### Upgrade Notes
+
+- If an affected version already removed these fields, Cockpit Tools cannot determine whether the previous values were `1M/900K`, `516K/460K`, or custom values and will not guess. Restore the original values in `config.toml`, or open **Codex Settings → Visible Models → Manage** and reselect the context and compaction preset or custom values for the affected models, then restart Codex and verify with a new task.
+
 ## [1.3.35] - 2026-09-01
 
 ### Added

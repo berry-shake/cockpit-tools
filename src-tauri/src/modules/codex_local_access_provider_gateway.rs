@@ -2192,17 +2192,42 @@ fn backup_current_profile_model_before_provider_gateway(
         .and_then(|item| item.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let previous_model = current_model.filter(|model| {
-        !provider_models
-            .iter()
-            .any(|item| item.trim().eq_ignore_ascii_case(model))
-    });
-    save_provider_model_backup(profile_dir, previous_model, provider_models)
+    save_provider_model_backup(profile_dir, current_model, provider_models)
 }
 
 pub fn cleanup_provider_gateway_profile_model_overrides(profile_dir: &Path) -> Result<(), String> {
+    let override_state = read_provider_model_backup(profile_dir);
+    let has_legacy_provider_catalog = [
+        CODEX_LEGACY_PROVIDER_MODEL_CATALOG_FILE,
+        CODEX_LEGACY_LOCAL_ACCESS_MODEL_CATALOG_FILE,
+    ]
+    .iter()
+    .any(|file_name| profile_dir.join(file_name).is_file());
+    let has_legacy_provider_catalog_reference =
+        std::fs::read_to_string(profile_config_path(profile_dir))
+            .ok()
+            .and_then(|content| {
+                crate::modules::codex_config_format::read_codex_config_doc_from_str(&content).ok()
+            })
+            .and_then(|doc| {
+                doc.get("model_catalog_json")
+                    .and_then(|item| item.as_str())
+                    .map(str::trim)
+                    .map(str::to_string)
+            })
+            .is_some_and(|catalog| {
+                catalog.eq_ignore_ascii_case(CODEX_LEGACY_PROVIDER_MODEL_CATALOG_FILE)
+                    || catalog.eq_ignore_ascii_case(CODEX_LEGACY_LOCAL_ACCESS_MODEL_CATALOG_FILE)
+            });
+    if override_state.is_none()
+        && !has_legacy_provider_catalog
+        && !has_legacy_provider_catalog_reference
+    {
+        return Ok(());
+    }
+
     let catalog_path = profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE);
-    let override_state = read_provider_model_backup(profile_dir).unwrap_or_default();
+    let override_state = override_state.unwrap_or_default();
     let previous_model = override_state.previous_model;
     let mut managed_models = override_state.managed_models;
     for file_name in [
@@ -2273,6 +2298,7 @@ pub fn cleanup_provider_gateway_profile_model_overrides(profile_dir: &Path) -> R
             .map_err(|e| format!("删除 Codex provider 模型目录失败: {}", e))?;
     }
     codex_account::cleanup_legacy_managed_model_catalogs(profile_dir);
+    codex_account::reapply_experimental_model_policy_if_enabled(profile_dir)?;
     delete_provider_model_backup(profile_dir)?;
     Ok(())
 }

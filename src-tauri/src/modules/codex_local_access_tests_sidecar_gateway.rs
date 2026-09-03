@@ -1834,6 +1834,98 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
+    fn provider_gateway_cleanup_restores_original_model_matching_provider_shell() {
+        let profile_dir = std::env::temp_dir().join(format!(
+            "cockpit-provider-model-restore-matching-shell-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&profile_dir).expect("create temp profile");
+
+        write_local_access_profile_model_override(&profile_dir, "gpt-5.5")
+            .expect("write original model");
+        backup_current_profile_model_before_provider_gateway(
+            &profile_dir,
+            &["gpt-5.5".to_string(), "gpt-5.4".to_string()],
+        )
+        .expect("backup original model");
+        write_provider_gateway_model_catalog(
+            &profile_dir,
+            &provider_gateway_model_slots(&[
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ]),
+        )
+        .expect("write provider catalog");
+
+        cleanup_provider_gateway_profile_model_overrides(&profile_dir).expect("cleanup overrides");
+
+        let config =
+            fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
+        assert!(config.contains("model = \"gpt-5.5\""));
+        assert!(!config.contains("model_catalog_json"));
+
+        let _ = fs::remove_dir_all(&profile_dir);
+    }
+
+    #[test]
+    fn provider_gateway_cleanup_reapplies_enabled_experimental_catalog() {
+        let profile_dir = std::env::temp_dir().join(format!(
+            "cockpit-provider-model-restore-experimental-catalog-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&profile_dir).expect("create temp profile");
+        fs::write(
+            profile_dir.join(CODEX_PROFILE_CONFIG_FILE),
+            "model = \"gpt-5.6-sol\"\n",
+        )
+        .expect("write original config");
+        crate::modules::codex_account::save_quick_config_for_base_dir(
+            &profile_dir,
+            None,
+            None,
+            Some(true),
+            None,
+        )
+        .expect("enable experimental catalog");
+
+        backup_current_profile_model_before_provider_gateway(
+            &profile_dir,
+            &["gpt-5.5".to_string(), "gpt-5.4".to_string()],
+        )
+        .expect("backup original model");
+        write_local_access_profile_model_override(&profile_dir, "gpt-5.5")
+            .expect("write provider model");
+        write_provider_gateway_model_catalog(
+            &profile_dir,
+            &provider_gateway_model_slots(&[
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ]),
+        )
+        .expect("write provider catalog");
+
+        cleanup_provider_gateway_profile_model_overrides(&profile_dir).expect("cleanup overrides");
+
+        let config =
+            fs::read_to_string(profile_dir.join(CODEX_PROFILE_CONFIG_FILE)).expect("read config");
+        assert!(config.contains(&format!(
+            "model_catalog_json = \"{}\"",
+            CODEX_PROVIDER_MODEL_CATALOG_FILE
+        )));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        assert!(profile_dir
+            .join(CODEX_PROVIDER_MODEL_CATALOG_FILE)
+            .is_file());
+        assert!(
+            crate::modules::codex_account::read_quick_config_from_config_toml(&profile_dir)
+                .expect("read quick config")
+                .experimental_model_catalog_enabled
+        );
+
+        let _ = fs::remove_dir_all(&profile_dir);
+    }
+
+    #[test]
     fn provider_gateway_cleanup_keeps_non_cockpit_model_catalog() {
         let profile_dir = std::env::temp_dir().join(format!(
             "cockpit-provider-model-keep-external-catalog-test-{}",
@@ -1863,6 +1955,71 @@ wire_api = "responses"
         assert!(config.contains("model_provider = \"ccswitch_deepseek\""));
         assert!(config.contains("model = \"deepseek-v4-pro\""));
         assert!(config.contains("[model_providers.ccswitch_deepseek]"));
+
+        let _ = fs::remove_dir_all(&profile_dir);
+    }
+
+    #[test]
+    fn provider_gateway_cleanup_preserves_unowned_managed_model_catalog() {
+        let profile_dir = std::env::temp_dir().join(format!(
+            "cockpit-provider-model-preserve-unowned-catalog-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&profile_dir).expect("create temp profile");
+
+        let config_path = profile_dir.join(CODEX_PROFILE_CONFIG_FILE);
+        let catalog_path = profile_dir.join(CODEX_PROVIDER_MODEL_CATALOG_FILE);
+        let config = format!(
+            "model_catalog_json = \"{}\"\nmodel = \"custom-model\"\nmodel_context_window = 1000000\n",
+            CODEX_PROVIDER_MODEL_CATALOG_FILE
+        );
+        let catalog = r#"{"models":[{"slug":"custom-model"}]}"#;
+        fs::write(&config_path, &config).expect("write config");
+        fs::write(&catalog_path, catalog).expect("write catalog");
+
+        cleanup_provider_gateway_profile_model_overrides(&profile_dir).expect("cleanup overrides");
+
+        assert_eq!(
+            fs::read_to_string(&config_path).expect("read config"),
+            config
+        );
+        assert_eq!(
+            fs::read_to_string(&catalog_path).expect("read catalog"),
+            catalog
+        );
+
+        let _ = fs::remove_dir_all(&profile_dir);
+    }
+
+    #[test]
+    fn provider_takeover_cleanup_preserves_local_access_provider_for_history_sessions() {
+        let profile_dir = std::env::temp_dir().join(format!(
+            "cockpit-provider-preserve-history-provider-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
+        fs::create_dir_all(&profile_dir).expect("create temp profile");
+
+        let config_path = profile_dir.join(CODEX_PROFILE_CONFIG_FILE);
+        let config_content = r#"model_provider = "codex_local_access"
+model = "gpt-5.6-sol"
+model_context_window = 1000000
+
+[model_providers.codex_local_access]
+name = "Codex Local Access"
+base_url = "http://127.0.0.1:51525/v1"
+wire_api = "responses"
+requires_openai_auth = true
+http_headers = { "x-cockpit-instance-id" = "default" }
+"#;
+        fs::write(&config_path, config_content).expect("write initial config");
+
+        let cleaned = remove_codex_local_access_config(config_content).expect("cleanup config");
+        assert!(!cleaned.contains("model_provider = \"codex_local_access\""));
+        assert!(cleaned.contains("model_context_window = 1000000"));
+        assert!(cleaned.contains("[model_providers.codex_local_access]"));
+        assert!(cleaned.contains("base_url = \"http://127.0.0.1:51525/v1\""));
+        assert!(cleaned.contains("wire_api = \"responses\""));
+        assert!(!cleaned.contains("x-cockpit-instance-id"));
 
         let _ = fs::remove_dir_all(&profile_dir);
     }

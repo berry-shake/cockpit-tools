@@ -1209,6 +1209,7 @@ wire_api = "responses"
             .get("codex_local_access")
             .and_then(|item| item.as_table())
             .expect("unknown user fields should keep the provider table");
+        assert!(local_provider.get("experimental_bearer_token").is_none());
         assert_eq!(
             local_provider
                 .get("custom_user_option")
