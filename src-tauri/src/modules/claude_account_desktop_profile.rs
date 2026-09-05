@@ -2098,6 +2098,66 @@ fn electron_runtime_root_dir() -> Result<PathBuf, String> {
         .join(CLAUDE_DESKTOP_ELECTRON_VERSION))
 }
 
+fn remove_desktop_login_component_dirs(data_dir: &Path) -> Result<(), String> {
+    let runtime_root = data_dir.join(CLAUDE_DESKTOP_ELECTRON_RUNTIME_DIR);
+    let login_root = data_dir.join(CLAUDE_DESKTOP_LOGIN_DIR);
+    remove_path_if_exists(&runtime_root)?;
+    remove_path_if_exists(&login_root)?;
+    Ok(())
+}
+
+fn desktop_login_component_dir_size(path: &Path) -> u64 {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return 0;
+    };
+    if metadata.is_file() {
+        return metadata.len();
+    }
+    if !metadata.is_dir() {
+        return 0;
+    }
+    fs::read_dir(path)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| desktop_login_component_dir_size(&entry.path()))
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ClaudeDesktopLoginComponentStorageInfo {
+    pub size_bytes: u64,
+}
+
+pub fn desktop_login_component_storage_info(
+) -> Result<ClaudeDesktopLoginComponentStorageInfo, String> {
+    let data_dir = get_data_dir()?;
+    Ok(ClaudeDesktopLoginComponentStorageInfo {
+        size_bytes: desktop_login_component_dir_size(
+            &data_dir.join(CLAUDE_DESKTOP_ELECTRON_RUNTIME_DIR),
+        )
+        .saturating_add(desktop_login_component_dir_size(
+            &data_dir.join(CLAUDE_DESKTOP_LOGIN_DIR),
+        )),
+    })
+}
+
+pub fn uninstall_desktop_login_component() -> Result<(), String> {
+    let _guard = CLAUDE_DESKTOP_ELECTRON_RUNTIME_LOCK
+        .lock()
+        .map_err(|_| "Electron runtime 下载锁已损坏".to_string())?;
+    cancel_desktop_login(None)?;
+    let data_dir = get_data_dir()?;
+    remove_desktop_login_component_dirs(&data_dir)?;
+    logger::log_info(&format!(
+        "[Claude Auth] 已卸载本地登录组件并清理临时 profile: data_dir={}",
+        data_dir.display()
+    ));
+    Ok(())
+}
+
 fn electron_runtime_download_url(asset: &ElectronRuntimeAsset) -> String {
     format!(
         "https://github.com/electron/electron/releases/download/v{}/{}",

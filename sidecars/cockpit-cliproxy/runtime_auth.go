@@ -768,6 +768,12 @@ func authModelExcluded(m *manifest, auth *coreauth.Auth, model string) bool {
 	if model == "" || auth == nil {
 		return false
 	}
+	if isCodexReserveModel(model) {
+		account := accountForAuthInManifest(m, auth)
+		if account == nil || !account.GPTReserveAllowed {
+			return true
+		}
+	}
 	excluded := excludedModelsForAuth(m, auth)
 	if len(excluded) == 0 {
 		return false
@@ -878,6 +884,9 @@ func codexClientThinkingSupport(modelID string) *internalregistry.ThinkingSuppor
 			return nil
 		}
 		return out
+	}
+	if isCodexReserveModel(modelID) {
+		return codexClientThinkingSupport("gpt-5.6-luna")
 	}
 	return nil
 }

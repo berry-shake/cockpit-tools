@@ -66,6 +66,112 @@ func TestValidateCodexClientModelsJSON(t *testing.T) {
 	}
 }
 
+func TestMergeLocallyPinnedCodexClientModelsKeepsAstraWhenRemoteLags(t *testing.T) {
+	remotePayload := map[string]any{
+		"models":          []map[string]any{testCodexClientModel("gpt-5.5", 1)},
+		"model_overrides": []map[string]any{{"slug": "custom-override"}},
+	}
+	remote, err := json.Marshal(remotePayload)
+	if err != nil {
+		t.Fatalf("marshal remote catalog: %v", err)
+	}
+	merged, err := mergeLocallyPinnedCodexClientModels(remote)
+	if err != nil {
+		t.Fatalf("merge remote catalog without Astra: %v", err)
+	}
+
+	var payload codexClientModelsPayload
+	if err := json.Unmarshal(merged, &payload); err != nil {
+		t.Fatalf("decode merged catalog: %v", err)
+	}
+	var mergedDocument map[string]json.RawMessage
+	if err := json.Unmarshal(merged, &mergedDocument); err != nil {
+		t.Fatalf("decode merged document: %v", err)
+	}
+	if _, ok := mergedDocument["model_overrides"]; !ok {
+		t.Fatal("merge dropped remote model_overrides")
+	}
+	var astra map[string]any
+	for _, model := range payload.Models {
+		if model["slug"] == locallyPinnedCodexClientModelSlug {
+			astra = model
+		}
+	}
+	if astra == nil {
+		t.Fatal("merged catalog does not contain locally pinned Astra")
+	}
+	if astra["context_window"] != float64(1050000) {
+		t.Fatalf("Astra context_window = %#v, want 1050000", astra["context_window"])
+	}
+}
+
+func TestMergeLocallyPinnedCodexClientModelsPrefersRemoteAstraMetadata(t *testing.T) {
+	remoteAstra := testCodexClientModel(locallyPinnedCodexClientModelSlug, 4)
+	remoteAstra["display_name"] = "Remote Astra"
+	remote := testCodexClientCatalog(
+		t,
+		testCodexClientModel("gpt-5.5", 1),
+		remoteAstra,
+	)
+	merged, err := mergeLocallyPinnedCodexClientModels(remote)
+	if err != nil {
+		t.Fatalf("merge remote catalog with Astra: %v", err)
+	}
+
+	var payload codexClientModelsPayload
+	if err := json.Unmarshal(merged, &payload); err != nil {
+		t.Fatalf("decode merged catalog: %v", err)
+	}
+	count := 0
+	for _, model := range payload.Models {
+		if model["slug"] == locallyPinnedCodexClientModelSlug {
+			count++
+			if model["display_name"] != "Remote Astra" {
+				t.Fatalf("remote Astra metadata was not preserved: %#v", model)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("Astra entry count = %d, want 1", count)
+	}
+}
+
+func TestRefreshCodexClientModelsKeepsPinnedAstraOnValidRemoteCatalog(t *testing.T) {
+	original, _ := GetCodexClientModelsSnapshot()
+	validCatalog := testCodexClientCatalog(t, testCodexClientModel("gpt-5.5", 1))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(validCatalog)
+	}))
+	defer server.Close()
+
+	previousURLs := codexClientModelsURLs
+	codexClientModelsURLs = []string{server.URL}
+	t.Cleanup(func() {
+		codexClientModelsURLs = previousURLs
+		if _, err := loadCodexClientModelsFromBytes(original, "test cleanup"); err != nil {
+			t.Fatalf("restore original catalog: %v", err)
+		}
+	})
+
+	tryRefreshCodexClientModels(context.Background(), "test pinned Astra refresh")
+	data, _ := GetCodexClientModelsSnapshot()
+	var payload codexClientModelsPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatalf("decode refreshed catalog: %v", err)
+	}
+	found := false
+	for _, model := range payload.Models {
+		if model["slug"] == locallyPinnedCodexClientModelSlug {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("valid remote refresh removed locally pinned Astra")
+	}
+}
+
 func TestLoadCodexClientModelsRejectsInvalidWithoutReplacing(t *testing.T) {
 	original, _ := GetCodexClientModelsSnapshot()
 	t.Cleanup(func() {

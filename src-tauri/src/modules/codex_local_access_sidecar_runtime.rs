@@ -1175,6 +1175,7 @@ fn write_local_access_profile_model_catalog(
     } else {
         codex_protocol::build_codex_client_models_response(&supported_codex_model_ids())
     };
+    codex_protocol::ensure_codex_reserve_fallback(&mut client_models);
     if let Some(models) = client_models
         .get_mut("models")
         .and_then(Value::as_array_mut)

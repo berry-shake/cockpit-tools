@@ -68,18 +68,18 @@ fn validate_instance_model_routing(
     bind_account_id: Option<&str>,
     launch_mode: &InstanceLaunchMode,
     model_routing: Option<&CodexInstanceModelRouting>,
-) -> Result<(), String> {
+) -> Result<Option<CodexInstanceModelRouting>, String> {
     let Some(model_routing) = model_routing.filter(|routing| routing.enabled) else {
-        return Ok(());
+        return Ok(model_routing.cloned());
     };
     if !launch_mode_uses_desktop_runtime(launch_mode) {
         return Err("混合模型路由第一版仅支持桌面版实例".to_string());
     }
-    modules::codex_local_access::validate_mixed_model_routing_config(
+    let normalized = modules::codex_local_access::validate_mixed_model_routing_config(
         bind_account_id,
         model_routing,
     )?;
-    Ok(())
+    Ok(Some(normalized))
 }
 
 fn model_routing_update_error(error: String, rollback_errors: Vec<String>) -> String {
@@ -424,12 +424,13 @@ async fn ensure_provider_gateway_for_bind_account(
 ) -> Result<(), String> {
     if let Some(routing) = model_routing.filter(|routing| routing.enabled) {
         let oauth_account_id = bind_account_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
+            .and_then(|value| {
+                modules::codex_account::oauth_account_id_for_runtime_binding(Some(value))
+            })
             .ok_or("混合模型路由缺少 OAuth 订阅账号")?;
         return modules::codex_local_access::ensure_mixed_model_gateway_for_dir(
             profile_dir,
-            oauth_account_id,
+            &oauth_account_id,
             routing,
         )
         .await;
@@ -2500,11 +2501,12 @@ pub async fn codex_update_instance(
         let effective_launch_mode = launch_mode
             .clone()
             .unwrap_or_else(|| current.launch_mode.clone());
-        validate_instance_model_routing(
+        let normalized_effective_model_routing = validate_instance_model_routing(
             effective_bind_account_id.as_deref(),
             &effective_launch_mode,
             effective_model_routing.as_ref(),
         )?;
+        let model_routing = model_routing.map(|_| normalized_effective_model_routing.clone());
         let default_dir = modules::codex_instance::get_default_codex_home()?;
         let mut updated = modules::codex_instance::update_default_settings(
             bind_account_id,
@@ -2610,11 +2612,12 @@ pub async fn codex_update_instance(
     let effective_launch_mode = launch_mode
         .clone()
         .unwrap_or_else(|| current.launch_mode.clone());
-    validate_instance_model_routing(
+    let normalized_effective_model_routing = validate_instance_model_routing(
         effective_bind_account_id.as_deref(),
         &effective_launch_mode,
         effective_model_routing.as_ref(),
     )?;
+    let model_routing = model_routing.map(|_| normalized_effective_model_routing.clone());
 
     let wants_bind = bind_account_id
         .as_ref()

@@ -924,7 +924,12 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
         };
 
         let models = visible_codex_model_ids_for_api_key(&collection, &api_key, None);
-        for model in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+        for model in [
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-6-astra",
+        ] {
             assert!(models.iter().any(|item| item == model));
         }
 
@@ -1254,6 +1259,29 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
                 );
             }
         }
+    }
+
+    #[test]
+    fn legacy_chat_completions_requests_preserve_max_reasoning_effort() {
+        let request = ParsedRequest {
+            method: "POST".to_string(),
+            target: "/v1/chat/completions".to_string(),
+            headers: HashMap::new(),
+            body: br#"{"model":"gpt-6-astra","reasoning_effort":"max","messages":[{"role":"user","content":"hello"}]}"#.to_vec(),
+        };
+
+        let (prepared, _) =
+            prepare_gateway_request_with_default_service_tier(request, Some("priority"))
+                .expect("request should map");
+        let mapped_body: Value =
+            serde_json::from_slice(&prepared.body).expect("mapped body should be json");
+        assert_eq!(
+            mapped_body
+                .get("reasoning")
+                .and_then(|reasoning| reasoning.get("effort"))
+                .and_then(Value::as_str),
+            Some("max")
+        );
     }
 
     #[test]
@@ -3066,6 +3094,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
+            "gpt-6-astra",
             "gpt-5.3-codex",
             "gpt-5.3-codex-spark",
         ] {
@@ -3081,6 +3110,7 @@ data: {"error":{"code":"server_error","type":"upstream","message":"stream aborte
         assert_eq!(
             default_codex_model_ids(),
             vec![
+                "gpt-6-astra",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",

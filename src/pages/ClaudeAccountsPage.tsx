@@ -48,6 +48,7 @@ import { QuickSettingsPopover } from '../components/QuickSettingsPopover';
 import { SingleSelectDropdown } from '../components/SingleSelectDropdown';
 import { TagEditModal } from '../components/TagEditModal';
 import { ClaudeIcon } from '../components/icons/ClaudeIcon';
+import { ClaudeDesktopRuntimeManager } from '../components/claude/ClaudeDesktopRuntimeManager';
 import { ModelProviderUsagePanel } from '../components/model-provider/ModelProviderUsagePanel';
 import { PlatformGroupSwitcher } from '../components/platform/PlatformGroupSwitcher';
 import { useEscClose } from '../hooks/useEscClose';
@@ -3358,6 +3359,7 @@ export function ClaudeAccountsPage({ subPlatform = 'desktop' }: ClaudeAccountsPa
                       '首次使用时会下载并校验 Electron 登录组件到本地应用数据目录；安装包不内置，之后复用本地缓存。',
                     )}
                   </p>
+                  <ClaudeDesktopRuntimeManager disabled={addModalBusy || Boolean(desktopLogin)} onError={setAddModalError} onSuccess={(text) => setMessage({ text })} />
                   {desktopStarting && desktopLoginProgress && (
                     <div className="claude-desktop-login-progress" role="status" aria-live="polite">
                       <div className="claude-desktop-login-progress__head">

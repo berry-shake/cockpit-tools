@@ -479,6 +479,7 @@
         build_model_provider_gateway_test_collection, build_ordered_account_ids,
         build_request_routing_hint, build_runtime_account, build_upstream_websocket_url,
         calculate_usage_cost_usd, calendar_stats_window_starts, canonical_model_for_client_model,
+        account_has_gpt_reserve_entitlement,
         classify_upstream_error_category, cleanup_profile_takeover_without_backup,
         cleanup_provider_gateway_profile_model_overrides, codex_price,
         collect_local_access_profile_takeover_dirs_from_store, compare_routing_candidates,
@@ -545,6 +546,7 @@
         ParsedRequest, ResolvedLocalApiKey, ResponseUsageCollector, RoutingCandidate,
         SidecarUsageDetails, SidecarUsageEvent, UsageCapture,
         BOUND_OAUTH_QUOTA_RESERVE_MAX_SNAPSHOT_AGE_SECONDS, CODEX_AUTO_REVIEW_MODEL_ID,
+        CODEX_GPT_RESERVE_MODEL_ID,
         CODEX_IMAGEGEN_ACTOR_HEADER, CODEX_IMAGE_MODEL_ID,
         CODEX_LEGACY_LOCAL_ACCESS_MODEL_CATALOG_FILE, CODEX_LEGACY_PROVIDER_MODEL_CATALOG_FILE,
         CODEX_LOCAL_ACCESS_DISABLE_HOSTED_IMAGE_GENERATION_HEADER,
@@ -1604,6 +1606,18 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     }
 
     #[test]
+    fn provider_gateway_model_slots_keep_identity_for_gpt_6_astra() {
+        let slots = provider_gateway_model_slots(&["gpt-6-astra".to_string()]);
+        assert_eq!(
+            slots,
+            vec![super::ProviderGatewayModelSlot {
+                client_model: "gpt-6-astra".to_string(),
+                upstream_model: "gpt-6-astra".to_string(),
+            }]
+        );
+    }
+
+    #[test]
     fn responses_sync_catalog_with_custom_models_requires_instance_gateway_but_remains_local_access_eligible(
     ) {
         let mut account = CodexAccount::new_api_key(
@@ -2648,6 +2662,118 @@ http_headers = { "x-cockpit-instance-id" = "default" }
             merge_collection_and_account_excluded_models(&collection, "account-a"),
             vec!["gpt-5.2".to_string(), "gpt-5.4-mini".to_string()]
         );
+    }
+
+    #[test]
+    fn gpt_reserve_entitlement_requires_an_allowed_additional_rate_limit() {
+        let mut account = test_account_with_plan("pro");
+        account.quota = Some(CodexQuota {
+            hourly_percentage: 100,
+            hourly_reset_time: None,
+            hourly_window_minutes: Some(300),
+            hourly_window_present: Some(true),
+            weekly_percentage: 100,
+            weekly_reset_time: None,
+            weekly_window_minutes: Some(10_080),
+            weekly_window_present: Some(true),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({
+                "additional_rate_limits": [{
+                    "limit_name": "GPT-Reserve",
+                    "rate_limit": { "allowed": true }
+                }],
+                "rate_limit": { "allowed": false },
+                "rate_limit_upsell": { "banner_type": "luna_reserve" }
+            })),
+        });
+        assert!(account_has_gpt_reserve_entitlement(&account));
+        let valid = account.quota.as_ref().unwrap().raw_data.clone().unwrap();
+        for (regular_allowed, reserve_allowed, banner) in [
+            (true, true, "luna_reserve"),
+            (false, false, "luna_reserve"),
+            (false, true, "upgrade"),
+        ] {
+            let mut raw = valid.clone();
+            raw["rate_limit"]["allowed"] = json!(regular_allowed);
+            raw["additional_rate_limits"][0]["rate_limit"]["allowed"] = json!(reserve_allowed);
+            raw["rate_limit_upsell"]["banner_type"] = json!(banner);
+            account.quota.as_mut().unwrap().raw_data = Some(raw);
+            assert!(!account_has_gpt_reserve_entitlement(&account),
+                "must reject regular={regular_allowed}, reserve={reserve_allowed}, banner={banner}");
+        }
+        account.quota.as_mut().unwrap().raw_data = Some(valid.clone());
+        account.auth_mode = crate::models::codex::CodexAuthMode::Apikey;
+        assert!(!account_has_gpt_reserve_entitlement(&account));
+        account.quota.as_mut().unwrap().raw_data = None;
+        assert!(!account_has_gpt_reserve_entitlement(&account));
+    }
+
+    #[test]
+    fn api_service_model_list_keeps_reserve_without_eligible_accounts() {
+        let mut entitled = test_account_with_plan("pro");
+        entitled.id = "reserve-entitled".to_string();
+        entitled.quota = Some(CodexQuota {
+            hourly_percentage: 100,
+            hourly_reset_time: None,
+            hourly_window_minutes: Some(300),
+            hourly_window_present: Some(true),
+            weekly_percentage: 100,
+            weekly_reset_time: None,
+            weekly_window_minutes: Some(10_080),
+            weekly_window_present: Some(true),
+            reset_credits_available: None,
+            reset_credits: Vec::new(),
+            reset_credits_next_expires_at: None,
+            raw_data: Some(json!({
+                "additional_rate_limits": [{
+                    "limit_name": "GPT reserve",
+                    "rate_limit": { "allowed": true }
+                }],
+                "rate_limit": { "allowed": false },
+                "rate_limit_upsell": { "banner_type": "luna_reserve" }
+            })),
+        });
+        let mut ordinary = entitled.clone();
+        ordinary.id = "reserve-ordinary".to_string();
+        ordinary.quota.as_mut().unwrap().raw_data = Some(json!({
+            "additional_rate_limits": []
+        }));
+
+        let mut collection = test_local_access_collection(vec![entitled.id.clone()]);
+        let api_key = ResolvedLocalApiKey {
+            id: "reserve-key".to_string(),
+            label: "Reserve".to_string(),
+            provider_gateway: None,
+            inherit_account_pool: true,
+            account_ids: Vec::new(),
+            model_prefix: None,
+            allowed_models: Vec::new(),
+            excluded_models: Vec::new(),
+            token_limit: None,
+            token_used: 0,
+        };
+        let entitled_models = visible_codex_model_ids_for_api_key_with_accounts(
+            &collection,
+            &api_key,
+            &[entitled.clone(), ordinary.clone()],
+            None,
+        );
+        assert!(entitled_models
+            .iter()
+            .any(|model| model.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)));
+
+        collection.account_ids = vec![ordinary.id.clone()];
+        let ordinary_models = visible_codex_model_ids_for_api_key_with_accounts(
+            &collection,
+            &api_key,
+            &[entitled, ordinary],
+            None,
+        );
+        assert!(ordinary_models
+            .iter()
+            .any(|model| model.eq_ignore_ascii_case(CODEX_GPT_RESERVE_MODEL_ID)));
     }
 
     #[test]

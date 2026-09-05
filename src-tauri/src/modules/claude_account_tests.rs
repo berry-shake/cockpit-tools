@@ -2,6 +2,48 @@
 // 测试内容作为原 tests 模块的内部实现，super 引用和 cfg 条件保持不变。
 use super::*;
 
+#[test]
+fn desktop_login_component_cleanup_removes_only_owned_cache_dirs() {
+    let data_dir = std::env::temp_dir().join(format!(
+        "cockpit-claude-runtime-cleanup-{}-{}",
+        std::process::id(),
+        now_ts_ms()
+    ));
+    let runtime_file = data_dir
+        .join(CLAUDE_DESKTOP_ELECTRON_RUNTIME_DIR)
+        .join(CLAUDE_DESKTOP_ELECTRON_VERSION)
+        .join("electron.exe");
+    let login_file = data_dir
+        .join(CLAUDE_DESKTOP_LOGIN_DIR)
+        .join("pending")
+        .join("Cookies");
+    let account_file = data_dir.join(ACCOUNTS_DIR).join("keep.json");
+    fs::create_dir_all(runtime_file.parent().expect("runtime parent"))
+        .expect("create runtime cache");
+    fs::create_dir_all(login_file.parent().expect("login parent")).expect("create login cache");
+    fs::create_dir_all(account_file.parent().expect("account parent"))
+        .expect("create account directory");
+    fs::write(&runtime_file, b"runtime").expect("create runtime file");
+    fs::write(&login_file, b"login").expect("create login file");
+    File::create(&account_file).expect("create account file");
+
+    assert_eq!(
+        desktop_login_component_dir_size(&data_dir.join(CLAUDE_DESKTOP_ELECTRON_RUNTIME_DIR)),
+        7
+    );
+    assert_eq!(
+        desktop_login_component_dir_size(&data_dir.join(CLAUDE_DESKTOP_LOGIN_DIR)),
+        5
+    );
+
+    remove_desktop_login_component_dirs(&data_dir).expect("cleanup should succeed");
+
+    assert!(!data_dir.join(CLAUDE_DESKTOP_ELECTRON_RUNTIME_DIR).exists());
+    assert!(!data_dir.join(CLAUDE_DESKTOP_LOGIN_DIR).exists());
+    assert!(account_file.exists());
+    let _ = fs::remove_dir_all(&data_dir);
+}
+
     fn cloudflare_challenge_profile() -> Value {
         serde_json::json!({
             "fetchContext": "cookie_direct",

@@ -49,6 +49,7 @@ const ginUserAPIKeyKey = "userApiKey"
 const defaultStreamKeepAliveSeconds = 15
 const quotaReserveMaxSnapshotAge = 3 * time.Minute
 const codexAutoReviewModel = "codex-auto-review"
+const codexReserveModel = "gpt-reserve"
 const codexSparkModel = "gpt-5.3-codex-spark"
 const codexSparkCatalogTemplateModel = "gpt-5.3-codex"
 const defaultImagesMainModel = "gpt-5.4-mini"
@@ -336,6 +337,7 @@ type accountSpec struct {
 	PlanRank              *int              `json:"planRank,omitempty"`
 	RemainingQuota        *int              `json:"remainingQuota,omitempty"`
 	SubscriptionExpiryMS  *int64            `json:"subscriptionExpiryMs,omitempty"`
+	GPTReserveAllowed     bool              `json:"gptReserveAllowed,omitempty"`
 	ImageGenerationPolicy string            `json:"imageGenerationPolicy,omitempty"`
 	QuotaReserve          *quotaReserveSpec `json:"quotaReserve,omitempty"`
 	ModelContextWindows   map[string]int64  `json:"modelContextWindows,omitempty"`
@@ -1430,7 +1432,7 @@ func buildOllamaShowResponse(model string, modifiedAt time.Time) gin.H {
 
 func ollamaModelFamily(model string) string {
 	normalized := strings.ToLower(strings.TrimSpace(model))
-	for _, prefix := range []string{"gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-oss", "codex"} {
+	for _, prefix := range []string{"gpt-6-astra", "gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-oss", "codex"} {
 		if strings.HasPrefix(normalized, prefix) {
 			return prefix
 		}
@@ -1448,6 +1450,8 @@ func ollamaModelFamily(model string) string {
 
 func ollamaContextLength(model string) int {
 	switch {
+	case strings.HasPrefix(model, "gpt-6-astra"):
+		return 1050000
 	case strings.HasPrefix(model, "gpt-5.6"):
 		return 372000
 	case strings.HasPrefix(model, "gpt-5.5"), strings.HasPrefix(model, "gpt-5.4"):
@@ -1461,6 +1465,8 @@ func ollamaContextLength(model string) int {
 
 func ollamaReasoningEfforts(model string) []string {
 	switch {
+	case strings.HasPrefix(model, "gpt-6-astra"):
+		return []string{"low", "medium", "high", "xhigh", "max", "ultra"}
 	case strings.HasPrefix(model, "gpt-5.6-sol"), strings.HasPrefix(model, "gpt-5.6-terra"):
 		return []string{"low", "medium", "high", "xhigh", "max", "ultra"}
 	case strings.HasPrefix(model, "gpt-5.6-luna"), strings.HasPrefix(model, "gpt-5.6"):
@@ -1552,7 +1558,12 @@ func applyExplicitContextWindows(models []map[string]any, windows map[string]int
 
 func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows map[string]int64) gin.H {
 	sourceModels := make([]map[string]any, 0, len(models))
+	reserveClientModel := ""
 	for _, model := range models {
+		if isCodexReserveModel(stripModelPrefix(model, spec)) {
+			reserveClientModel = model
+			model = codexReserveModel
+		}
 		displayName := displayNameForModel(model)
 		entry := map[string]any{
 			"id":           model,
@@ -1583,6 +1594,12 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows m
 			slug, _ := model["slug"].(string)
 			if isHiddenCodexClientModel(slug) {
 				model["visibility"] = "hide"
+			}
+			if isCodexReserveModel(slug) {
+				model["visibility"] = "list"
+				if reserveClientModel != "" {
+					model["slug"] = reserveClientModel
+				}
 			}
 			// Preserve template priority/context/service_tiers. Only fill gaps
 			// for synthesized models that lack official catalog fields.
@@ -1675,6 +1692,10 @@ func displayNameForModel(model string) string {
 		return "GPT-5.6-Terra"
 	case "gpt-5.6-luna":
 		return "GPT-5.6-Luna"
+	case "gpt-6-astra":
+		return "GPT-6 Astra"
+	case codexReserveModel:
+		return "Luna Reserve"
 	case "gpt-5.5":
 		return "GPT-5.5"
 	case "gpt-5.4":
@@ -1873,7 +1894,18 @@ func visibleModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {
 		}
 		return normalizeStringList(models)
 	}
-	models := applyModelFilters(m.ModelIDs, nil, m.ExcludedModels)
+	baseModels := append([]string(nil), m.ModelIDs...)
+	hasReserve := false
+	for _, model := range baseModels {
+		if isCodexReserveModel(model) {
+			hasReserve = true
+			break
+		}
+	}
+	if !hasReserve {
+		baseModels = append(baseModels, codexReserveModel)
+	}
+	models := applyModelFilters(baseModels, nil, m.ExcludedModels)
 	if spec != nil && spec.ModelRouting != nil {
 		for _, route := range spec.ModelRouting.Routes {
 			if route.ProviderGateway == nil {
@@ -1895,6 +1927,10 @@ func visibleModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {
 		}
 	}
 	return models
+}
+
+func isCodexReserveModel(model string) bool {
+	return strings.EqualFold(strings.TrimSpace(model), codexReserveModel)
 }
 
 func clientCatalogModelsForAPIKey(m *manifest, spec *apiKeySpec) []string {

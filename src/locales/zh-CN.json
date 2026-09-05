@@ -2219,6 +2219,7 @@
       "title": "可见模型",
       "description": "统一管理可见模型、推理强度、上下文窗口和压缩阈值。",
       "enabledHint": "启用后使用当前可见模型列表，重启 Codex 生效。",
+      "disabledHint": "关闭后会移除 Cockpit 受管模型目录，恢复官方模型可见性；具体可用模型由官方账号权限决定。",
       "models": {
         "title": "模型列表",
         "model": "模型",
@@ -3741,7 +3742,8 @@
         "low": "低",
         "medium": "中",
         "high": "高",
-        "xhigh": "超高"
+        "xhigh": "超高",
+        "max": "最大"
       }
     },
     "sessionManager": {
@@ -6169,6 +6171,16 @@
       "preparingRuntime": "准备登录组件...",
       "hint": "登录态会先保存到本工具本地账号库，不会立刻写入官方 Claude；切号时才写回 Claude。",
       "runtimeHint": "首次使用时会下载并校验 Electron 登录组件到本地应用数据目录；安装包不内置，之后复用本地缓存。",
+      "uninstall": "卸载并释放空间",
+      "storageTitle": "登录组件缓存",
+      "storageUsage": "占用 {{size}}",
+      "storageCalculating": "计算中…",
+      "uninstallTitle": "卸载登录组件",
+      "uninstallConfirm": "确定卸载本地 Electron 登录组件吗？下次使用 Claude 登录时需要重新下载。",
+      "uninstalling": "正在卸载...",
+      "uninstallSuccess": "Claude 登录组件已卸载，已清理本地缓存空间。",
+      "uninstallFailed": "卸载 Claude 登录组件失败：{{error}}",
+      "uninstallDesc": "卸载会删除本地 Electron 登录组件、下载缓存和未完成登录的临时文件；不会删除已保存的 Claude 账号。",
       "nameLabel": "账号名称",
       "namePlaceholder": "可选，例如 Claude Free",
       "waiting": "请在已打开的 Claude 授权窗口完成登录。看到聊天页后回到这里点击完成导入。",

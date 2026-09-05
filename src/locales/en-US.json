@@ -2219,6 +2219,7 @@
       "title": "Visible models",
       "description": "Manage visible models, reasoning effort, context windows, and compact limits in one place.",
       "enabledHint": "Uses the current visible-model list. Restart Codex to apply.",
+      "disabledHint": "When disabled, the Cockpit-managed model catalog is removed and official model visibility is restored; available models are determined by the official account entitlement.",
       "models": {
         "title": "Model list",
         "model": "Model",
@@ -3741,7 +3742,8 @@
         "low": "Low",
         "medium": "Medium",
         "high": "High",
-        "xhigh": "XHigh"
+        "xhigh": "XHigh",
+        "max": "Max"
       }
     },
     "sessionManager": {
@@ -6169,6 +6171,16 @@
       "preparingRuntime": "Preparing sign-in...",
       "hint": "The sign-in state is saved to this tool's local account vault first and is not written to official Claude until you switch accounts.",
       "runtimeHint": "First use may download and verify the Electron sign-in component into the local app data folder; it is not bundled in the installer and is reused afterward.",
+      "uninstall": "Uninstall and free space",
+      "storageTitle": "Sign-in component cache",
+      "storageUsage": "Using {{size}}",
+      "storageCalculating": "Calculating…",
+      "uninstallTitle": "Uninstall sign-in component",
+      "uninstallConfirm": "Uninstall the local Electron sign-in component? It will be downloaded again the next time you sign in to Claude.",
+      "uninstalling": "Uninstalling...",
+      "uninstallSuccess": "Claude sign-in component uninstalled and local cache cleared.",
+      "uninstallFailed": "Failed to uninstall the Claude sign-in component: {{error}}",
+      "uninstallDesc": "This removes the local Electron sign-in component, download cache, and unfinished sign-in files; saved Claude accounts are not deleted.",
       "nameLabel": "Account name",
       "namePlaceholder": "Optional, for example Claude Free",
       "waiting": "Finish signing in in the opened Claude authorization window. When the chat page appears, return here and complete the import.",

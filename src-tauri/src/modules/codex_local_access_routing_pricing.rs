@@ -375,6 +375,83 @@ fn normalize_quota_limit_name_to_model_pattern(limit_name: &str) -> Option<Strin
     Some(trimmed.to_ascii_lowercase().replace(' ', "-"))
 }
 
+fn normalize_quota_entitlement_key(value: &str) -> String {
+    value
+        .trim()
+        .to_ascii_lowercase()
+        .replace(['_', ' '], "-")
+}
+
+fn is_gpt_reserve_entitlement_name(value: &str) -> bool {
+    let normalized = normalize_quota_entitlement_key(value);
+    normalized == CODEX_GPT_RESERVE_MODEL_ID
+        || normalized == "gptreserve"
+        || normalized.starts_with("gpt-reserve-")
+        || normalized.starts_with("gptreserve-")
+}
+
+fn additional_rate_limit_allowed(entry: &Value) -> Option<bool> {
+    entry
+        .get("rate_limit")
+        .or_else(|| entry.get("rateLimit"))
+        .and_then(|rate_limit| rate_limit.get("allowed"))
+        .and_then(Value::as_bool)
+        .or_else(|| entry.get("allowed").and_then(Value::as_bool))
+}
+
+fn additional_rate_limit_matches_gpt_reserve(entry: &Value, object_key: Option<&str>) -> bool {
+    [
+        object_key,
+        entry.get("limit_name").and_then(Value::as_str),
+        entry.get("limitName").and_then(Value::as_str),
+        entry.get("name").and_then(Value::as_str),
+        entry.get("metered_feature").and_then(Value::as_str),
+        entry.get("meteredFeature").and_then(Value::as_str),
+    ]
+    .into_iter()
+    .flatten()
+    .any(is_gpt_reserve_entitlement_name)
+}
+
+fn account_has_gpt_reserve_entitlement(account: &CodexAccount) -> bool {
+    // Listing is independent of eligibility. Dispatch follows the official
+    // quota-side predicate, without emulating desktop UI feature gates.
+    if account.is_api_key_auth() {
+        return false;
+    }
+    let Some(raw) = account
+        .quota
+        .as_ref()
+        .and_then(|quota| quota.raw_data.as_ref())
+    else {
+        return false;
+    };
+    if raw.pointer("/rate_limit/allowed").and_then(Value::as_bool) != Some(false)
+        || raw.pointer("/rate_limit_upsell/banner_type").and_then(Value::as_str)
+            != Some("luna_reserve")
+    {
+        return false;
+    }
+    let Some(additional) = raw
+        .get("additional_rate_limits")
+        .or_else(|| raw.get("additionalRateLimits"))
+    else {
+        return false;
+    };
+
+    match additional {
+        Value::Array(entries) => entries.iter().any(|entry| {
+            additional_rate_limit_matches_gpt_reserve(entry, None)
+                && additional_rate_limit_allowed(entry) == Some(true)
+        }),
+        Value::Object(entries) => entries.iter().any(|(name, entry)| {
+            additional_rate_limit_matches_gpt_reserve(entry, Some(name))
+                && additional_rate_limit_allowed(entry) == Some(true)
+        }),
+        _ => false,
+    }
+}
+
 fn metered_features_in_quota_raw(raw: &Value) -> HashSet<String> {
     let mut features = HashSet::new();
     let Some(limits) = raw.get("additional_rate_limits").and_then(Value::as_array) else {
@@ -501,6 +578,9 @@ fn sidecar_excluded_models_for_account(
         account,
         metered_feature_patterns,
     ));
+    if !account_has_gpt_reserve_entitlement(account) {
+        excluded.push(CODEX_GPT_RESERVE_MODEL_ID.to_string());
+    }
     if !account.api_model_mappings.is_empty() {
         let mapped = account_api_model_mapping_ids(account);
         excluded.extend(
@@ -1065,6 +1145,12 @@ const fn codex_price(
 const CODEX_LOCAL_ACCESS_PRICE_BOOK: &[CodexLocalAccessPriceBookEntry] = &[
     // Keep in sync with supported Codex models and public OpenAI rates.
     CodexLocalAccessPriceBookEntry {
+        model_id: "gpt-6-astra",
+        session_long_context: true,
+        standard: codex_price(10.0, 1.0, 50.0),
+        priority: Some(codex_price(20.0, 2.0, 100.0)),
+    },
+    CodexLocalAccessPriceBookEntry {
         model_id: "gpt-5.6-sol",
         session_long_context: true,
         standard: codex_price(5.0, 0.5, 30.0),
@@ -1262,6 +1348,9 @@ fn normalize_known_openai_codex_model(model: &str) -> Option<String> {
         }
     }
 
+    if normalized.contains("gpt-6-astra") {
+        return Some("gpt-6-astra".to_string());
+    }
     if normalized.contains("gpt-5.6-sol") {
         return Some("gpt-5.6-sol".to_string());
     }
@@ -1353,6 +1442,7 @@ fn is_openai_session_long_context_model(model_id: &str) -> bool {
         normalized.as_str(),
         "gpt-5.4"
             | "gpt-5.5"
+            | "gpt-6-astra"
             | "gpt-5.6"
             | "gpt-5.6-sol"
             | "gpt-5.6-terra"
@@ -1853,4 +1943,3 @@ fn trim_recent_events(events: &mut Vec<CodexLocalAccessUsageEvent>, retention_si
     events.retain(|event| event.timestamp > 0 && event.timestamp >= retention_since);
     events.sort_by_key(|event| event.timestamp);
 }
-

@@ -25,6 +25,7 @@ import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { useEscClose } from "../hooks/useEscClose";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
+import { useRememberMfaQuery } from "../hooks/useRememberMfaQuery";
 import type { SingleSelectFilterOption } from "../components/SingleSelectFilterDropdown";
 import type { CodexAccount, CodexAppSpeed } from "../types/codex";
 import type { CodexLocalAccessAddressKind, CodexLocalAccessState } from "../types/codexLocalAccess";
@@ -2276,6 +2277,13 @@ export function useCodexAccountsBaseController() {
     const refreshSavedMfaRecords = useCallback(() => {
       setSavedMfaRecords(loadSavedMfaRecords());
     }, []);
+
+    const rememberActiveAccountNoteMfaQuery = useRememberMfaQuery({
+      enabled: Boolean(activeAccountNoteMode),
+      secret: activeAccountNoteForm.twoFactorSecret,
+      accountName: activeAccountNoteDisplayName,
+      remark: activeAccountNoteForm.note,
+    });
   
     const resetAccountNoteMailPreview = useCallback(() => {
       accountNoteMailPreviewSeqRef.current += 1;
@@ -2436,6 +2444,7 @@ export function useCodexAccountsBaseController() {
   
     const closeAccountNoteModal = useCallback(() => {
       if (savingAccountNote || savingPendingOAuthAccount) return;
+      rememberActiveAccountNoteMfaQuery();
       setEditingAccountNoteId(null);
       setEditingAccountNoteForm(EMPTY_CODEX_ACCOUNT_NOTE_FORM);
       setPendingOAuthNoteModalOpen(false);
@@ -2448,6 +2457,7 @@ export function useCodexAccountsBaseController() {
       setAccountNoteError(null);
     }, [
       resetAccountNoteMailPreview,
+      rememberActiveAccountNoteMfaQuery,
       savingAccountNote,
       savingPendingOAuthAccount,
       setAccountNoteError,
@@ -2565,6 +2575,7 @@ export function useCodexAccountsBaseController() {
         };
   
         if (normalizedTwoFactorSecret) {
+          rememberActiveAccountNoteMfaQuery();
           setSavedMfaRecords(
             upsertSavedMfaRecord({
               secret: normalizedTwoFactorSecret,
@@ -2618,6 +2629,7 @@ export function useCodexAccountsBaseController() {
       activeAccountNoteSaving,
       activeAccountUsesPersonalAccessToken,
       editingAccountNoteId,
+      rememberActiveAccountNoteMfaQuery,
       setAccountNoteError,
       setMessage,
       resetAccountNoteMailPreview,

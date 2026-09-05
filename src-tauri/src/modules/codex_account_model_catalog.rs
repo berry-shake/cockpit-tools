@@ -241,6 +241,19 @@ fn clear_previous_experimental_catalog_reference(base_dir: &Path) -> Result<(), 
     }
 }
 
+fn clear_experimental_model_catalog_config(base_dir: &Path) -> Result<(), String> {
+    let path = experimental_model_config_path(base_dir);
+    crate::modules::atomic_write::remove_file_locked(&path)
+        .map(|_| ())
+        .map_err(|error| {
+            format!(
+                "清理 Codex 实验模型配置失败: path={}, error={}",
+                path.display(),
+                error
+            )
+        })
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct ExperimentalModelCatalogConfig {
     #[serde(default)]
@@ -248,11 +261,67 @@ struct ExperimentalModelCatalogConfig {
     models: Vec<CodexExperimentalModelDefinition>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     default_model_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    migrations: Vec<String>,
+}
+
+const GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID: &str = "repair-gpt-6-astra-default-model";
+
+fn read_experimental_model_catalog_config(
+    base_dir: &Path,
+) -> Option<ExperimentalModelCatalogConfig> {
+    let content = fs::read_to_string(experimental_model_config_path(base_dir)).ok()?;
+    serde_json::from_str::<ExperimentalModelCatalogConfig>(&content).ok()
+}
+
+fn experimental_model_catalog_has_migration(base_dir: &Path, migration_id: &str) -> bool {
+    read_experimental_model_catalog_config(base_dir)
+        .is_some_and(|config| config.migrations.iter().any(|item| item == migration_id))
+}
+
+fn prioritize_gpt_6_astra_model_definition(
+    mut models: Vec<CodexExperimentalModelDefinition>,
+) -> Vec<CodexExperimentalModelDefinition> {
+    if let Some(index) = models
+        .iter()
+        .position(|model| model.model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+    {
+        if index > 0 {
+            let astra = models.remove(index);
+            models.insert(0, astra);
+        }
+    }
+    models
+}
+
+fn astra_default_repair_is_needed(
+    base_dir: &Path,
+    configured_model: Option<&str>,
+    models: &[CodexExperimentalModelDefinition],
+) -> bool {
+    if experimental_model_catalog_has_migration(
+        base_dir,
+        GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID,
+    ) || !models
+        .iter()
+        .any(|model| model.model_id.eq_ignore_ascii_case(DEFAULT_CODEX_MODEL_ID))
+    {
+        return false;
+    }
+
+    let explicit_default = read_experimental_model_catalog_config(base_dir)
+        .and_then(|config| config.default_model_id)
+        .filter(|model_id| !model_id.trim().is_empty());
+    explicit_default
+        .as_deref()
+        .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+        || explicit_default.is_none()
+            && configured_model
+                .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
 }
 
 fn read_experimental_model_default_model_id(base_dir: &Path) -> Option<String> {
-    let content = fs::read_to_string(experimental_model_config_path(base_dir)).ok()?;
-    let config = serde_json::from_str::<ExperimentalModelCatalogConfig>(&content).ok()?;
+    let config = read_experimental_model_catalog_config(base_dir)?;
     if config.version < EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION {
         return None;
     }
@@ -260,7 +329,7 @@ fn read_experimental_model_default_model_id(base_dir: &Path) -> Option<String> {
     if default_model_id.is_empty() {
         return None;
     }
-    config
+    let model_id = config
         .models
         .iter()
         .find(|model| {
@@ -269,7 +338,17 @@ fn read_experimental_model_default_model_id(base_dir: &Path) -> Option<String> {
                 .trim()
                 .eq_ignore_ascii_case(&default_model_id)
         })
-        .map(|model| model.model_id.trim().to_string())
+        .map(|model| model.model_id.trim().to_string())?;
+    if model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID)
+        && astra_default_repair_is_needed(base_dir, None, &config.models)
+    {
+        return config
+            .models
+            .iter()
+            .find(|model| model.model_id.eq_ignore_ascii_case(DEFAULT_CODEX_MODEL_ID))
+            .map(|model| model.model_id.trim().to_string());
+    }
+    Some(model_id)
 }
 
 fn experimental_model_config_requires_catalog_migration(base_dir: &Path) -> bool {
@@ -344,11 +423,46 @@ fn default_experimental_model_definitions(
     }
 }
 
+/// Add newly shipped models to an unchanged, previously generated default list.
+/// Explicitly curated lists (including lists where the user removed a shipped model)
+/// remain untouched so account switching does not override user visibility choices.
+fn maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(
+    base_dir: &Path,
+    mut models: Vec<CodexExperimentalModelDefinition>,
+) -> Vec<CodexExperimentalModelDefinition> {
+    if models
+        .iter()
+        .any(|model| model.model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+    {
+        return prioritize_gpt_6_astra_model_definition(models);
+    }
+
+    let existing_ids = models
+        .iter()
+        .map(|model| model.model_id.to_ascii_lowercase())
+        .collect::<HashSet<_>>();
+    if !PRE_ASTRA_SHIPPED_VISIBLE_CODEX_MODEL_IDS
+        .iter()
+        .all(|model_id| existing_ids.contains(&model_id.to_ascii_lowercase()))
+    {
+        return models;
+    }
+
+    if let Some(astra) = default_experimental_model_definitions(base_dir)
+        .into_iter()
+        .find(|model| model.model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID))
+    {
+        models.insert(0, astra);
+    }
+    prioritize_gpt_6_astra_model_definition(models)
+}
+
 fn model_catalog_display_name(model_id: &str, fallback: &str) -> String {
     match model_id.trim().to_ascii_lowercase().as_str() {
         "gpt-5.6-sol" => "5.6 Sol".to_string(),
         "gpt-5.6-terra" => "5.6 Terra".to_string(),
         "gpt-5.6-luna" => "5.6 Luna".to_string(),
+        GPT_6_ASTRA_MODEL_ID => "GPT-6 Astra".to_string(),
         "gpt-5.3-codex" => "5.3 Codex".to_string(),
         "gpt-5.5" => "5.5".to_string(),
         "gpt-5.4" => "5.4".to_string(),
@@ -476,16 +590,31 @@ pub(crate) fn read_experimental_model_definitions(
     let Ok(content) = fs::read_to_string(&path) else {
         return default_experimental_model_definitions(base_dir);
     };
-    match serde_json::from_str::<ExperimentalModelCatalogConfig>(&content)
+    let mut models = match serde_json::from_str::<ExperimentalModelCatalogConfig>(&content)
         .map_err(|error| error.to_string())
-        .and_then(|config| normalize_experimental_model_definitions(config.models))
+        .and_then(|config| {
+            let requires_catalog_migration =
+                config.version < EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION;
+            let should_add_astra = config.version == EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION
+                && !config
+                    .migrations
+                    .iter()
+                    .any(|item| item == GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID);
+            normalize_experimental_model_definitions(config.models).map(|models| {
+                (models, requires_catalog_migration, should_add_astra)
+            })
+        })
     {
-        Ok(_models) if experimental_model_config_requires_catalog_migration(base_dir) => {
+        Ok((_models, true, _)) => {
             // A release migration intentionally resets all pre-release lists to the
-            // shipped visible-model preset. Later user edits are preserved by version 4+.
+            // shipped visible-model preset. Later user edits are preserved by version 4+
+            // and the additive Astra migration marker.
             default_experimental_model_definitions(base_dir)
         }
-        Ok(models) => models,
+        Ok((models, false, false)) => prioritize_gpt_6_astra_model_definition(models),
+        Ok((models, false, true)) => {
+            maybe_add_gpt_6_astra_to_previous_shipped_model_definitions(base_dir, models)
+        }
         Err(error) => {
             logger::log_warn(&format!(
                 "[Codex实验模型] 模型配置无效，使用默认值: path={}, error={}",
@@ -494,7 +623,17 @@ pub(crate) fn read_experimental_model_definitions(
             ));
             default_experimental_model_definitions(base_dir)
         }
+    };
+    if !models.iter().any(|model| model.model_id.eq_ignore_ascii_case("gpt-reserve")) {
+        models.push(CodexExperimentalModelDefinition {
+            model_id: "gpt-reserve".to_string(),
+            display_name: "Luna Reserve".to_string(),
+            reasoning_efforts: None,
+            context_window: None,
+            auto_compact_token_limit: None,
+        });
     }
+    models
 }
 
 fn persist_experimental_model_definitions(
@@ -502,17 +641,52 @@ fn persist_experimental_model_definitions(
     models: Vec<CodexExperimentalModelDefinition>,
     default_model_id: Option<&str>,
 ) -> Result<Vec<CodexExperimentalModelDefinition>, String> {
-    let models = normalize_experimental_model_definitions(models)?;
-    let default_model_id = default_model_id.and_then(|value| {
+    let previous_config = read_experimental_model_catalog_config(base_dir);
+    let previous_default_was_astra = previous_config
+        .as_ref()
+        .and_then(|config| config.default_model_id.as_deref())
+        .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
+    let models = prioritize_gpt_6_astra_model_definition(normalize_experimental_model_definitions(
+        models,
+    )?);
+    let mut default_model_id = default_model_id.and_then(|value| {
         models
             .iter()
             .find(|model| model.model_id.eq_ignore_ascii_case(value.trim()))
             .map(|model| model.model_id.clone())
     });
+    let mut migrations = previous_config
+        .map(|config| config.migrations)
+        .unwrap_or_default();
+    let requested_astra = default_model_id
+        .as_deref()
+        .is_some_and(|model_id| model_id.eq_ignore_ascii_case(GPT_6_ASTRA_MODEL_ID));
+    let default_repair_pending = !migrations
+        .iter()
+        .any(|item| item == GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID);
+    if requested_astra
+        && previous_default_was_astra
+        && default_repair_pending
+        && models
+            .iter()
+            .any(|model| model.model_id.eq_ignore_ascii_case(DEFAULT_CODEX_MODEL_ID))
+    {
+        default_model_id = Some(DEFAULT_CODEX_MODEL_ID.to_string());
+    }
+    if default_model_id.is_some() && default_repair_pending {
+        migrations.push(GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID.to_string());
+    }
+    if !migrations
+        .iter()
+        .any(|item| item == GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID)
+    {
+        migrations.push(GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID.to_string());
+    }
     let mut content = serde_json::to_string_pretty(&ExperimentalModelCatalogConfig {
         version: EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
         models: models.clone(),
         default_model_id,
+        migrations,
     })
     .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_CONFIG_SERIALIZE_FAILED".to_string())?;
     content.push('\n');
@@ -562,6 +736,7 @@ fn build_experimental_model_catalog(base_dir: &Path) -> Result<String, String> {
     let mut catalog =
         crate::modules::codex_protocol::build_codex_client_models_response_with_model_definitions_and_reasoning(&definitions);
     apply_model_context_config_to_catalog(&mut catalog, &model_definitions);
+    crate::modules::codex_protocol::ensure_codex_reserve_fallback(&mut catalog);
     serde_json::to_string_pretty(&catalog)
         .map(|mut content| {
             content.push('\n');
@@ -846,6 +1021,15 @@ fn apply_experimental_model_catalog_to_doc(
     if experimental_models.is_empty() {
         return Err("EXPERIMENTAL_MODEL_CATALOG_MODELS_REQUIRED".to_string());
     }
+    let configured_model = doc.get("model").and_then(|item| item.as_str());
+    if astra_default_repair_is_needed(base_dir, configured_model, &experimental_models) {
+        experimental_models = persist_experimental_model_definitions(
+            base_dir,
+            experimental_models,
+            Some(DEFAULT_CODEX_MODEL_ID),
+        )?;
+        doc["model"] = value(DEFAULT_CODEX_MODEL_ID);
+    }
     let generated_content = build_experimental_model_catalog(base_dir)
         .map_err(|_| "EXPERIMENTAL_MODEL_CATALOG_SERIALIZE_FAILED".to_string())?;
     if read_previous_experimental_catalog_state(base_dir).is_none() {
@@ -939,6 +1123,13 @@ pub fn read_quick_config_from_config_toml(base_dir: &Path) -> Result<CodexQuickC
                 return None;
             }
             let configured_model = doc.get("model").and_then(|item| item.as_str())?.trim();
+            if astra_default_repair_is_needed(base_dir, Some(configured_model), &experimental_models)
+            {
+                return experimental_models
+                    .iter()
+                    .find(|model| model.model_id.eq_ignore_ascii_case(DEFAULT_CODEX_MODEL_ID))
+                    .map(|model| model.model_id.clone());
+            }
             experimental_models
                 .iter()
                 .find(|model| model.model_id.eq_ignore_ascii_case(configured_model))
@@ -1028,6 +1219,10 @@ fn write_quick_config_to_config_toml_with_default_mode(
 ) -> Result<CodexQuickConfig, String> {
     let config_path = get_config_toml_path(base_dir);
     let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let disabling_experimental_catalog = experimental_model_catalog_enabled == Some(false);
+    let had_experimental_model_control_state = experimental_model_policy_path(base_dir).is_file()
+        || experimental_model_config_path(base_dir).is_file()
+        || experimental_model_previous_catalog_path(base_dir).is_file();
 
     if existing.trim().is_empty()
         && model_context_window.is_none()
@@ -1044,7 +1239,14 @@ fn write_quick_config_to_config_toml_with_default_mode(
         crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
-    let migrated_legacy_catalog = migrate_legacy_managed_catalog_reference(base_dir, &mut doc)?;
+    // Disabling the Cockpit catalog must not migrate or retain a legacy reference as part of
+    // this save. The official client must use its own catalog and account-level visibility rules;
+    // any user-owned catalog file is left untouched on disk, but is no longer activated here.
+    let migrated_legacy_catalog = if disabling_experimental_catalog {
+        false
+    } else {
+        migrate_legacy_managed_catalog_reference(base_dir, &mut doc)?
+    };
 
     if !preserve_context {
         if let Some(context_window) = model_context_window {
@@ -1066,7 +1268,12 @@ fn write_quick_config_to_config_toml_with_default_mode(
         }
     }
 
-    if let Some(models) = experimental_model_catalog_models {
+    // A disabled catalog is an opt-out from Cockpit model control. In particular, do not
+    // validate or persist a stale editor draft that the frontend sends together with the
+    // unchecked switch; the state is removed below instead.
+    if let Some(models) = experimental_model_catalog_models
+        .filter(|_| !disabling_experimental_catalog)
+    {
         persist_experimental_model_definitions(
             base_dir,
             models,
@@ -1081,6 +1288,12 @@ fn write_quick_config_to_config_toml_with_default_mode(
         &mut doc,
         effective_experimental_enabled,
     )?;
+    if disabling_experimental_catalog {
+        // Explicitly disabling this feature is the user's request to return to the official
+        // catalog. Remove both Cockpit-managed and user-supplied model_catalog_json references;
+        // the referenced user file is intentionally preserved for manual reuse later.
+        let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
+    }
 
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
@@ -1098,21 +1311,23 @@ fn write_quick_config_to_config_toml_with_default_mode(
         persist_experimental_model_policy(base_dir, enabled)?;
     }
 
-    if remove_experimental_catalog_after_write {
-        if let Err(error) = crate::modules::atomic_write::remove_file_locked(
-            &experimental_model_catalog_path(base_dir),
-        ) {
-            logger::log_warn(&format!(
-                "[Codex实验模型] 配置已停用，但清理受管目录失败: profile={}, error={}",
-                base_dir.display(),
-                error
-            ));
-        }
+    let remove_managed_catalog_after_write = remove_experimental_catalog_after_write
+        || (disabling_experimental_catalog && had_experimental_model_control_state);
+    if remove_managed_catalog_after_write {
+        crate::modules::atomic_write::remove_file_locked(&experimental_model_catalog_path(base_dir))
+            .map_err(|error| {
+                format!(
+                    "配置已停用，但清理 Codex 受管模型目录失败: profile={}, error={}",
+                    base_dir.display(),
+                    error
+                )
+            })?;
         let _ = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir);
     }
-    if experimental_model_catalog_enabled == Some(false) {
+    if disabling_experimental_catalog {
         cleanup_legacy_managed_model_catalogs(base_dir);
         clear_previous_experimental_catalog_reference(base_dir)?;
+        clear_experimental_model_catalog_config(base_dir)?;
     }
 
     read_quick_config_from_config_toml(base_dir)
@@ -1605,6 +1820,12 @@ fn sync_or_cleanup_managed_model_catalog_for_dir(
     sync_or_cleanup_account_model_catalog_for_dir(base_dir, account)?;
     if preserve_experimental_policy {
         enforce_experimental_model_policy_for_dir(base_dir)?;
+    } else {
+        // A disabled catalog must not survive a later account/profile switch as latent
+        // Cockpit state. Provider-owned files may still be recreated by the account-specific
+        // sync path above, but the experimental definitions and restore marker are always gone.
+        clear_experimental_model_catalog_config(base_dir)?;
+        clear_previous_experimental_catalog_reference(base_dir)?;
     }
     Ok(())
 }

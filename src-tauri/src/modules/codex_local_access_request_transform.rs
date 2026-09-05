@@ -1111,6 +1111,8 @@ fn normalize_proxy_reasoning_effort(value: &str) -> Option<&'static str> {
         "medium" | "med" | "default" => Some("medium"),
         "high" => Some("high"),
         "xhigh" | "x-high" | "extra_high" | "extrahigh" => Some("xhigh"),
+        "max" => Some("max"),
+        "ultra" => Some("ultra"),
         _ => None,
     }
 }
@@ -1939,4 +1941,3 @@ fn build_chat_completion_stream_body(
     stream_body.extend_from_slice(&tail);
     String::from_utf8(stream_body).unwrap_or_default()
 }
-

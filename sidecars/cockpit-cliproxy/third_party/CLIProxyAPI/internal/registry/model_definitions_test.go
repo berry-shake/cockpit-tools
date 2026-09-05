@@ -55,6 +55,39 @@ func TestWithXAIBuiltinsIncludesImage20(t *testing.T) {
 	t.Fatalf("expected xAI builtin model %s", xaiBuiltinImage20ModelID)
 }
 
+func TestPaidCodexModelsIncludeAstraButFreeDoesNot(t *testing.T) {
+	for _, models := range [][]*ModelInfo{
+		GetCodexTeamModels(),
+		GetCodexPlusModels(),
+		GetCodexProModels(),
+	} {
+		var astra *ModelInfo
+		for _, model := range models {
+			if model != nil && model.ID == codexBuiltinGPT6AstraModelID {
+				astra = model
+				break
+			}
+		}
+		if astra == nil {
+			t.Fatalf("paid Codex models do not contain %s", codexBuiltinGPT6AstraModelID)
+		}
+		if models[0] == nil || models[0].ID != codexBuiltinGPT6AstraModelID {
+			t.Fatalf("Astra is not the first paid Codex model: got %#v", models[0])
+		}
+		if astra.ContextLength != 1050000 || astra.MaxCompletionTokens != 128000 {
+			t.Fatalf("Astra limits = %d/%d, want 1050000/128000", astra.ContextLength, astra.MaxCompletionTokens)
+		}
+		if astra.Thinking == nil || len(astra.Thinking.Levels) != 6 || astra.Thinking.Levels[4] != "max" || astra.Thinking.Levels[5] != "ultra" {
+			t.Fatalf("Astra reasoning levels = %#v", astra.Thinking)
+		}
+	}
+	for _, model := range GetCodexFreeModels() {
+		if model != nil && model.ID == codexBuiltinGPT6AstraModelID {
+			t.Fatal("free Codex models should not advertise Astra before entitlement rollout")
+		}
+	}
+}
+
 func TestWithXAIBuiltinsIncludesVideo15GAAndPreviewAlias(t *testing.T) {
 	models := WithXAIBuiltins(nil)
 	foundGA := false

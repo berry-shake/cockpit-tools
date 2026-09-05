@@ -41,6 +41,7 @@ const REASONING_EFFORT_OPTIONS: CodexReasoningEffort[] = [
   "medium",
   "high",
   "xhigh",
+  "max",
 ];
 const CONTEXT_PRESETS = {
   preset_516k: { context_window: 516000, auto_compact_token_limit: 460000 },

@@ -2049,6 +2049,14 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       '统一管理可见模型、推理强度、上下文窗口和压缩阈值。',
                     )}
                   </div>
+                  {!codexExperimentalModelCatalogEnabled && (
+                    <div className="qs-hint">
+                      {t(
+                        'codex.experimentalModelCatalog.disabledHint',
+                        '关闭后会移除 Cockpit 受管模型目录，恢复官方模型可见性；具体可用模型由官方账号权限决定。',
+                      )}
+                    </div>
+                  )}
                   {codexExperimentalModelCatalogEnabled && (
                     <>
                       <div className="qs-hint">

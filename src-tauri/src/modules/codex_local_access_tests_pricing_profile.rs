@@ -1035,6 +1035,24 @@
         assert_eq!(luna.input_usd_per_million, 0.2);
         assert_eq!(luna.output_usd_per_million, 1.2);
         assert_eq!(luna.cached_input_usd_per_million, Some(0.02));
+
+        let astra =
+            resolve_effective_model_pricing(None, Some("gpt-6-astra"), Some(&short_usage), None)
+                .expect("gpt-6-astra pricing");
+        assert_eq!(astra.input_usd_per_million, 10.0);
+        assert_eq!(astra.output_usd_per_million, 50.0);
+        assert_eq!(astra.cached_input_usd_per_million, Some(1.0));
+
+        let astra_long = resolve_effective_model_pricing(
+            None,
+            Some("gpt-6-astra"),
+            Some(&long_usage),
+            Some("priority"),
+        )
+        .expect("gpt-6-astra priority long pricing");
+        assert_eq!(astra_long.input_usd_per_million, 40.0);
+        assert_eq!(astra_long.output_usd_per_million, 150.0);
+        assert_eq!(astra_long.cached_input_usd_per_million, Some(4.0));
     }
 
     #[test]

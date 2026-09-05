@@ -257,7 +257,7 @@ export interface CodexLocalAccessUsageEvent {
   gatewayMode?: CodexLocalAccessGatewayMode | null;
   requestKind: CodexLocalAccessRequestKind;
   serviceTier?: string | null;
-  /** Request reasoning effort (e.g. low/medium/high/xhigh), when present. */
+  /** Request reasoning effort (e.g. low/medium/high/xhigh/max), when present. */
   reasoningEffort?: string | null;
   success: boolean;
   httpStatus?: number | null;

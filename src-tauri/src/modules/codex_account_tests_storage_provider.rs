@@ -225,6 +225,35 @@
         assert_eq!(normalized.routes[0].namespace, "cpa");
         assert_eq!(normalized.routes[0].provider_account_id, api_account.id);
 
+        let legacy_internal_namespace = crate::models::CodexInstanceModelRouting {
+            routes: vec![crate::models::CodexInstanceApiRoute {
+                namespace: "__provider_gateway__".to_string(),
+                ..routing.routes[0].clone()
+            }],
+            ..routing.clone()
+        };
+        let normalized_legacy =
+            crate::modules::codex_local_access::validate_mixed_model_routing_config(
+                Some(&oauth_account.id),
+                &legacy_internal_namespace,
+            )
+            .expect("migrate legacy provider gateway namespace");
+        assert_eq!(normalized_legacy.routes[0].namespace, "api");
+
+        let mut gateway_api_account = api_account.clone();
+        gateway_api_account.bound_oauth_account_id = Some(oauth_account.id.clone());
+        save_account(&gateway_api_account).expect("save provider gateway API account");
+        let provider_gateway_bind_id =
+            crate::modules::codex_instance::provider_gateway_bind_account_id(
+                &gateway_api_account.id,
+            )
+            .expect("provider gateway bind id");
+        crate::modules::codex_local_access::validate_mixed_model_routing_config(
+            Some(&provider_gateway_bind_id),
+            &routing,
+        )
+        .expect("resolve provider gateway binding to its OAuth account");
+
         let empty_selection = crate::models::CodexInstanceModelRouting {
             routes: vec![crate::models::CodexInstanceApiRoute {
                 selected_models: Some(Vec::new()),

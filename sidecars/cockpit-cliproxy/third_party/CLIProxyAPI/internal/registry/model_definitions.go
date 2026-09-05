@@ -9,6 +9,7 @@ import (
 const (
 	codexBuiltinImage15ModelID    = "gpt-image-1.5"
 	codexBuiltinImageModelID      = "gpt-image-2"
+	codexBuiltinGPT6AstraModelID  = "gpt-6-astra"
 	xaiBuiltinImageModelID        = "grok-imagine-image"
 	xaiBuiltinImageQualityModelID = "grok-imagine-image-quality"
 	xaiBuiltinImage20ModelID      = "grok-imagine-image-2.0"
@@ -59,17 +60,17 @@ func GetCodexFreeModels() []*ModelInfo {
 
 // GetCodexTeamModels returns model definitions for the Codex team plan tier.
 func GetCodexTeamModels() []*ModelInfo {
-	return WithCodexBuiltins(cloneModelInfos(getModels().CodexTeam))
+	return withCodexPaidBuiltins(cloneModelInfos(getModels().CodexTeam))
 }
 
 // GetCodexPlusModels returns model definitions for the Codex plus plan tier.
 func GetCodexPlusModels() []*ModelInfo {
-	return WithCodexBuiltins(cloneModelInfos(getModels().CodexPlus))
+	return withCodexPaidBuiltins(cloneModelInfos(getModels().CodexPlus))
 }
 
 // GetCodexProModels returns model definitions for the Codex pro plan tier.
 func GetCodexProModels() []*ModelInfo {
-	return WithCodexBuiltins(cloneModelInfos(getModels().CodexPro))
+	return withCodexPaidBuiltins(cloneModelInfos(getModels().CodexPro))
 }
 
 // GetKimiModels returns the standard Kimi (Moonshot AI) model definitions.
@@ -119,6 +120,15 @@ func WithCodexBuiltins(models []*ModelInfo) []*ModelInfo {
 	return upsertModelInfos(models, codexBuiltinImage15ModelInfo(), codexBuiltinImageModelInfo())
 }
 
+// withCodexPaidBuiltins keeps paid Codex model availability stable when the
+// remote static model catalog is older than the shipped client catalog.
+func withCodexPaidBuiltins(models []*ModelInfo) []*ModelInfo {
+	return prioritizeModelInfoByID(
+		upsertModelInfos(WithCodexBuiltins(models), codexBuiltinGPT6AstraModelInfo()),
+		codexBuiltinGPT6AstraModelID,
+	)
+}
+
 // WithXAIBuiltins injects hard-coded xAI image/video model definitions that should
 // not depend on remote models.json updates.
 func WithXAIBuiltins(models []*ModelInfo) []*ModelInfo {
@@ -154,6 +164,25 @@ func codexBuiltinImageModelInfo() *ModelInfo {
 		Type:        "openai",
 		DisplayName: "GPT Image 2",
 		Version:     codexBuiltinImageModelID,
+	}
+}
+
+func codexBuiltinGPT6AstraModelInfo() *ModelInfo {
+	return &ModelInfo{
+		ID:                        codexBuiltinGPT6AstraModelID,
+		Object:                    "model",
+		Created:                   1788480000, // 2026-09-04
+		OwnedBy:                   "openai",
+		Type:                      "openai",
+		DisplayName:               "GPT-6 Astra",
+		Version:                   codexBuiltinGPT6AstraModelID,
+		Description:               "Our most capable model, built for the hardest end-to-end work.",
+		ContextLength:             1050000,
+		MaxCompletionTokens:       128000,
+		SupportedParameters:       []string{"tools"},
+		SupportedInputModalities:  []string{"text", "image"},
+		SupportedOutputModalities: []string{"text"},
+		Thinking:                  &ThinkingSupport{Levels: []string{"low", "medium", "high", "xhigh", "max", "ultra"}},
 	}
 }
 
@@ -281,6 +310,24 @@ func upsertModelInfos(models []*ModelInfo, extras ...*ModelInfo) []*ModelInfo {
 	return filtered
 }
 
+func prioritizeModelInfoByID(models []*ModelInfo, modelID string) []*ModelInfo {
+	index := -1
+	for i, model := range models {
+		if model != nil && strings.EqualFold(strings.TrimSpace(model.ID), modelID) {
+			index = i
+			break
+		}
+	}
+	if index <= 0 {
+		return models
+	}
+
+	model := models[index]
+	copy(models[1:index+1], models[:index])
+	models[0] = model
+	return models
+}
+
 // cloneModelInfos returns a shallow copy of the slice with each element deep-cloned.
 func cloneModelInfos(models []*ModelInfo) []*ModelInfo {
 	if len(models) == 0 {
@@ -359,6 +406,9 @@ func LookupStaticModelInfo(modelID string) *ModelInfo {
 				return cloneModelInfo(m)
 			}
 		}
+	}
+	if strings.EqualFold(strings.TrimSpace(modelID), codexBuiltinGPT6AstraModelID) {
+		return cloneModelInfo(codexBuiltinGPT6AstraModelInfo())
 	}
 
 	return nil

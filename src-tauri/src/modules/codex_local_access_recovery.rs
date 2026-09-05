@@ -254,6 +254,7 @@ async fn proxy_request_with_account_pool(
     let mut last_account_email: Option<String> = None;
     let mut attempts = 0usize;
     let mut retry_round = 0usize;
+    let mut auto_recovery_attempted = false;
     let mut earliest_cooldown_wait: Option<Duration>;
 
     loop {
@@ -277,6 +278,7 @@ async fn proxy_request_with_account_pool(
             &collection.custom_routing_rules,
         );
         let mut attempted_in_round = false;
+        let mut recoverable_blocked_in_round = false;
         let mut round_cooldown_wait: Option<Duration> = None;
 
         for account_id in strategy_account_ids {
@@ -298,6 +300,7 @@ async fn proxy_request_with_account_pool(
             }
 
             if account_id_blocked_by_health(&account_id).await {
+                recoverable_blocked_in_round = true;
                 last_error = "账号连续鉴权或预处理失败，已暂时跳过".to_string();
                 last_error_category = Some("account_unhealthy".to_string());
                 continue;
@@ -307,6 +310,7 @@ async fn proxy_request_with_account_pool(
                 if let Some(wait) =
                     get_model_cooldown_wait(&account_id, &routing_hint.model_key).await
                 {
+                    recoverable_blocked_in_round = true;
                     round_cooldown_wait = Some(match round_cooldown_wait {
                         Some(current) if current <= wait => current,
                         _ => wait,
@@ -733,6 +737,35 @@ async fn proxy_request_with_account_pool(
         }
 
         earliest_cooldown_wait = round_cooldown_wait;
+        if !attempted_in_round && recoverable_blocked_in_round && !auto_recovery_attempted {
+            auto_recovery_attempted = true;
+            logger::log_codex_api_warn(&format!(
+                "[CodexLocalAccess] 账号池无可用账号，自动恢复全部账号调度状态并重试: account_count={}",
+                scoped_account_ids.len()
+            ));
+            match recover_local_access_accounts(scoped_account_ids.clone()).await {
+                Ok(_) => {
+                    last_status = StatusCode::SERVICE_UNAVAILABLE.as_u16();
+                    last_error =
+                        "账号池没有可用账号，已自动恢复所有账号可用状态，正在重试".to_string();
+                    last_error_category = Some("auth_unavailable_auto_recovered".to_string());
+                    continue;
+                }
+                Err(error) => {
+                    logger::log_codex_api_warn(&format!(
+                        "[CodexLocalAccess] 账号池自动恢复失败: {}",
+                        error
+                    ));
+                    last_status = StatusCode::SERVICE_UNAVAILABLE.as_u16();
+                    last_error = format!(
+                        "账号池没有可用账号，已尝试自动恢复但仍无可用账号：{}",
+                        error
+                    );
+                    last_error_category = Some("auth_unavailable".to_string());
+                    earliest_cooldown_wait = None;
+                }
+            }
+        }
         let Some(wait) = earliest_cooldown_wait else {
             break;
         };
@@ -2867,4 +2900,3 @@ async fn handle_connection(
         }
     }
 }
-

@@ -26,6 +26,16 @@
                 .expect("read local access model catalog"),
         )
         .expect("parse local access model catalog");
+        let reserve = catalog["models"].as_array().unwrap().iter()
+            .find(|model| model["slug"] == "gpt-reserve")
+            .expect("API Service catalog should list Reserve even with an empty account pool");
+        assert_eq!(reserve["visibility"], "list");
+        assert_eq!(reserve["display_name"], "Luna Reserve");
+        assert!(reserve["auto_compact_token_limit"].is_null());
+        assert_eq!(reserve["prefer_websockets"], false);
+        assert!(!config.contains("model_context_window"));
+        assert!(!config.contains("model_auto_compact_token_limit"));
+        assert!(!config.contains("model = \"gpt-reserve\""));
         let spark = catalog
             .get("models")
             .and_then(Value::as_array)

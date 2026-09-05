@@ -208,6 +208,14 @@ export function CodexQuickConfigCard({ onClose }: { onClose?: () => void }) {
                       )}
                     </p>
                   )}
+                  {!catalogEnabled && (
+                    <p>
+                      {t(
+                        'codex.experimentalModelCatalog.disabledHint',
+                        '关闭后会移除 Cockpit 受管模型目录，恢复官方模型可见性；具体可用模型由官方账号权限决定。',
+                      )}
+                    </p>
+                  )}
                   {unavailableMessage && (
                     <div className="codex-quick-config-field__error">
                       <CircleAlert size={14} />

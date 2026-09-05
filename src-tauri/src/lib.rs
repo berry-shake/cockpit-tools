@@ -754,6 +754,8 @@ pub fn run() {
             commands::claude::list_claude_accounts,
             commands::claude::delete_claude_account,
             commands::claude::delete_claude_accounts,
+            commands::claude::claude_uninstall_desktop_login_component,
+            commands::claude::claude_get_desktop_login_component_storage,
             commands::claude::import_claude_from_json,
             commands::claude::import_claude_api_key,
             commands::claude::import_claude_desktop_gateway,

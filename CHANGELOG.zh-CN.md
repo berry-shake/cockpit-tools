@@ -7,7 +7,54 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ---
-## [未发布]
+## [1.3.40] - 2026-09-05
+
+### 新增
+
+- **常驻提供 Luna Reserve 手动选项**：API Service 与 Codex 受管模型列表提供 `gpt-reserve`，不因暂时没有合格账号而隐藏；不自动切换、不设为默认，也不预设固定压缩阈值。请求保持 `gpt-reserve` ID，仅在当前 API Key 的账号范围内选择常规额度不可用、备用额度允许且服务端标记为 `luna_reserve` 的 OAuth 账号；没有合格账号则报错，不改用普通账号或其他模型。用户显式配置的模型访问限制仍生效，关闭可见模型受管后仍由官方控制模型可见性。
+
+### 变更
+
+- **恢复 Codex OAuth 凭据过期后的单次重试**：Codex Alpha Search 收到上游 `401` 后会刷新当前 Home 凭据并重试一次，与常规 Codex 请求的恢复行为保持一致。
+- **账号池暂时无可用账号时自动恢复并重试一次**：当账号池存在候选账号但没有账号可被选中时，Cockpit Tools 会重置运行时调度状态并重试原请求；如果重试后仍没有可用账号，响应会明确说明已执行自动恢复。
+- **确认关闭第三方 API 路由后立即保存状态**：关闭路由时会立即保存“已关闭”，但不会影响当前正在运行的会话；配置会在下次启动 Codex 时生效。
+- **按 API Key 作用域隔离 Codex 会话绑定**：同一 Codex 会话在不同客户端 API Key 下不会复用另一 Key 的账号绑定，避免受限 Key 被错误路由到不属于自身范围的账号。
+
+- **按客户端版本返回 Codex 模型能力**：模型目录会依据 `client_version` 过滤不兼容的 `max`/`ultra` 推理强度，并保留官方模型别名、上下文窗口、优先级、服务层级和可用推理强度；Astra 使用已确认的官方模型能力模板。
+- **补齐 Codex API Service 的 HTTP、Responses 与 WebSocket 链路**：支持 Codex client model 路由、Responses/WebSocket 流式事件、连接保活与 Ping、上游事件和配额响应头合并、握手限额的 `Retry-After`，以及本地升级失败时的兼容回退。
+- **支持 Codex 多 Agent 与分支会话**：兼容 `collab_spawn` 委派标记、orphan delegation、fork/subagent 会话层级和父子会话身份，保证协作请求能沿正确会话继续执行。
+- **完善 Claude/OpenAI 协议转换**：修正工具调用与 `tool_result` 顺序、工具相邻关系、JSON Schema `required` 严格度、推理文本增量/摘要映射，并保留 Codex→Claude 的 cache-write 用量信息。
+- **增强 Codex 认证、调度与配额状态一致性**：改进 OAuth 刷新和 `401` 重试、并发刷新合并、模型级冷却与配额耗尽状态、重试后错误归因、别名/子 Agent 选择和候选账号回退，避免可恢复请求被错误冷却。
+- **补齐流式用量与诊断信息**：区分首个数据包与有效 TTFT，补充流式模式、WebSocket 响应观察、重试隔离的响应头和请求级诊断信息，使额度与请求失败原因更准确。
+- **保持非 Codex 模型目录独立**：本次 API Service 同步仅更新 Codex 模型条目及其必要的共享底层能力，不覆盖其他供应商的模型配置。
+
+## [1.3.39] - 2026-09-05
+
+### 新增
+
+- **补齐 GPT-6 Astra 的 Ultra 推理强度**：Astra 现在会在模型能力目录和 API 请求中支持 `ultra`，与官方客户端的可选强度保持一致。
+
+## [1.3.38] - 2026-09-05
+
+### 新增
+
+- **支持卸载 Claude Desktop 登录组件**：Claude 账号弹框现在可以删除本地下载的 Electron 登录 runtime 和未完成登录的临时 profile，释放磁盘空间，同时保留已保存的 Claude 账号。
+- **适配 GPT-6 Astra 模型**：在 API Service、账号切换、可见模型目录、唤醒预设和 Provider sidecar 中支持官方 `gpt-6-astra` 模型 ID 与 `GPT-6 Astra` 显示名称，并将它排在这些模型列表的第一位；同时补齐 105 万上下文、`max` 推理强度、Fast 档元数据和本地成本估算。仅增加可选模型，不改变默认模型。
+
+### 变更
+
+- **优化 Claude 登录组件缓存管理展示**：卸载区域改为独立的缓存卡片，显示实际占用空间并将说明、确认操作与按钮分层排列；空间统计在后台读取，不阻塞账号弹框打开。
+- **关闭可见模型目录后恢复官方模型可见性**：保存为关闭状态时会移除当前生效的 `model_catalog_json` 覆盖和 Cockpit 受管目录状态，但保留用户自己的目录文件；之后由官方 Codex 客户端根据账号权限决定可用模型。
+- **生成过验证码的 2FA 秘钥会自动保留到查询历史**：在 2FA 管理器或账号备注弹框输入有效秘钥后，只要能生成一次性验证码就立即加入近期查询，即使未保存账号备注直接关闭也可找回；查询历史不再自动淘汰超过 50 条的旧记录。
+
+### 修复
+
+- **修复 Claude Gateway 映射中的 1M 上下文复选框导致弹框错位的问题**：为自定义复选框建立独立的定位上下文，点击或勾选 1M 上下文后映射行和弹框内容保持稳定。（[#2229](https://github.com/jlcodes99/cockpit-tools/issues/2229)）
+- **修复混合模型路由被内部 `__provider_gateway__` 标识拒绝的问题**：不再把 Provider Gateway 内部绑定标识当作用户可配置的路由命名空间或账号 ID，使合法的 OAuth 订阅绑定和 API Key 路由可以正常保存并启动。（[#2222](https://github.com/jlcodes99/cockpit-tools/issues/2222)）
+- **修复 CodeBuddy 导入账号切换后的官方会话与国际版额度请求问题**：国际版 CodeBuddy 的计费请求补齐必要的 `User-Agent`，CodeBuddy、CodeBuddy CN 与 WorkBuddy 的 JSON 导入账号现在会保留 `expires_at`，避免切换到官方客户端后会话立即失效。（[#2194](https://github.com/jlcodes99/cockpit-tools/pull/2194)）
+- **修复 API Key 上游的 Responses Lite 请求兼容性**：规范化 API Service 发往 API Key 上游的 Responses Lite 请求头和工具调用参数，减少多轮请求被上游拒绝的情况。（[#2169](https://github.com/jlcodes99/cockpit-tools/pull/2169)）
+- **修复 Windows 工具栏按钮被拖拽层遮挡的问题**：窗口滚动后，顶部工具栏按钮仍可完整点击。（[#2187](https://github.com/jlcodes99/cockpit-tools/pull/2187)）
+- **修复 Codex API Service 在上游网络传输失败时错误冷却账号的问题**：DNS 失败、断网和连接被拒绝时仍可重试，不再修改账号或模型的冷却状态。
 
 ## [1.3.36] - 2026-09-02
 

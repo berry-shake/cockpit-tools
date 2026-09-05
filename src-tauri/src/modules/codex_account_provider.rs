@@ -64,9 +64,10 @@ const CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE: &str =
     ".cockpit-experimental-model-catalog-config.json";
 const CODEX_EXPERIMENTAL_MODEL_PREVIOUS_CATALOG_FILE: &str =
     ".cockpit-experimental-model-catalog-previous.json";
-const EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION: u32 = 4;
-const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
-const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
+pub(crate) const GPT_6_ASTRA_MODEL_ID: &str = "gpt-6-astra";
+const DEFAULT_CODEX_MODEL_ID: &str = "gpt-5.6-sol";
+const GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-astra-model";
+const PRE_ASTRA_SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
@@ -75,6 +76,20 @@ const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.3-codex-spark",
+];
+const EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION: u32 = 4;
+const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
+    GPT_6_ASTRA_MODEL_ID,
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.3-codex",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex-spark",
+    "gpt-reserve",
 ];
 /// Official DeepSeek Codex setup writes `models.json` and points `model_catalog_json` at it.
 /// Extra instances must use their own CODEX_HOME copy, not the default `~/.codex/models.json`.

@@ -508,6 +508,9 @@ fn is_provider_model_shell_slug(model: &str) -> bool {
     CODEX_PROVIDER_MODEL_SHELL_POOL
         .iter()
         .any(|shell| shell.eq_ignore_ascii_case(model))
+        || CODEX_PROVIDER_IDENTITY_ONLY_MODEL_IDS
+            .iter()
+            .any(|shell| shell.eq_ignore_ascii_case(model))
 }
 
 const DEEPSEEK_OFFICIAL_SHELL_SLOTS: &[(&str, &str)] = &[
@@ -1180,6 +1183,13 @@ fn provider_gateway_bound_oauth_account_id_for_account(account: &CodexAccount) -
 
 fn normalize_mixed_model_namespace(namespace: &str) -> Result<String, String> {
     let namespace = namespace.trim().to_ascii_lowercase();
+    if namespace == "__provider_gateway__" {
+        // Legacy builds could persist the internal Provider Gateway marker in
+        // the user-facing route namespace. Keep the marker reserved, but
+        // migrate that exact value to a normal namespace at the validation
+        // boundary so the configuration can be repaired and saved.
+        return Ok("api".to_string());
+    }
     if !(2..=32).contains(&namespace.len()) {
         return Err("模型路由命名空间长度必须为 2-32 个字符".to_string());
     }
@@ -1215,8 +1225,9 @@ pub fn validate_mixed_model_routing_config(
     let oauth_account_id = bind_account_id
         .map(str::trim)
         .filter(|value| !value.is_empty())
+        .and_then(|value| codex_account::oauth_account_id_for_runtime_binding(Some(value)))
         .ok_or("启用混合模型路由前必须绑定直接登录的 OAuth 订阅账号")?;
-    let _ = validate_local_access_bound_oauth_account(oauth_account_id)?;
+    let _ = validate_local_access_bound_oauth_account(&oauth_account_id)?;
 
     let mut seen_namespaces = HashSet::new();
     let mut normalized_routes = Vec::with_capacity(routing.routes.len());
@@ -1226,7 +1237,19 @@ pub fn validate_mixed_model_routing_config(
         if id.is_empty() {
             return Err("模型路由缺少 route id".to_string());
         }
-        let namespace = normalize_mixed_model_namespace(&route.namespace)?;
+        let legacy_internal_namespace = route
+            .namespace
+            .trim()
+            .eq_ignore_ascii_case("__provider_gateway__");
+        let base_namespace = normalize_mixed_model_namespace(&route.namespace)?;
+        let mut namespace = base_namespace.clone();
+        if legacy_internal_namespace {
+            let mut suffix = 2;
+            while seen_namespaces.contains(&namespace) {
+                namespace = format!("{base_namespace}-{suffix}");
+                suffix += 1;
+            }
+        }
         if !seen_namespaces.insert(namespace.clone()) {
             return Err(format!("模型路由命名空间重复: {}", namespace));
         }

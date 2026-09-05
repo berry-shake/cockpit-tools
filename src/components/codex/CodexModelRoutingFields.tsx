@@ -13,6 +13,7 @@ import type {
   CodexProviderWireApi,
 } from "../../types/codex";
 import {
+  CODEX_PROVIDER_GATEWAY_INTERNAL_NAMESPACE,
   CodexInstanceApiRoute,
   CodexInstanceModelRouting,
 } from "../../types/instance";
@@ -187,6 +188,35 @@ export const suggestCodexRouteNamespace = (
   }
 
   return "api";
+};
+
+export const normalizeCodexModelRoutingRoutes = (
+  routes: CodexInstanceApiRoute[],
+  accounts: CodexModelRoutingAccount[],
+): CodexInstanceApiRoute[] => {
+  const usedNamespaces = new Set<string>();
+  return routes.map((route) => {
+    const currentNamespace = route.namespace.trim().toLowerCase();
+    if (currentNamespace !== CODEX_PROVIDER_GATEWAY_INTERNAL_NAMESPACE) {
+      usedNamespaces.add(currentNamespace);
+      return route;
+    }
+
+    const provider = accounts.find((account) => account.id === route.providerAccountId);
+    const suggested = suggestCodexRouteNamespace(
+      provider,
+      provider ? shortCodexRouteAccountLabel(provider, provider.email) : undefined,
+    );
+    const base = suggested || "api";
+    let namespace = base;
+    let suffix = 2;
+    while (usedNamespaces.has(namespace)) {
+      namespace = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedNamespaces.add(namespace);
+    return { ...route, namespace };
+  });
 };
 
 export const createCodexModelRoute = (

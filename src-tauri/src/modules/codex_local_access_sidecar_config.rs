@@ -1506,6 +1506,7 @@ fn sidecar_account_manifest_value(
         "planRank": resolve_plan_rank(account),
         "remainingQuota": resolve_remaining_quota(account),
         "subscriptionExpiryMs": resolve_subscription_expiry_ms(account),
+        "gptReserveAllowed": account_has_gpt_reserve_entitlement(account),
         "imageGenerationPolicy": match collection.image_generation_account_policies.get(&account.id) {
             Some(CodexLocalAccessImageGenerationPolicy::Enabled) => "enabled",
             Some(CodexLocalAccessImageGenerationPolicy::Disabled) => "disabled",

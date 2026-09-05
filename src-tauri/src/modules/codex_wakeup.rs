@@ -27,10 +27,12 @@ const REASONING_EFFORT_LOW: &str = "low";
 const REASONING_EFFORT_MEDIUM: &str = "medium";
 const REASONING_EFFORT_HIGH: &str = "high";
 const REASONING_EFFORT_XHIGH: &str = "xhigh";
+const REASONING_EFFORT_MAX: &str = "max";
 const CODEX_WAKEUP_TEST_CANCELLED_MESSAGE: &str = "Codex 唤醒测试已取消";
 const CODEX_WAKEUP_CANCEL_POLL_MS: u64 = 120;
 const GPT_5_6_MODEL_PRESETS_MIGRATION_ID: &str = "add-gpt-5-6-model-presets";
 const GPT_5_5_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-5-5-model-preset";
+const GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID: &str = "add-gpt-6-astra-model-preset";
 const PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID: &str =
     "prune-legacy-codex-model-presets-before-gpt-5-4";
 const LEGACY_CODEX_MODEL_PRESET_IDS: &[&str] = &[
@@ -370,6 +372,7 @@ impl Default for CodexWakeupState {
             model_preset_migrations: vec![
                 GPT_5_6_MODEL_PRESETS_MIGRATION_ID.to_string(),
                 GPT_5_5_MODEL_PRESET_MIGRATION_ID.to_string(),
+                GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string(),
                 PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID.to_string(),
             ],
         }
@@ -450,6 +453,7 @@ fn supported_reasoning_efforts() -> &'static [&'static str] {
         REASONING_EFFORT_MEDIUM,
         REASONING_EFFORT_HIGH,
         REASONING_EFFORT_XHIGH,
+        REASONING_EFFORT_MAX,
     ]
 }
 
@@ -483,8 +487,15 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
             REASONING_EFFORT_MEDIUM.to_string(),
             REASONING_EFFORT_HIGH.to_string(),
         ]
-    } else {
+    } else if model.trim().eq_ignore_ascii_case("gpt-6-astra")
+        || model.trim().starts_with("gpt-5.6-")
+    {
         supported_reasoning_efforts()
+            .iter()
+            .map(|item| item.to_string())
+            .collect()
+    } else {
+        supported_reasoning_efforts()[..4]
             .iter()
             .map(|item| item.to_string())
             .collect()
@@ -493,6 +504,7 @@ fn default_reasoning_efforts_for_model(model: &str) -> Vec<String> {
 
 fn default_model_presets() -> Vec<CodexWakeupModelPreset> {
     let items = [
+        ("preset-gpt-6-astra", "GPT-6 Astra", "gpt-6-astra"),
         ("preset-gpt-5-6-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
         ("preset-gpt-5-6-terra", "GPT-5.6 Terra", "gpt-5.6-terra"),
         ("preset-gpt-5-6-luna", "GPT-5.6 Luna", "gpt-5.6-luna"),
@@ -612,6 +624,40 @@ fn ensure_gpt_5_5_model_preset(state: &mut CodexWakeupState) -> bool {
     true
 }
 
+fn ensure_gpt_6_astra_model_preset(state: &mut CodexWakeupState) -> bool {
+    let mut changed = false;
+    if !state
+        .model_preset_migrations
+        .iter()
+        .any(|item| item == GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID)
+    {
+        state
+            .model_preset_migrations
+            .push(GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string());
+        changed = true;
+    }
+
+    if let Some(index) = state
+        .model_presets
+        .iter()
+        .position(|preset| preset.model.trim().eq_ignore_ascii_case("gpt-6-astra"))
+    {
+        if index != 0 {
+            let astra = state.model_presets.remove(index);
+            state.model_presets.insert(0, astra);
+            changed = true;
+        }
+    } else if let Some(preset) = default_model_presets()
+        .into_iter()
+        .find(|preset| preset.model.eq_ignore_ascii_case("gpt-6-astra"))
+    {
+        state.model_presets.insert(0, preset);
+        changed = true;
+    }
+
+    changed
+}
+
 fn is_legacy_codex_model_preset(preset: &CodexWakeupModelPreset) -> bool {
     let id = preset.id.trim();
     let model = preset.model.trim();
@@ -646,6 +692,7 @@ fn apply_model_preset_migrations(state: &mut CodexWakeupState) -> bool {
     changed |= prune_legacy_model_presets(state);
     changed |= ensure_gpt_5_6_model_presets(state);
     changed |= ensure_gpt_5_5_model_preset(state);
+    changed |= ensure_gpt_6_astra_model_preset(state);
     state.model_preset_migrations.sort();
     state.model_preset_migrations.dedup();
     changed
@@ -2790,7 +2837,8 @@ mod tests {
         build_usable_resolved_binary, default_model_presets, prune_missing_accounts_from_state,
         retain_existing_account_ids, CodexWakeupModelPreset, CodexWakeupSchedule, CodexWakeupState,
         CodexWakeupTask, GPT_5_5_MODEL_PRESET_MIGRATION_ID, GPT_5_6_MODEL_PRESETS_MIGRATION_ID,
-        PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID, REASONING_EFFORT_MEDIUM,
+        GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID, PRUNE_LEGACY_MODEL_PRESETS_MIGRATION_ID,
+        REASONING_EFFORT_MEDIUM,
     };
     use std::collections::HashSet;
     use std::fs;
@@ -2885,6 +2933,7 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6-astra",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
@@ -2892,6 +2941,14 @@ mod tests {
                 "gpt-5.4",
                 "gpt-5.4-mini"
             ]
+        );
+        let astra = default_model_presets()
+            .into_iter()
+            .find(|preset| preset.model == "gpt-6-astra")
+            .expect("Astra preset");
+        assert_eq!(
+            astra.allowed_reasoning_efforts,
+            vec!["low", "medium", "high", "xhigh", "max"]
         );
     }
 
@@ -2919,6 +2976,7 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6-astra",
                 "gpt-5.6-sol",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
@@ -2934,6 +2992,10 @@ mod tests {
             .model_preset_migrations
             .iter()
             .any(|item| item == GPT_5_6_MODEL_PRESETS_MIGRATION_ID));
+        assert!(state
+            .model_preset_migrations
+            .iter()
+            .any(|item| item == GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID));
     }
 
     #[test]
@@ -2961,12 +3023,34 @@ mod tests {
         assert_eq!(
             models,
             vec![
+                "gpt-6-astra",
                 "gpt-5.6-terra",
                 "gpt-5.6-luna",
                 "gpt-5.6-sol",
                 "custom-model"
             ]
         );
+        assert!(!apply_model_preset_migrations(&mut state));
+    }
+
+    #[test]
+    fn model_preset_migration_moves_existing_astra_to_first() {
+        let mut state = CodexWakeupState {
+            enabled: false,
+            tasks: Vec::new(),
+            model_presets: vec![
+                model_preset("preset-sol", "GPT-5.6 Sol", "gpt-5.6-sol"),
+                model_preset("preset-astra", "GPT-6 Astra", "gpt-6-astra"),
+            ],
+            model_preset_migrations: vec![GPT_6_ASTRA_MODEL_PRESET_MIGRATION_ID.to_string()],
+        };
+
+        assert!(apply_model_preset_migrations(&mut state));
+        assert_eq!(state.model_presets[0].model, "gpt-6-astra");
+        assert!(state
+            .model_presets
+            .iter()
+            .any(|preset| preset.model == "gpt-5.6-sol"));
         assert!(!apply_model_preset_migrations(&mut state));
     }
 

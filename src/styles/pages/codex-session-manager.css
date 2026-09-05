@@ -1535,6 +1535,113 @@
   color: var(--text-secondary);
 }
 
+.claude-desktop-runtime-manager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-card) 68%, transparent);
+  margin-top: 10px;
+}
+
+.claude-desktop-runtime-manager__main {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 10px;
+}
+
+.claude-desktop-runtime-manager__icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.claude-desktop-runtime-manager__copy {
+  min-width: 0;
+}
+
+.claude-desktop-runtime-manager__copy strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.claude-desktop-runtime-manager__copy p {
+  margin: 0;
+  text-align: left;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.claude-desktop-runtime-manager__title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.claude-desktop-runtime-manager__size {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.claude-desktop-runtime-manager__button {
+  flex: 0 0 auto;
+}
+
+.claude-desktop-runtime-manager--confirming {
+  align-items: flex-start;
+}
+
+.claude-desktop-runtime-manager--confirming .claude-desktop-runtime-manager__copy {
+  flex: 1 1 auto;
+}
+
+.claude-desktop-runtime-manager__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .claude-desktop-runtime-manager {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .claude-desktop-runtime-manager__button,
+  .claude-desktop-runtime-manager__actions {
+    width: 100%;
+  }
+
+  .claude-desktop-runtime-manager__button {
+    justify-content: center;
+  }
+
+  .claude-desktop-runtime-manager__actions {
+    justify-content: stretch;
+  }
+
+  .claude-desktop-runtime-manager__actions .btn {
+    flex: 1 1 0;
+  }
+}
+
 @media (max-width: 860px) {
   .codex-quick-config-modal .codex-quick-config-grid {
     grid-template-columns: 1fr;

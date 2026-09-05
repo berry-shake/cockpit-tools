@@ -248,7 +248,7 @@ const WEEKDAY_OPTIONS = [
 
 const DEFAULT_PROMPT = 'hi';
 const QUICK_TIME_OPTIONS = ['07:00', '08:00', '09:00', '10:00', '14:00', '18:00', '22:00'];
-const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh'];
+const REASONING_EFFORT_OPTIONS: CodexWakeupReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 const DEFAULT_WAKEUP_MODEL = 'gpt-5.3-codex';
 const DEFAULT_WAKEUP_REASONING_EFFORT: CodexWakeupReasoningEffort = 'medium';
 const QUOTA_RESET_MIN_REFRESH_MINUTES = 2;
@@ -395,7 +395,7 @@ function createEmptyPresetDraft(): PresetDraft {
   return {
     name: '',
     model: '',
-    allowedReasoningEfforts: ['low', 'medium', 'high', 'xhigh'],
+    allowedReasoningEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     defaultReasoningEffort: 'medium',
   };
 }

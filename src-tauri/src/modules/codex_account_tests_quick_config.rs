@@ -1,6 +1,44 @@
 // Codex 账号测试：Quick config, provider validation and index repair behavior。
 // 测试与生产实现共享 super 作用域，验证真实持久化和运行态行为。
     #[test]
+    fn managed_catalog_lists_reserve_without_changing_defaults_and_cleans_up_when_disabled() {
+        let base_dir = make_temp_dir("codex-reserve-managed-catalog");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
+            .expect("write original model");
+        let definitions = super::default_experimental_model_definitions(&base_dir);
+        assert!(definitions.iter().any(|model| model.model_id == "gpt-reserve"));
+        let saved = super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, true, definitions.clone(), Some("gpt-5.6-sol".to_string()),
+        ).expect("save managed catalog");
+        assert!(saved.experimental_model_catalog_models.iter()
+            .any(|model| model.model_id == "gpt-reserve"));
+        let catalog: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)).unwrap()
+        ).unwrap();
+        let models = catalog["models"].as_array().unwrap();
+        let reserve = models.iter().find(|model| model["slug"] == "gpt-reserve").unwrap();
+        let luna = models.iter().find(|model| model["slug"] == "gpt-5.6-luna").unwrap();
+        assert_eq!(reserve["visibility"], "list");
+        assert_eq!(reserve["display_name"], "Luna Reserve");
+        assert_eq!(reserve["context_window"], luna["context_window"]);
+        assert_eq!(reserve["supported_reasoning_levels"], luna["supported_reasoning_levels"]);
+        assert!(reserve["auto_compact_token_limit"].is_null());
+        let config = fs::read_to_string(base_dir.join("config.toml")).unwrap();
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        assert!(!config.contains("model_context_window"));
+        assert!(!config.contains("model_auto_compact_token_limit"));
+
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir, false, definitions, None,
+        ).expect("disable managed catalog");
+        let config = fs::read_to_string(base_dir.join("config.toml")).unwrap();
+        assert!(!config.contains("model_catalog_json"));
+        assert!(!base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE).exists());
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn quick_config_reads_custom_context_window_without_hiding_it() {
         let base_dir = make_temp_dir("codex-quick-config-custom-window-test");
         let config_path = base_dir.join("config.toml");
@@ -183,7 +221,12 @@
         )
         .expect("parse generated catalog");
         let models = generated["models"].as_array().expect("models array");
+        assert_eq!(
+            models[0].get("slug").and_then(serde_json::Value::as_str),
+            Some("gpt-6-astra")
+        );
         for expected in [
+            "gpt-6-astra",
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
@@ -199,6 +242,9 @@
         }
         assert!(!models.iter().any(|model| {
             model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-sol-wm")
+        }));
+        assert!(models.iter().any(|model| {
+            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-6-astra")
         }));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
@@ -224,6 +270,153 @@
         assert!(model_ids.contains(&"gpt-5.6-sol"));
         assert!(model_ids.contains(&"gpt-5.3-codex"));
         assert!(!model_ids.contains(&"gpt-5.6-sol-wm"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn account_switch_adds_astra_to_previous_shipped_catalog_without_overwriting_curated_lists() {
+        let base_dir = make_temp_dir("codex-astra-visible-model-migration-test");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
+            .expect("write config");
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE),
+            "enabled\n",
+        )
+        .expect("enable experimental catalog");
+
+        let mut previous_defaults = super::default_experimental_model_definitions(&base_dir);
+        previous_defaults.retain(|model| model.model_id != "gpt-6-astra");
+        let previous_config = serde_json::json!({
+            "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
+            "models": previous_defaults,
+        });
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE),
+            serde_json::to_vec_pretty(&previous_config).expect("serialize previous catalog"),
+        )
+        .expect("write previous catalog");
+
+        let account = CodexAccount::new(
+            "oauth-astra-migration".to_string(),
+            "astra@example.com".to_string(),
+            CodexTokens {
+                id_token: "test-id-token".to_string(),
+                access_token: "test-access-token".to_string(),
+                refresh_token: Some("test-refresh-token".to_string()),
+            },
+        );
+        super::sync_or_cleanup_managed_model_catalog_for_dir(&base_dir, &account)
+            .expect("switch account with previous catalog");
+        let generated: serde_json::Value = serde_json::from_slice(
+            &fs::read(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
+                .expect("read switched catalog"),
+        )
+        .expect("parse switched catalog");
+        assert!(generated["models"]
+            .as_array()
+            .expect("models")
+            .first()
+            .is_some_and(|model| model["slug"] == "gpt-6-astra"));
+        assert!(generated["models"]
+            .as_array()
+            .expect("models")
+            .iter()
+            .any(|model| model["slug"] == "gpt-6-astra"));
+
+        let mut curated = super::default_experimental_model_definitions(&base_dir);
+        curated.retain(|model| model.model_id != "gpt-6-astra");
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &base_dir,
+            true,
+            curated,
+            None,
+        )
+        .expect("persist curated catalog");
+        assert!(!read_experimental_model_definitions(&base_dir)
+            .iter()
+            .any(|model| model.model_id == "gpt-6-astra"));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn quick_config_repairs_astra_default_and_preserves_order_once() {
+        let base_dir = make_temp_dir("codex-astra-default-repair-test");
+        fs::write(
+            base_dir.join("config.toml"),
+            "model_catalog_json = \"cockpit-model-catalog.json\"\nmodel = \"gpt-6-astra\"\n",
+        )
+        .expect("write config");
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE),
+            "enabled\n",
+        )
+        .expect("enable experimental catalog");
+        let models = vec![
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-6-astra",
+        ]
+        .into_iter()
+        .map(|model_id| CodexExperimentalModelDefinition {
+            model_id: model_id.to_string(),
+            display_name: model_id.to_string(),
+            reasoning_efforts: None,
+            context_window: None,
+            auto_compact_token_limit: None,
+        })
+        .collect::<Vec<_>>();
+        let saved = serde_json::json!({
+            "version": super::EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION,
+            "models": models,
+            "default_model_id": "gpt-6-astra",
+            "migrations": [super::GPT_6_ASTRA_MODEL_CATALOG_MIGRATION_ID]
+        });
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE),
+            serde_json::to_vec_pretty(&saved).expect("serialize saved catalog"),
+        )
+        .expect("write saved catalog");
+
+        super::enforce_experimental_model_policy_for_dir(&base_dir)
+            .expect("repair experimental catalog");
+
+        let quick_config = read_quick_config_from_config_toml(&base_dir).expect("read repaired config");
+        assert_eq!(
+            quick_config.experimental_model_catalog_default_model_id.as_deref(),
+            Some("gpt-5.6-sol")
+        );
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        let catalog_config: serde_json::Value = serde_json::from_slice(
+            &fs::read(base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE))
+                .expect("read repaired catalog"),
+        )
+        .expect("parse repaired catalog");
+        assert_eq!(catalog_config["models"][0]["model_id"], "gpt-6-astra");
+        assert_eq!(catalog_config["default_model_id"], "gpt-5.6-sol");
+        assert!(catalog_config["migrations"]
+            .as_array()
+            .expect("migrations")
+            .iter()
+            .any(|migration| migration == super::GPT_6_ASTRA_DEFAULT_REPAIR_MIGRATION_ID));
+
+        let repaired_models = quick_config.experimental_model_catalog_models.clone();
+        let selected_astra = write_quick_config_to_config_toml_with_default(
+            &base_dir,
+            None,
+            None,
+            Some(true),
+            Some(repaired_models),
+            Some("gpt-6-astra".to_string()),
+        )
+        .expect("persist explicit Astra selection");
+        assert_eq!(
+            selected_astra.experimental_model_catalog_default_model_id.as_deref(),
+            Some("gpt-6-astra")
+        );
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -310,7 +503,15 @@
         )
         .expect("enable dynamic experimental catalog");
 
-        assert_eq!(result.experimental_model_catalog_models, models);
+        let mut expected = models.clone();
+        expected.push(CodexExperimentalModelDefinition {
+            model_id: "gpt-reserve".to_string(),
+            display_name: "Luna Reserve".to_string(),
+            reasoning_efforts: None,
+            context_window: None,
+            auto_compact_token_limit: None,
+        });
+        assert_eq!(result.experimental_model_catalog_models, expected);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(!config.contains("model = \"custom-model-a\""));
         let catalog: serde_json::Value = serde_json::from_str(
@@ -434,7 +635,15 @@
         )
         .expect("persist visible model list");
 
-        assert_eq!(result.experimental_model_catalog_models, models);
+        let mut expected = models.clone();
+        expected.push(CodexExperimentalModelDefinition {
+            model_id: "gpt-reserve".to_string(),
+            display_name: "Luna Reserve".to_string(),
+            reasoning_efforts: None,
+            context_window: None,
+            auto_compact_token_limit: None,
+        });
+        assert_eq!(result.experimental_model_catalog_models, expected);
         assert_eq!(
             result
                 .experimental_model_catalog_default_model_id
@@ -603,9 +812,9 @@
         );
 
         write_quick_config_to_config_toml(&base_dir, None, None, Some(false), None)
-            .expect("disable and restore original catalog");
+            .expect("disable and restore official catalog");
         let restored_config = fs::read_to_string(&config_path).expect("read restored config");
-        assert!(restored_config.contains("model_catalog_json = \"user-model-catalog.json\""));
+        assert!(!restored_config.contains("model_catalog_json"));
         assert!(restored_config.contains("model = \"gpt-5\""));
         assert_eq!(
             fs::read_to_string(base_dir.join("user-model-catalog.json"))
@@ -642,18 +851,62 @@
         assert!(status.experimental_model_catalog_enabled);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
-        let default_model = read_experimental_model_definitions(&base_dir)
-            .first()
-            .expect("initial model")
-            .model_id
-            .clone();
-        assert!(config.contains(&format!("model = \"{}\"", default_model)));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .is_file());
         assert!(base_dir
             .join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE)
             .is_file());
+        let catalog = fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
+            .expect("read OAuth switched catalog");
+        assert!(catalog.contains("\"gpt-6-astra\""));
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn account_switch_does_not_recreate_disabled_experimental_catalog() {
+        let base_dir = make_temp_dir("codex-experimental-disabled-switch-test");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
+            .expect("write config");
+        write_quick_config_to_config_toml(&base_dir, None, None, Some(true), None)
+            .expect("enable experimental catalog");
+        write_quick_config_to_config_toml(&base_dir, None, None, Some(false), None)
+            .expect("disable experimental catalog");
+        // Simulate a stale file left by an older build; account switching must clean it too.
+        fs::write(
+            base_dir.join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE),
+            r#"{"version":4,"models":[{"model_id":"gpt-6-astra","display_name":"6 Astra"}]}"#,
+        )
+        .expect("write stale catalog state");
+
+        let account = CodexAccount::new(
+            "oauth-disabled-catalog".to_string(),
+            "disabled@example.com".to_string(),
+            CodexTokens {
+                id_token: "test-id-token".to_string(),
+                access_token: "test-access-token".to_string(),
+                refresh_token: Some("test-refresh-token".to_string()),
+            },
+        );
+        super::sync_or_cleanup_managed_model_catalog_for_dir(&base_dir, &account)
+            .expect("switch with disabled catalog");
+
+        let status = read_quick_config_from_config_toml(&base_dir).expect("read quick config");
+        assert!(!status.experimental_model_catalog_enabled);
+        assert!(status.experimental_model_catalog_default_model_id.is_none());
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(!config.contains("model_catalog_json"));
+        assert!(!base_dir
+            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
+            .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE)
+            .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE)
+            .exists());
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -682,18 +935,16 @@
         assert!(status.experimental_model_catalog_enabled);
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
         assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
-        let default_model = read_experimental_model_definitions(&base_dir)
-            .first()
-            .expect("initial model")
-            .model_id
-            .clone();
-        assert!(config.contains(&format!("model = \"{}\"", default_model)));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(base_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
             .is_file());
         assert!(base_dir
             .join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE)
             .is_file());
+        let catalog = fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
+            .expect("read API key switched catalog");
+        assert!(catalog.contains("\"gpt-6-astra\""));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -755,6 +1006,56 @@
         assert!(!base_dir
             .join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE)
             .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE)
+            .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_PREVIOUS_CATALOG_FILE)
+            .exists());
+
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn disabling_catalog_ignores_stale_invalid_editor_draft_and_cleans_control_state() {
+        let base_dir = make_temp_dir("codex-experimental-disable-stale-draft-test");
+        fs::write(base_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
+            .expect("write config");
+        write_quick_config_to_config_toml(&base_dir, None, None, Some(true), None)
+            .expect("enable catalog");
+
+        let invalid_draft = vec![CodexExperimentalModelDefinition {
+            model_id: "bad model id".to_string(),
+            display_name: String::new(),
+            reasoning_efforts: Some(vec!["not-a-real-effort".to_string()]),
+            context_window: None,
+            auto_compact_token_limit: None,
+        }];
+        write_quick_config_to_config_toml_with_default(
+            &base_dir,
+            None,
+            None,
+            Some(false),
+            Some(invalid_draft),
+            Some("bad model id".to_string()),
+        )
+        .expect("disable should ignore stale draft");
+
+        let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
+        assert!(!config.contains("model_catalog_json"));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
+        assert!(!base_dir
+            .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)
+            .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE)
+            .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_CONFIG_FILE)
+            .exists());
+        assert!(!base_dir
+            .join(super::CODEX_EXPERIMENTAL_MODEL_PREVIOUS_CATALOG_FILE)
+            .exists());
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
     }
@@ -772,7 +1073,7 @@
     }
 
     #[test]
-    fn quick_config_preserves_provider_catalog_when_switch_is_off() {
+    fn quick_config_removes_provider_catalog_reference_when_switch_is_off() {
         let base_dir = make_temp_dir("codex-provider-catalog-disabled-test");
         fs::write(
             base_dir.join("config.toml"),
@@ -793,7 +1094,7 @@
             .expect("keep switch disabled");
 
         let config = fs::read_to_string(base_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model_catalog_json = \"cockpit-model-catalog.json\""));
+        assert!(!config.contains("model_catalog_json"));
         assert_eq!(
             fs::read_to_string(base_dir.join(super::CODEX_MANAGED_MODEL_CATALOG_FILE))
                 .expect("read provider catalog"),

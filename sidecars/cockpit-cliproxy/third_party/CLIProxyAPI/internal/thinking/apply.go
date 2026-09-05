@@ -398,7 +398,7 @@ func extractSourceThinkingConfig(body []byte, provider string) ThinkingConfig {
 //
 // Parsing priority:
 //  1. Special values: "none" → ModeNone, "auto"/"-1" → ModeAuto
-//  2. Level names: "minimal", "low", "medium", "high", "xhigh" → ModeLevel
+//  2. Level names: "minimal", "low", "medium", "high", "xhigh", "max" → ModeLevel
 //  3. Numeric values: positive integers → ModeBudget, 0 → ModeNone
 //
 // If none of the above match, returns empty ThinkingConfig (treated as no config).
@@ -787,7 +787,7 @@ func extractInteractionsConfig(body []byte) ThinkingConfig {
 // extractOpenAIConfig extracts thinking configuration from OpenAI format request body.
 //
 // OpenAI API format:
-//   - reasoning_effort: "none", "low", "medium", "high" (discrete levels)
+//   - reasoning_effort: "none", "low", "medium", "high", "xhigh", "max" (discrete levels)
 //
 // OpenAI uses level-based thinking configuration only, no numeric budget support.
 // The "none" value is treated specially to return ModeNone.
@@ -851,7 +851,7 @@ func extractKimiConfig(body []byte) ThinkingConfig {
 // extractCodexConfig extracts thinking configuration from Codex format request body.
 //
 // Codex API format (OpenAI Responses API):
-//   - reasoning.effort: "none", "low", "medium", "high"
+//   - reasoning.effort: "none", "low", "medium", "high", "xhigh", "max"
 //
 // This is similar to OpenAI but uses nested field "reasoning.effort" instead of "reasoning_effort".
 func extractCodexConfig(body []byte) ThinkingConfig {
