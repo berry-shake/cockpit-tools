@@ -450,9 +450,102 @@ fn clear_runtime_account_health(runtime: &mut GatewayRuntime, account_ids: &[Str
             .iter()
             .any(|account_id| key.starts_with(&format!("{}{}", account_id, COOLDOWN_KEY_SEPARATOR)))
     });
-    // A successful scheduler reset invalidates previous pool-level selection failures.
-    // A subsequent request will recreate the pool issue if no candidate is still usable.
-    runtime.account_pool_health.clear();
+    // Keep pool diagnostics for accounts that were not part of this manual
+    // recovery. Clearing the whole map makes a single-account recovery look
+    // like "recover all" in the health modal.
+    runtime.account_pool_health.retain(|_, health| {
+        if health.account_statuses.is_empty() {
+            // Older Sidecars did not report per-account statuses. There is no
+            // safe way to subtract one member from that aggregate diagnostic;
+            // retain it until the next Sidecar diagnostic refresh instead of
+            // hiding every remaining account.
+            return true;
+        }
+        health
+            .account_statuses
+            .retain(|member| !account_ids.contains(member.account_id.as_str()));
+        !health.account_statuses.is_empty()
+    });
+}
+
+async fn request_sidecar_reset_scheduler(
+    collection: &CodexLocalAccessCollection,
+    port: u16,
+    account_ids: &[String],
+) -> Result<Vec<String>, String> {
+    if account_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let client = build_localhost_http_client(Duration::from_secs(10), "账号调度恢复")?;
+    let url = format!(
+        "http://{}:{}/v1/cockpit/accounts/reset-scheduler",
+        CODEX_LOCAL_ACCESS_DEFAULT_CLIENT_URL_HOST, port
+    );
+    let response = client
+        .post(url)
+        .bearer_auth(collection.api_key.trim())
+        .json(&json!({ "accountIds": account_ids }))
+        .send()
+        .await
+        .map_err(|error| format!("请求 Sidecar 恢复账号状态失败: {}", error))?;
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "Sidecar 恢复账号状态失败: HTTP {} {}",
+            status,
+            body.chars().take(300).collect::<String>()
+        ));
+    }
+
+    let reset_account_ids = serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|payload| payload.get("accountIds").and_then(Value::as_array).cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|value| value.as_str().map(str::trim).map(str::to_string))
+        .filter(|account_id| !account_id.is_empty())
+        .collect::<Vec<_>>();
+    if reset_account_ids.is_empty() {
+        return Err("Sidecar 未确认任何账号调度状态".to_string());
+    }
+    Ok(reset_account_ids)
+}
+
+async fn restore_removed_local_access_accounts(account_ids: &[String]) {
+    let account_ids = account_ids
+        .iter()
+        .map(|account_id| account_id.trim().to_string())
+        .filter(|account_id| !account_id.is_empty())
+        .collect::<Vec<_>>();
+    if account_ids.is_empty() {
+        return;
+    }
+    let (collection, port, running) = {
+        let runtime = gateway_runtime().lock().await;
+        (
+            runtime.collection.clone(),
+            runtime
+                .actual_port
+                .or_else(|| runtime.collection.as_ref().map(|collection| collection.port)),
+            runtime.running,
+        )
+    };
+    if running {
+        if let (Some(collection), Some(port)) = (collection.as_ref(), port) {
+            if let Err(error) =
+                request_sidecar_reset_scheduler(collection, port, &account_ids).await
+            {
+                logger::log_codex_api_warn(&format!(
+                    "[CodexLocalAccess] 从 API 服务移除账号后恢复调度状态失败: {}",
+                    error
+                ));
+            }
+        }
+    }
+    let mut runtime = gateway_runtime().lock().await;
+    clear_runtime_account_health(&mut runtime, &account_ids);
+    clear_runtime_quota_cooldowns(&mut runtime, &account_ids);
 }
 
 pub async fn recover_local_access_accounts(
@@ -490,42 +583,13 @@ pub async fn recover_local_access_accounts(
         return Err("没有找到可恢复的账号".to_string());
     }
 
-    let client = build_localhost_http_client(Duration::from_secs(10), "账号调度恢复")?;
-    let url = format!(
-        "http://{}:{}/v1/cockpit/accounts/reset-scheduler",
-        CODEX_LOCAL_ACCESS_DEFAULT_CLIENT_URL_HOST, port
-    );
-    let response = client
-        .post(url)
-        .bearer_auth(collection.api_key.trim())
-        .json(&json!({ "accountIds": selected }))
-        .send()
-        .await
-        .map_err(|error| format!("请求 Sidecar 恢复账号状态失败: {}", error))?;
-    let status = response.status();
-    let body = response.text().await.unwrap_or_default();
-    if !status.is_success() {
-        return Err(format!(
-            "Sidecar 恢复账号状态失败: HTTP {} {}",
-            status,
-            body.chars().take(300).collect::<String>()
-        ));
-    }
-
-    let reset_account_ids = serde_json::from_str::<Value>(&body)
-        .ok()
-        .and_then(|payload| payload.get("accountIds").and_then(Value::as_array).cloned())
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|value| value.as_str().map(str::trim).map(str::to_string))
-        .filter(|account_id| !account_id.is_empty())
-        .collect::<Vec<_>>();
-    if reset_account_ids.is_empty() {
-        return Err("Sidecar 未确认任何账号调度状态".to_string());
-    }
+    let reset_account_ids =
+        request_sidecar_reset_scheduler(&collection, port, &selected).await?;
 
     let mut runtime = gateway_runtime().lock().await;
+    let now = now_ms();
     clear_runtime_account_health(&mut runtime, &reset_account_ids);
+    mark_quota_cooldowns_recovered(&mut runtime, &reset_account_ids, now);
     Ok(build_fresh_state_snapshot(&mut runtime))
 }
 
@@ -1201,13 +1265,7 @@ fn write_local_access_profile_model_catalog(
     invalidate_codex_model_cache(profile_dir)?;
 
     let config_path = profile_config_path(profile_dir);
-    let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
-    let mut doc = if existing.trim().is_empty() {
-        Document::new()
-    } else {
-        crate::modules::codex_config_format::read_codex_config_doc_from_str(&existing)
-            .map_err(|e| format!("解析 Codex config.toml 失败: {}", e))?
-    };
+    let mut doc = crate::modules::codex_config_format::load_codex_config_doc(&config_path)?;
     doc["model_catalog_json"] = value(catalog_file);
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
     crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)

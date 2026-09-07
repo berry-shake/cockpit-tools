@@ -203,6 +203,15 @@ pub async fn save_local_access_accounts(
             next_account_ids.push(account_id);
         }
     }
+    let removed_account_ids = collection
+        .account_ids
+        .iter()
+        .filter(|account_id| !next_account_ids.iter().any(|next| next == *account_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !removed_account_ids.is_empty() {
+        restore_removed_local_access_accounts(&removed_account_ids).await;
+    }
 
     collection.restrict_free_accounts = restrict_free_accounts;
     collection.account_ids = next_account_ids;
@@ -247,6 +256,7 @@ pub async fn save_local_access_accounts(
     {
         let mut runtime = gateway_runtime().lock().await;
         sync_runtime_collection(&mut runtime, collection);
+        sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
     }
 
     if should_reload_gateway {
@@ -298,6 +308,7 @@ pub async fn append_local_access_accounts(
         {
             let mut runtime = gateway_runtime().lock().await;
             sync_runtime_collection(&mut runtime, collection);
+            sync_runtime_quota_cooldowns(&mut runtime, &accounts, now_ms());
         }
         if should_reload_gateway {
             trigger_gateway_reload_in_background("导入账号同步加入 API 服务");
@@ -814,6 +825,16 @@ pub async fn remove_deleted_accounts_from_local_access_pool(
         return Ok(());
     };
 
+    let removed_account_ids = collection
+        .account_ids
+        .iter()
+        .filter(|account_id| remove_ids.contains(*account_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !removed_account_ids.is_empty() {
+        restore_removed_local_access_accounts(&removed_account_ids).await;
+    }
+
     if !remove_account_refs_from_collection(&mut collection, &remove_ids) {
         return Ok(());
     }
@@ -862,6 +883,16 @@ pub async fn remove_local_access_accounts(
         .collect::<HashSet<_>>();
     if remove_ids.is_empty() {
         return snapshot_state().await;
+    }
+
+    let removed_account_ids = collection
+        .account_ids
+        .iter()
+        .filter(|account_id| remove_ids.contains(*account_id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !removed_account_ids.is_empty() {
+        restore_removed_local_access_accounts(&removed_account_ids).await;
     }
 
     let refs_changed = remove_account_refs_from_collection(&mut collection, &remove_ids);

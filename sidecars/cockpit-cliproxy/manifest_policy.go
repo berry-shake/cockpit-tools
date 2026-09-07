@@ -29,6 +29,7 @@ import (
 	codexmodels "github.com/router-for-me/CLIProxyAPI/v7/internal/client/codex/models"
 	internallogging "github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	coreusage "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
@@ -107,6 +108,8 @@ type manifest struct {
 	accountByEmail    map[string]*accountSpec
 	aliasToSource     map[string]string
 	originalIndexByID map[string]int
+	quotaCooldowns    *quotaCooldownStateStore
+	authManager       *coreauth.Manager
 }
 
 type apiKeySpec struct {
@@ -326,21 +329,22 @@ type providerGatewayModelCapability struct {
 }
 
 type accountSpec struct {
-	ID                    string            `json:"id"`
-	Email                 string            `json:"email"`
-	AuthID                string            `json:"authId,omitempty"`
-	AuthKind              string            `json:"authKind,omitempty"`
-	PlanType              string            `json:"planType,omitempty"`
-	AccessTokenOnly       bool              `json:"accessTokenOnly,omitempty"`
-	ChatGPTAccountID      string            `json:"chatgptAccountId,omitempty"`
-	UpstreamAPIKey        string            `json:"upstreamApiKey,omitempty"`
-	PlanRank              *int              `json:"planRank,omitempty"`
-	RemainingQuota        *int              `json:"remainingQuota,omitempty"`
-	SubscriptionExpiryMS  *int64            `json:"subscriptionExpiryMs,omitempty"`
-	GPTReserveAllowed     bool              `json:"gptReserveAllowed,omitempty"`
-	ImageGenerationPolicy string            `json:"imageGenerationPolicy,omitempty"`
-	QuotaReserve          *quotaReserveSpec `json:"quotaReserve,omitempty"`
-	ModelContextWindows   map[string]int64  `json:"modelContextWindows,omitempty"`
+	ID                    string              `json:"id"`
+	Email                 string              `json:"email"`
+	AuthID                string              `json:"authId,omitempty"`
+	AuthKind              string              `json:"authKind,omitempty"`
+	PlanType              string              `json:"planType,omitempty"`
+	AccessTokenOnly       bool                `json:"accessTokenOnly,omitempty"`
+	ChatGPTAccountID      string              `json:"chatgptAccountId,omitempty"`
+	UpstreamAPIKey        string              `json:"upstreamApiKey,omitempty"`
+	PlanRank              *int                `json:"planRank,omitempty"`
+	RemainingQuota        *int                `json:"remainingQuota,omitempty"`
+	QuotaCooldown         *quotaCooldownState `json:"quotaCooldown,omitempty"`
+	SubscriptionExpiryMS  *int64              `json:"subscriptionExpiryMs,omitempty"`
+	GPTReserveAllowed     bool                `json:"gptReserveAllowed,omitempty"`
+	ImageGenerationPolicy string              `json:"imageGenerationPolicy,omitempty"`
+	QuotaReserve          *quotaReserveSpec   `json:"quotaReserve,omitempty"`
+	ModelContextWindows   map[string]int64    `json:"modelContextWindows,omitempty"`
 }
 
 type quotaReserveSpec struct {
@@ -1693,7 +1697,7 @@ func displayNameForModel(model string) string {
 	case "gpt-5.6-luna":
 		return "GPT-5.6-Luna"
 	case "gpt-6-astra":
-		return "GPT-6 Astra"
+		return "6 Astra"
 	case codexReserveModel:
 		return "Luna Reserve"
 	case "gpt-5.5":

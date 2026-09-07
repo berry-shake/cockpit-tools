@@ -122,6 +122,10 @@ func main() {
 		os.Exit(2)
 	}
 	emitter.emitStartupStage("init_runtime")
+	m.quotaCooldowns = newQuotaCooldownStateStore(*quotaPoolStatePath, m)
+	if err := m.quotaCooldowns.load(); err != nil {
+		emitter.emit(map[string]any{"type": "quota_cooldown_state_error", "message": err.Error()})
+	}
 	quotaState := newQuotaReserveStateStore(*quotaReserveStatePath, m)
 	if err := quotaState.load(); err != nil {
 		emitter.emit(map[string]any{
@@ -149,12 +153,14 @@ func main() {
 		tracker:    usageTracker,
 	}
 	coreManager := buildCoreAuthManager(cfg, selector, hook, m, quotaState, usageTracker)
+	m.authManager = coreManager
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(signalCtx)
 	defer cancel()
 	quotaState.start(ctx, emitter)
+	m.quotaCooldowns.start(ctx, emitter)
 	monitorParentProcess(ctx, *parentPID, cancel, emitter)
 
 	coreusage.RegisterPlugin(&usagePlugin{manifest: m, tracker: usageTracker})

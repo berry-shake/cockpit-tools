@@ -124,7 +124,11 @@ fn resolve_remaining_quota(account: &CodexAccount) -> Option<i32> {
     if quota.weekly_window_present.unwrap_or(true) {
         percentages.push(quota.weekly_percentage.clamp(0, 100));
     }
-    percentages.into_iter().min()
+    let remaining = percentages.into_iter().min();
+    if remaining == Some(0) && quota_has_usable_credits(quota) {
+        return Some(1);
+    }
+    remaining
 }
 
 fn resolve_subscription_expiry_ms(account: &CodexAccount) -> Option<i64> {
@@ -909,6 +913,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         weekly: CodexLocalAccessStatsWindow {
             since: window_starts.week,
@@ -917,6 +923,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         monthly: CodexLocalAccessStatsWindow {
             since: window_starts.month,
@@ -925,6 +933,8 @@ fn empty_stats_snapshot() -> CodexLocalAccessStats {
             accounts: Vec::new(),
             models: Vec::new(),
             api_keys: Vec::new(),
+            trend: Vec::new(),
+            trend_hourly: false,
         },
         events: Vec::new(),
     }
@@ -984,6 +994,8 @@ fn empty_stats_window(since: i64, updated_at: i64) -> CodexLocalAccessStatsWindo
         accounts: Vec::new(),
         models: Vec::new(),
         api_keys: Vec::new(),
+        trend: Vec::new(),
+        trend_hourly: false,
     }
 }
 
