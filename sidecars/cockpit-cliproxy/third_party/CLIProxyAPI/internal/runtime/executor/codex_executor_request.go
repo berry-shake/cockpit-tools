@@ -25,7 +25,7 @@ import (
 const (
 	codexUserAgent             = "codex-tui/0.153.4 (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; 0.153.4)"
 	codexOriginator            = "codex-tui"
-	codexDefaultImageToolModel = "gpt-image-2"
+	codexDefaultImageToolModel = "gpt-image-2.5"
 	codexResponsesLiteHeader   = "X-OpenAI-Internal-Codex-Responses-Lite"
 	codexResponsesLiteMetadata = "client_metadata.ws_request_header_x_openai_internal_codex_responses_lite"
 )
@@ -323,13 +323,8 @@ func applyModelHeaderOverrides(headers http.Header, modelName string) {
 }
 
 // applyCodexDirectImageHeaders sets Codex upstream headers for direct /images/* calls.
-// OAuth requests use the Codex identity to reduce Cloudflare 1010 blocks, while
-// API-key requests retain the downstream identity like other passthrough calls.
+// Downstream client User-Agent values are not forwarded to reduce Cloudflare 1010 blocks.
 func applyCodexDirectImageHeaders(r *http.Request, auth *cliproxyauth.Auth, token string, stream bool, cfg *config.Config, clientHeaders ...http.Header) {
-	if codexAuthUsesAPIKey(auth) {
-		applyCodexHeaders(r, auth, token, stream, cfg, clientHeaders...)
-		return
-	}
 	var ginHeaders http.Header
 	if len(clientHeaders) > 0 && clientHeaders[0] != nil {
 		ginHeaders = clientHeaders[0].Clone()
@@ -339,6 +334,10 @@ func applyCodexDirectImageHeaders(r *http.Request, auth *cliproxyauth.Auth, toke
 		ginHeaders.Del("User-Agent")
 	}
 	applyCodexHeadersFromSources(r, auth, token, stream, cfg, ginHeaders)
+	// Direct image endpoints use the official Codex identity even for API-key
+	// passthrough; retain other client headers such as Version separately.
+	r.Header.Set("User-Agent", codexUserAgent)
+	r.Header.Set("Originator", codexOriginator)
 }
 
 func applyCodexHeadersFromSources(r *http.Request, auth *cliproxyauth.Auth, token string, stream bool, cfg *config.Config, ginHeaders http.Header) {
@@ -369,6 +368,9 @@ func applyCodexHeadersFromSources(r *http.Request, auth *cliproxyauth.Auth, toke
 		// OAuth cloaking fallback can make a newer client look like 0.146.0 and
 		// trigger strict_passthrough_client_version_unsupported upstream.
 		ensureHeaderWithPriority(r.Header, ginHeaders, "User-Agent", "", "")
+		if r.Header.Get("User-Agent") == "" {
+			r.Header.Set("User-Agent", codexUserAgent)
+		}
 	} else {
 		cfgUserAgent, _ := codexHeaderDefaults(cfg, auth)
 		ensureHeaderWithConfigPrecedence(r.Header, ginHeaders, "User-Agent", cfgUserAgent, codexUserAgent)

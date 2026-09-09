@@ -10,7 +10,7 @@ import (
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
-func TestCodexDirectImageHeadersRespectAuthIdentity(t *testing.T) {
+func TestCodexDirectImageHeadersKeepOfficialIdentityAndClientVersion(t *testing.T) {
 	for _, apiKey := range []bool{false, true} {
 		for _, explicitHeaders := range []bool{false, true} {
 			for _, stream := range []bool{false, true} {
@@ -44,7 +44,6 @@ func TestCodexDirectImageHeadersRespectAuthIdentity(t *testing.T) {
 					}
 					wantUA, wantOriginator := codexUserAgent, codexOriginator
 					if apiKey {
-						wantUA, wantOriginator = source["User-Agent"], source["Originator"]
 						if got := req.Header.Get("Version"); got != source["Version"] {
 							t.Fatalf("API-key Version = %q, want %q", got, source["Version"])
 						}
