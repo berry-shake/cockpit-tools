@@ -21,7 +21,7 @@ test('maps account overview access_token progress to shared launch fields', () =
   });
 });
 
-test('merges id_token and refresh progress into the shared launch protocol', () => {
+test('normalizes id_token and refresh progress into the shared launch protocol', () => {
   const idToken = mapCodexSwitchProgressToLaunch({
     accountId: 'account-1',
     step: 'idToken',

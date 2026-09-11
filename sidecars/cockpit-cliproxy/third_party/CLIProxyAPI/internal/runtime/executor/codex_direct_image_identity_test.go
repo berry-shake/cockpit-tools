@@ -36,7 +36,7 @@ func TestCodexDirectImageHeadersKeepOfficialIdentityAndClientVersion(t *testing.
 					if apiKey {
 						auth.Attributes = map[string]string{"api_key": "test-token"}
 					}
-					cfg := &config.Config{Codex: config.CodexConfig{APIServiceCompatibility: true}}
+					cfg := &config.Config{}
 					if explicitHeaders {
 						applyCodexDirectImageHeaders(req, auth, "test-token", stream, cfg, headers)
 					} else {
