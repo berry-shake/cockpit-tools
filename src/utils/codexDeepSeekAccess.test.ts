@@ -10,6 +10,7 @@ import {
   parseCodexBoundAccountId,
   resolveDeepSeekAccessMode,
   resolveDeepSeekBindAccountId,
+  resolveDeepSeekModelOptions,
   resolveDeepSeekStartupModel,
   shouldShowCodexApiKeyUsagePanel,
   shouldUseDeepSeekProviderGateway,
@@ -114,19 +115,60 @@ test("binds gateway prefix except official-direct Responses", () => {
   assert.equal(resolveDeepSeekBindAccountId(cdpAccount), "acc-1");
 });
 
-test("keeps last official startup model or falls back to Flash", () => {
+test("keeps last official startup model or falls back to the current Flash model", () => {
   assert.equal(
     resolveDeepSeekStartupModel({ api_startup_model: "deepseek-v4-pro" }),
     "deepseek-v4-pro",
   );
   assert.equal(
     resolveDeepSeekStartupModel({ api_startup_model: "gpt-5.5" }),
-    "deepseek-v4-flash",
+    "deepseek-flash",
   );
+  assert.equal(resolveDeepSeekStartupModel(null), "deepseek-flash");
   assert.equal(
     parseCodexBoundAccountId(`${CODEX_PROVIDER_GATEWAY_BIND_PREFIX}acc-2`),
     "acc-2",
   );
+});
+
+test("resolves startup models from the account catalog and preserves legacy models", () => {
+  assert.equal(
+    resolveDeepSeekStartupModel({
+      api_startup_model: " CUSTOM-REASONER ",
+      api_model_catalog: ["deepseek-flash", " custom-reasoner "],
+    }),
+    "custom-reasoner",
+  );
+  assert.equal(
+    resolveDeepSeekStartupModel({
+      api_startup_model: "removed-model",
+      api_model_catalog: ["", " Custom-First ", "deepseek-flash"],
+    }),
+    "custom-first",
+  );
+  assert.equal(
+    resolveDeepSeekStartupModel({
+      api_startup_model: "deepseek-v4-flash",
+      api_model_catalog: ["deepseek-v4-flash", "deepseek-v4-pro"],
+    }),
+    "deepseek-v4-flash",
+  );
+});
+
+test("builds model options from account order with official labels and custom IDs", () => {
+  assert.deepEqual(
+    resolveDeepSeekModelOptions({
+      api_model_catalog: [" custom-first ", "deepseek-flash", "custom-first", ""],
+    }),
+    [
+      { id: "custom-first", label: "custom-first" },
+      { id: "deepseek-flash", label: "DeepSeek-V4.1-Flash" },
+    ],
+  );
+  assert.deepEqual(resolveDeepSeekModelOptions(null), [
+    { id: "deepseek-flash", label: "DeepSeek-V4.1-Flash" },
+    { id: "deepseek-v4-pro", label: "DeepSeek-V4-Pro" },
+  ]);
 });
 
 test("DeepSeek Chat Completions accounts can query usage", () => {
