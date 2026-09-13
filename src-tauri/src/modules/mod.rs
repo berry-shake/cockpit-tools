@@ -5,6 +5,7 @@ pub mod antigravity_credential;
 pub mod antigravity_legacy_instance;
 pub mod antigravity_paths;
 pub mod antigravity_switch_history;
+pub mod apikey_fun_links;
 pub mod app_lifecycle;
 pub mod atomic_write;
 pub mod auto_local_import;
@@ -90,6 +91,7 @@ pub mod quota;
 pub mod quota_cache;
 pub mod remote_config;
 pub mod secure_account_storage;
+pub mod sponsor_route_sync;
 pub mod ssh_server;
 pub mod sync_settings;
 #[cfg(test)]
