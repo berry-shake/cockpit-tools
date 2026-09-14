@@ -122,6 +122,7 @@ test("keeps last official startup model or falls back to the current Flash model
   );
   assert.equal(
     resolveDeepSeekStartupModel({ api_startup_model: "gpt-5.5" }),
+    // 官方新名 `deepseek-flash` 与 DeepSeek 模型目录（DEEPSEEK_CODEX_MODEL_CATALOG）保持一致。
     "deepseek-flash",
   );
   assert.equal(resolveDeepSeekStartupModel(null), "deepseek-flash");

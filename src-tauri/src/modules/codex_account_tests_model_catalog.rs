@@ -371,6 +371,29 @@
     }
 
     #[test]
+    fn deepseek_overrides_upgrade_new_keys_in_existing_top_level_backup() {
+        let base_dir = make_temp_dir("codex-deepseek-new-backup-keys");
+        let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(
+            "web_search = \"live\"\npreferred_auth_method = \"custom-original\"\n",
+        ).unwrap();
+        super::apply_deepseek_config_overrides(&mut doc, &base_dir);
+        let mut legacy = super::read_deepseek_compaction_backup(&base_dir);
+        legacy.get_mut(super::DEEPSEEK_TOP_LEVEL_BACKUP_SECTION).unwrap()
+            .as_object_mut().unwrap().remove("preferred_auth_method");
+        super::write_deepseek_compaction_backup(&base_dir, &legacy).unwrap();
+        doc["preferred_auth_method"] = toml_edit::value("custom-original");
+
+        super::apply_deepseek_config_overrides(&mut doc, &base_dir);
+        assert_eq!(doc["preferred_auth_method"].as_str(), Some("custom-original"));
+        // 此键由 DeepSeek 运行态改写，不属于应移除的冲突键。
+        doc["preferred_auth_method"] = toml_edit::value("apikey");
+        assert!(super::restore_deepseek_config_overrides(&mut doc, &base_dir));
+        assert_eq!(doc["preferred_auth_method"].as_str(), Some("custom-original"));
+        assert_eq!(doc["web_search"].as_str(), Some("live"));
+        fs::remove_dir_all(&base_dir).unwrap();
+    }
+
+    #[test]
     fn deepseek_overrides_do_not_change_config_when_backup_cannot_be_created() {
         let base_dir = make_temp_dir("codex-deepseek-backup-write-failure");
         let blocked_dir = base_dir.join("not-a-directory");
@@ -431,6 +454,39 @@
         assert!(restored.contains("base_instructions = \"custom\""));
         assert!(restored.contains("service_tier = \"priority\""));
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn deepseek_switch_restores_preferred_auth_method_written_by_runtime() {
+        // 用户原本手工设置过：DeepSeek 运行态会改写成 apikey，切走必须还原原值。
+        let base_dir = make_temp_dir("codex-deepseek-preferred-auth-method-restore");
+        let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(
+            "model = \"gpt-5\"\npreferred_auth_method = \"chatgpt\"\n",
+        )
+        .expect("parse config");
+        super::apply_deepseek_config_overrides(&mut doc, &base_dir);
+        doc["preferred_auth_method"] = toml_edit::value("apikey");
+
+        assert!(super::restore_deepseek_config_overrides(&mut doc, &base_dir));
+        let restored = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+        assert!(restored.contains("preferred_auth_method = \"chatgpt\""));
+        assert!(!restored.contains("apikey"));
+        fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+
+        // 用户原本没有该键：切走时要把 DeepSeek 运行态写入的值清掉。
+        let empty_dir = make_temp_dir("codex-deepseek-preferred-auth-method-absent");
+        let mut doc = crate::modules::codex_config_format::read_codex_config_doc_from_str(
+            "model = \"gpt-5\"\n",
+        )
+        .expect("parse config");
+        super::apply_deepseek_config_overrides(&mut doc, &empty_dir);
+        doc["preferred_auth_method"] = toml_edit::value("apikey");
+
+        assert!(super::restore_deepseek_config_overrides(&mut doc, &empty_dir));
+        let restored = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
+        assert!(!restored.contains("preferred_auth_method"));
+        assert!(restored.contains("model = \"gpt-5\""));
+        fs::remove_dir_all(&empty_dir).expect("cleanup temp dir");
     }
 
     #[test]
@@ -1325,4 +1381,66 @@ multi_agent = true
         assert!(content.contains("[features]"));
 
         fs::remove_dir_all(&base_dir).expect("cleanup temp dir");
+    }
+
+    /// 第三方（API Key）账号必须使用自己的模型目录：既不能被「模型管理」的受管目录覆盖，
+    /// 也不能反过来改动用户的模型管理开关与模型清单。
+    #[test]
+    fn api_key_account_catalog_is_independent_from_model_management() {
+        let managed_dir = make_temp_dir("codex-api-key-managed-catalog-isolation");
+        let baseline_dir = make_temp_dir("codex-api-key-managed-catalog-baseline");
+
+        fs::write(managed_dir.join("config.toml"), "model = \"gpt-5.6-sol\"\n")
+            .expect("write base config");
+        let definitions = super::default_experimental_model_definitions(&managed_dir);
+        super::save_model_catalog_for_base_dir_preserving_context(
+            &managed_dir,
+            true,
+            definitions.clone(),
+            None,
+        )
+        .expect("enable managed catalog");
+        let policy_path = managed_dir.join(super::CODEX_EXPERIMENTAL_MODEL_POLICY_FILE);
+        assert!(policy_path.is_file(), "前置条件：模型管理已开启");
+
+        let mut account = CodexAccount::new_api_key(
+            "deepseek-api-key".to_string(),
+            "deepseek@example.com".to_string(),
+            "sk-deepseek".to_string(),
+            CodexApiProviderMode::Custom,
+            Some("https://api.deepseek.com".to_string()),
+            Some("deepseek".to_string()),
+            Some("DeepSeek".to_string()),
+            vec![
+                "deepseek-v4-flash".to_string(),
+                "deepseek-v4-pro".to_string(),
+            ],
+        );
+        account.api_wire_api = Some("responses".to_string());
+        account.api_sync_model_catalog_to_codex = true;
+        account.api_instance_access_mode = Some("gateway".to_string());
+        account.api_startup_model = Some("deepseek-v4-pro".to_string());
+
+        write_account_bundle_to_dir(&managed_dir, &account).expect("write managed dir bundle");
+        write_account_bundle_to_dir(&baseline_dir, &account).expect("write baseline bundle");
+
+        let catalog_file = super::CODEX_MANAGED_MODEL_CATALOG_FILE;
+        let managed_catalog =
+            fs::read_to_string(managed_dir.join(catalog_file)).expect("read managed catalog");
+        let baseline_catalog =
+            fs::read_to_string(baseline_dir.join(catalog_file)).expect("read baseline catalog");
+        assert_eq!(
+            managed_catalog, baseline_catalog,
+            "第三方账号的模型目录不能受模型管理影响"
+        );
+        assert!(policy_path.is_file(), "API Key 账号不能改动模型管理开关");
+        let definitions_after = super::read_experimental_model_definitions(&managed_dir);
+        assert_eq!(
+            definitions_after.len(),
+            definitions.len(),
+            "用户的模型清单必须保留"
+        );
+
+        fs::remove_dir_all(&managed_dir).expect("cleanup temp dir");
+        fs::remove_dir_all(&baseline_dir).expect("cleanup temp dir");
     }

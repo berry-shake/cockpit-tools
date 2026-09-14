@@ -3,7 +3,7 @@ use crate::models::codex::{
     CodexQuickConfig, CodexQuota, CodexTokens,
 };
 use crate::models::codex_local_access::{
-    CodexLocalAccessAccountModelRule, CodexLocalAccessAccountWindowQuery,
+    CodexInstanceGatewayView, CodexLocalAccessAccountModelRule, CodexLocalAccessAccountWindowQuery,
     CodexLocalAccessAccountWindowStats, CodexLocalAccessAppendAccountsResult,
     CodexLocalAccessChatMessage, CodexLocalAccessChatResult, CodexLocalAccessClientBaseUrlHost,
     CodexLocalAccessCustomRoutingRule, CodexLocalAccessGatewayMode,
