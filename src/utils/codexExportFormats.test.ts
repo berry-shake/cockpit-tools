@@ -120,7 +120,7 @@ test('official auth.json export uses personal_access_token for access-token-only
     transformCodexExportJson(JSON.stringify([account]), 'auth_json'),
   ) as Record<string, unknown>;
 
-  assert.equal(exported.auth_mode, 'personalAccessToken');
+  assert.equal(exported.auth_mode, undefined);
   assert.equal(exported.type, undefined);
   assert.equal(exported.personal_access_token, 'at-personal-token');
   assert.equal(exported.OPENAI_API_KEY, null);
@@ -336,7 +336,6 @@ test('Codex export keeps the official null API key and personal token shapes', (
     transformCodexExportJson(JSON.stringify([personalToken]), 'auth_json'),
   ) as Record<string, unknown>;
   assert.deepEqual(personalTokenExport, {
-    auth_mode: 'personalAccessToken',
     OPENAI_API_KEY: null,
     personal_access_token: 'at-personal-token',
   });

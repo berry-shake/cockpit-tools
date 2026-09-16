@@ -589,8 +589,8 @@ function toOfficialCodexAuthStorage(account: CodexAccount): JsonRecord {
   const idToken = account.tokens.id_token?.trim() || '';
   const refreshToken = account.tokens.refresh_token?.trim() || '';
   if (!idToken && !refreshToken) {
+    // Match the backend PAT shape without auth_mode for older Codex parsers.
     return {
-      auth_mode: 'personalAccessToken',
       OPENAI_API_KEY: null,
       personal_access_token: accessToken,
     };
