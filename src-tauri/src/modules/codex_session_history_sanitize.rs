@@ -9,10 +9,12 @@
 //! `thread_items` 的这类项清空 `content`，使旧会话在官方账号下也能继续使用。
 //!
 //! 成本控制：查询先按官方客户端写入的 `item_type` 过滤，避免对历史库里的大字段（文件改动、
-//! 长回复）做全表 `LIKE`；备份只记录被改动行的原始内容，不做整库快照——客户端历史库可能有
-//! 数 GB，整库备份会占用同量级磁盘与 IO。操作幂等、可重复执行。
+//! 长回复）做全表 `LIKE`；命中行按 rowid 分批扫描，备份发布后按库提交，备份也是边扫描边落盘，内存占用
+//! 不随命中行数增长；备份只记录被改动行的原始内容，不做整库快照——客户端历史库可能有数 GB，
+//! 整库备份会占用同量级磁盘与 IO。操作幂等、可重复执行。
 
 use std::fs;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -29,7 +31,9 @@ const SQLITE_DIR_NAME: &str = "sqlite";
 const BACKUP_DIR_NAME: &str = "cockpit-history-sanitize-backup";
 const MAX_BACKUP_FILES: usize = 3;
 const BUSY_TIMEOUT_SECONDS: u64 = 5;
-const ITEM_TABLES: [&str; 2] = ["thread_items", "thread_realtime_items"];
+/// 单批扫描的行数与字节上限：避免整库 reasoning 行同时驻留内存。
+const HISTORY_SANITIZE_BATCH_ROWS: usize = 200;
+const HISTORY_SANITIZE_BATCH_BYTES: usize = 4 * 1024 * 1024;
 /// 一次性迁移标识：标识变化时会对所有 profile 目录重新执行一次。
 const ONE_TIME_MIGRATION_ID: &str = "third_party_reasoning_content_v1";
 const ONE_TIME_MIGRATION_STATE_FILE: &str = "codex_history_reasoning_sanitize.json";
@@ -275,18 +279,20 @@ pub fn sanitize_official_incompatible_reasoning_history(
         return Ok(summary);
     }
 
-    let mut backups: Vec<HistoryBackupDatabase> = Vec::new();
-    let mut backup_path = None;
+    // 备份边扫描边落盘：任何时刻内存里只保留当前批次，不再随命中行数增长。
+    let mut backup = HistoryBackupWriter::create(data_dir);
     for database in databases {
-        let (updated_items, changed_threads) = sanitize_history_database(&database, |backup| {
-            backups.push(backup);
-            write_history_backup(data_dir, &backups, &mut backup_path)
-        })?;
+        let (updated_items, changed_threads) = sanitize_history_database(&database, &mut backup)?;
         summary.updated_item_count += updated_items;
         summary.changed_thread_count += changed_threads;
     }
-    if !backups.is_empty() {
-        prune_backup_files(&data_dir.join(BACKUP_DIR_NAME), "sanitize-");
+    if let Some((backup_file, rows, bytes)) = backup.finish()? {
+        modules::logger::log_info(&format!(
+            "[Codex History Sanitize] 已记录可回滚备份: file={}, rows={}, bytes={}",
+            backup_file.display(),
+            rows,
+            bytes
+        ));
     }
     Ok(summary)
 }
@@ -324,7 +330,7 @@ fn collect_history_databases(dir: &Path, paths: &mut Vec<PathBuf>) {
 
 fn sanitize_history_database(
     database: &Path,
-    backup_before_write: impl FnOnce(HistoryBackupDatabase) -> Result<(), String>,
+    backup: &mut HistoryBackupWriter,
 ) -> Result<(usize, usize), String> {
     let connection = Connection::open(database)
         .map_err(|error| format!("打开会话历史库失败 ({}): {}", database.display(), error))?;
@@ -337,177 +343,357 @@ fn sanitize_history_database(
                 error
             )
         })?;
-
-    // 在同一读写事务内收集和更新，不能覆盖后台客户端在扫描后写入的新内容。
-    let transaction = connection
-        .unchecked_transaction()
-        .map_err(|error| format!("开启会话历史库事务失败 ({}): {}", database.display(), error))?;
-    let pending = collect_sanitize_updates(&transaction, database)?;
-    if pending.is_empty() {
+    if !table_exists(&connection, "thread_items")? {
+        // 其它表结构与 thread_items 不同（无 thread_id 语义），当前只处理主历史表。
         return Ok((0, 0));
     }
 
-    let backup = HistoryBackupDatabase {
-        path: database.to_string_lossy().to_string(),
-        rows: pending.iter().map(HistoryBackupRow::from).collect(),
+    // 官方客户端把条目类型写在 item_type 列；先按它过滤可以跳过文件改动、长回复等大字段，
+    // 避免对整张表做 LIKE。列缺失或为空时仍回退到原来的全文匹配，保证不漏项。
+    let filter = if table_has_column(&connection, "thread_items", "item_type")? {
+        "item_type = 'reasoning' OR (item_type = '' AND item_json LIKE '%\"reasoning\"%')"
+    } else {
+        "item_json LIKE '%\"reasoning\"%'"
     };
+    // 按 rowid 分页：每页只驻留有限行，命中行数不再决定内存占用。
+    let select_sql = format!(
+        "SELECT rowid, thread_id, turn_id, item_id, item_json FROM thread_items \
+         WHERE rowid > ?1 AND ({filter}) ORDER BY rowid LIMIT ?2"
+    );
 
-    // 原始行必须先持久化；失败时事务回滚，已成功的其它数据库备份仍保留。
-    backup_before_write(backup)?;
-    for update in &pending {
-        transaction
-            .execute(
-                "UPDATE thread_items SET item_json = ?1 WHERE rowid = ?2",
-                rusqlite::params![update.item_json, update.rowid],
-            )
-            .map_err(|error| {
-                format!(
-                    "写入会话历史项失败 ({} rowid={}): {}",
-                    database.display(),
-                    update.rowid,
-                    error
-                )
+    // 分批扫描限制内存；同一库仍使用同一个读写事务，避免扫描后覆盖客户端的新写入。
+    // 整库备份发布成功后才提交，因此失败时该库回滚，先前数据库的备份仍可恢复。
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(|error| format!("开启会话历史库事务失败 ({}): {}", database.display(), error))?;
+    let mut updated_items = 0usize;
+    let mut changed_threads = std::collections::HashSet::new();
+    let mut last_rowid = i64::MIN;
+
+    loop {
+        // 读满一批后立即释放 statement，避免与随后的 UPDATE 争用同一连接。
+        let batch = {
+            let mut statement = transaction.prepare(&select_sql).map_err(|error| {
+                format!("查询会话历史项失败 ({}): {}", database.display(), error)
             })?;
+            let rows = statement
+                .query_map(
+                    rusqlite::params![last_rowid, HISTORY_SANITIZE_BATCH_ROWS as i64],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                        ))
+                    },
+                )
+                .map_err(|error| {
+                    format!("读取会话历史项失败 ({}): {}", database.display(), error)
+                })?;
+            let mut batch = Vec::new();
+            let mut batch_bytes = 0usize;
+            for row in rows {
+                let row = row.map_err(|error| {
+                    format!("解析会话历史项失败 ({}): {}", database.display(), error)
+                })?;
+                batch_bytes += row.4.len();
+                batch.push(row);
+                // 行数与字节数谁先到上限就换批；单行很大时也不会撑大一批。
+                if batch.len() >= HISTORY_SANITIZE_BATCH_ROWS
+                    || batch_bytes >= HISTORY_SANITIZE_BATCH_BYTES
+                {
+                    break;
+                }
+            }
+            batch
+        };
+        let Some((batch_last_rowid, _, _, _, _)) = batch.last() else {
+            break;
+        };
+        last_rowid = *batch_last_rowid;
+
+        // 备份逐行落盘，内存里只保留这一批的改写结果。
+        let mut updates: Vec<(i64, String)> = Vec::new();
+        for (rowid, thread_id, turn_id, item_id, original_item_json) in batch {
+            let Some(sanitized) = sanitize_history_item_json(&original_item_json) else {
+                continue;
+            };
+            backup.write_row(
+                database,
+                rowid,
+                &thread_id,
+                &turn_id,
+                &item_id,
+                &original_item_json,
+            )?;
+            changed_threads.insert(thread_id);
+            updates.push((rowid, sanitized));
+        }
+        if updates.is_empty() {
+            continue;
+        }
+
+        for (rowid, item_json) in &updates {
+            transaction
+                .execute(
+                    "UPDATE thread_items SET item_json = ?1 WHERE rowid = ?2",
+                    rusqlite::params![item_json, rowid],
+                )
+                .map_err(|error| {
+                    format!(
+                        "写入会话历史项失败 ({} rowid={}): {}",
+                        database.display(),
+                        rowid,
+                        error
+                    )
+                })?;
+        }
+        updated_items += updates.len();
+    }
+
+    // 收尾：关闭当前库在备份文件里的 rows 数组，下一个库会另起一项。
+    backup.close_database()?;
+    if updated_items > 0 {
+        backup.checkpoint()?;
     }
     transaction
         .commit()
         .map_err(|error| format!("提交会话历史库事务失败 ({}): {}", database.display(), error))?;
 
-    let changed_threads = pending
-        .iter()
-        .map(|update| update.thread_id.as_str())
-        .collect::<std::collections::HashSet<_>>()
-        .len();
-    modules::logger::log_info(&format!(
-        "[Codex History Sanitize] 已清理第三方推理历史: database={}, updated_items={}, changed_threads={}",
-        database.display(),
-        pending.len(),
-        changed_threads
-    ));
-    Ok((pending.len(), changed_threads))
-}
-
-struct HistoryItemUpdate {
-    rowid: i64,
-    thread_id: String,
-    turn_id: String,
-    item_id: String,
-    /// 改写前的原始内容，用于回滚。
-    original_item_json: String,
-    /// 改写后的内容，用于写库。
-    item_json: String,
+    if updated_items > 0 {
+        modules::logger::log_info(&format!(
+            "[Codex History Sanitize] 已清理第三方推理历史: database={}, updated_items={}, changed_threads={}",
+            database.display(),
+            updated_items,
+            changed_threads.len()
+        ));
+    }
+    Ok((updated_items, changed_threads.len()))
 }
 
 /// 被改动行的原始内容备份（用于手动回滚）。只记录被改动的 reasoning 行，
 /// 避免对可能数 GB 的历史库做整库快照。
-#[derive(Debug, Serialize)]
-struct HistoryBackupDatabase {
-    path: String,
-    rows: Vec<HistoryBackupRow>,
+///
+/// 备份文件边扫描边追加写入，任何时刻内存里只保留当前一行；文件结构仍与旧实现一致：
+/// `{ "migration": ..., "created_at_ms": ..., "databases": [ { "path": ..., "rows": [ ... ] } ] }`。
+struct HistoryBackupWriter {
+    backup_root: PathBuf,
+    backup_file: PathBuf,
+    temp_path: PathBuf,
+    timestamp_ms: u128,
+    writer: Option<BufWriter<fs::File>>,
+    database_open: bool,
+    databases_written: usize,
+    rows_written: usize,
+    bytes_written: u64,
+    finished: bool,
 }
 
 #[derive(Debug, Serialize)]
-struct HistoryBackupRow {
+struct HistoryBackupRow<'a> {
     rowid: i64,
-    thread_id: String,
-    turn_id: String,
-    item_id: String,
-    item_json: String,
+    thread_id: &'a str,
+    turn_id: &'a str,
+    item_id: &'a str,
+    item_json: &'a str,
 }
 
-impl From<&HistoryItemUpdate> for HistoryBackupRow {
-    fn from(update: &HistoryItemUpdate) -> Self {
+impl HistoryBackupWriter {
+    fn create(data_dir: &Path) -> Self {
+        let backup_root = data_dir.join(BACKUP_DIR_NAME);
+        let timestamp_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or_default();
+        let backup_file = backup_root.join(format!(
+            "sanitize-{timestamp_ms}-{}.json",
+            uuid::Uuid::new_v4()
+        ));
+        let temp_path = backup_file.with_extension("json.tmp");
         Self {
-            rowid: update.rowid,
-            thread_id: update.thread_id.clone(),
-            turn_id: update.turn_id.clone(),
-            item_id: update.item_id.clone(),
-            item_json: update.original_item_json.clone(),
+            backup_root,
+            backup_file,
+            temp_path,
+            timestamp_ms,
+            writer: None,
+            database_open: false,
+            databases_written: 0,
+            rows_written: 0,
+            bytes_written: 0,
+            finished: false,
         }
     }
-}
 
-#[derive(Debug, Serialize)]
-struct HistoryBackupFile<'a> {
-    migration: String,
-    created_at_ms: u128,
-    databases: &'a [HistoryBackupDatabase],
-}
+    /// 首次真正写入时才创建文件：没有命中行时不会留下空备份。
+    fn writer(&mut self) -> Result<&mut BufWriter<fs::File>, String> {
+        if self.writer.is_none() {
+            fs::create_dir_all(&self.backup_root).map_err(|error| {
+                format!(
+                    "创建会话历史备份目录失败 ({}): {}",
+                    self.backup_root.display(),
+                    error
+                )
+            })?;
+            let file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&self.temp_path)
+                .map_err(|error| {
+                    format!(
+                        "创建会话历史备份文件失败 ({}): {}",
+                        self.temp_path.display(),
+                        error
+                    )
+                })?;
+            let mut writer = BufWriter::new(file);
+            let header = format!(
+                "{{\"migration\":{},\"created_at_ms\":{},\"databases\":[",
+                serde_json::to_string(ONE_TIME_MIGRATION_ID)
+                    .map_err(|error| format!("序列化会话历史备份标识失败: {}", error))?,
+                self.timestamp_ms
+            );
+            writer
+                .write_all(header.as_bytes())
+                .map_err(|error| format!("写入会话历史备份失败: {}", error))?;
+            self.writer = Some(writer);
+        }
+        self.writer
+            .as_mut()
+            .ok_or_else(|| "会话历史备份写入器未就绪".to_string())
+    }
 
-/// 收集需要清理的行；已经是 `content: []` 的行会被跳过，保证幂等。
-fn collect_sanitize_updates(
-    connection: &Connection,
-    database: &Path,
-) -> Result<Vec<HistoryItemUpdate>, String> {
-    let mut updates = Vec::new();
-    for table in ITEM_TABLES {
-        if !table_exists(connection, table)? {
-            continue;
-        }
-        if table != "thread_items" {
-            // 其它表结构与 thread_items 不同（无 thread_id 语义），当前只处理主历史表。
-            continue;
-        }
-        // 官方客户端把条目类型写在 item_type 列；先按它过滤可以跳过文件改动、长回复等大字段，
-        // 避免对整张表做 LIKE。列缺失或为空时仍回退到原来的全文匹配，保证不漏项。
-        let filter = if table_has_column(connection, table, "item_type")? {
-            "item_type = 'reasoning' OR (item_type = '' AND item_json LIKE '%\"reasoning\"%')"
+    fn write_row(
+        &mut self,
+        database: &Path,
+        rowid: i64,
+        thread_id: &str,
+        turn_id: &str,
+        item_id: &str,
+        original_item_json: &str,
+    ) -> Result<(), String> {
+        // 只序列化当前这一行，不 clone 原始内容。
+        let row_json = serde_json::to_string(&HistoryBackupRow {
+            rowid,
+            thread_id,
+            turn_id,
+            item_id,
+            item_json: original_item_json,
+        })
+        .map_err(|error| format!("序列化会话历史备份失败: {}", error))?;
+        let payload = if self.database_open {
+            format!(",{}", row_json)
         } else {
-            "item_json LIKE '%\"reasoning\"%'"
+            let separator = if self.databases_written > 0 { "," } else { "" };
+            let path_json = serde_json::to_string(&database.to_string_lossy().to_string())
+                .map_err(|error| format!("序列化会话历史备份路径失败: {}", error))?;
+            format!(
+                "{}{{\"path\":{},\"rows\":[{}",
+                separator, path_json, row_json
+            )
         };
-        let mut statement = connection
-            .prepare(&format!(
-                "SELECT rowid, thread_id, turn_id, item_id, item_json FROM {table} WHERE {filter}"
-            ))
-            .map_err(|error| {
-                format!(
-                    "查询会话历史项失败 ({} / {}): {}",
-                    database.display(),
-                    table,
-                    error
-                )
-            })?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, String>(3)?,
-                    row.get::<_, String>(4)?,
-                ))
-            })
-            .map_err(|error| {
-                format!(
-                    "读取会话历史项失败 ({} / {}): {}",
-                    database.display(),
-                    table,
-                    error
-                )
-            })?;
-        for row in rows {
-            let (rowid, thread_id, turn_id, item_id, item_json) = row.map_err(|error| {
-                format!(
-                    "解析会话历史项失败 ({} / {}): {}",
-                    database.display(),
-                    table,
-                    error
-                )
-            })?;
-            let Some(sanitized) = sanitize_history_item_json(&item_json) else {
-                continue;
-            };
-            updates.push(HistoryItemUpdate {
-                rowid,
-                thread_id,
-                turn_id,
-                item_id,
-                original_item_json: item_json,
-                item_json: sanitized,
-            });
+        let payload_bytes = payload.len() as u64;
+        {
+            let writer = self.writer()?;
+            writer
+                .write_all(payload.as_bytes())
+                .map_err(|error| format!("写入会话历史备份失败: {}", error))?;
+        }
+        self.database_open = true;
+        self.rows_written += 1;
+        self.bytes_written += payload_bytes;
+        Ok(())
+    }
+
+    fn close_database(&mut self) -> Result<(), String> {
+        if !self.database_open {
+            return Ok(());
+        }
+        {
+            let writer = self.writer()?;
+            writer
+                .write_all(b"]}")
+                .map_err(|error| format!("写入会话历史备份失败: {}", error))?;
+        }
+        self.database_open = false;
+        self.databases_written += 1;
+        Ok(())
+    }
+
+    /// 发布累积的完整 JSON 备份，再允许当前数据库提交。
+    /// 使用文件流复制，不把已有备份读回内存；每库只发布一次，避免每批复制整份备份。
+    fn checkpoint(&mut self) -> Result<(), String> {
+        if self.writer.is_none() {
+            return Ok(());
+        }
+        self.close_database()?;
+        self.writer
+            .as_mut()
+            .unwrap()
+            .flush()
+            .map_err(|error| format!("刷新会话历史备份失败: {}", error))?;
+        let checkpoint_path = self.backup_file.with_extension("json.checkpoint");
+        let result = (|| -> Result<(), String> {
+            let mut source = fs::File::open(&self.temp_path)
+                .map_err(|error| format!("读取会话历史备份流失败: {}", error))?;
+            let mut destination = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&checkpoint_path)
+                .map_err(|error| format!("创建会话历史备份检查点失败: {}", error))?;
+            std::io::copy(&mut source, &mut destination)
+                .map_err(|error| format!("复制会话历史备份检查点失败: {}", error))?;
+            destination
+                .write_all(b"]}\n")
+                .map_err(|error| format!("补全会话历史备份检查点失败: {}", error))?;
+            destination
+                .sync_all()
+                .map_err(|error| format!("同步会话历史备份检查点失败: {}", error))?;
+            drop(destination);
+            fs::rename(&checkpoint_path, &self.backup_file)
+                .map_err(|error| format!("发布会话历史备份检查点失败: {}", error))?;
+            // Windows 不能按普通文件打开目录；文件本身在所有平台都已同步。
+            #[cfg(unix)]
+            fs::File::open(&self.backup_root)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|error| format!("同步会话历史备份目录失败: {}", error))?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&checkpoint_path);
+        }
+        result
+    }
+
+    /// 所有数据库成功后收尾；只在此时清理旧的受管备份。
+    fn finish(mut self) -> Result<Option<(PathBuf, usize, u64)>, String> {
+        if self.writer.is_none() {
+            self.finished = true;
+            return Ok(None);
+        }
+        self.checkpoint()?;
+        self.writer = None;
+        fs::remove_file(&self.temp_path)
+            .map_err(|error| format!("移除会话历史备份临时文件失败: {}", error))?;
+        self.finished = true;
+        prune_backup_files(&self.backup_root, "sanitize-");
+        Ok(Some((
+            self.backup_file.clone(),
+            self.rows_written,
+            self.bytes_written,
+        )))
+    }
+}
+
+impl Drop for HistoryBackupWriter {
+    fn drop(&mut self) {
+        if !self.finished {
+            // 只清理未提交的工作流；已发布的完整检查点必须保留以便回滚。
+            self.writer = None;
+            let _ = fs::remove_file(&self.temp_path);
         }
     }
-    Ok(updates)
 }
 
 /// 把第三方 reasoning 项的 `content` 清空；官方形状（空数组）原样返回 `None`。
@@ -554,45 +740,6 @@ fn table_has_column(connection: &Connection, table: &str, column: &str) -> Resul
         }
     }
     Ok(false)
-}
-
-fn write_history_backup(
-    data_dir: &Path,
-    databases: &[HistoryBackupDatabase],
-    backup_path: &mut Option<PathBuf>,
-) -> Result<(), String> {
-    let backup_root = data_dir.join(BACKUP_DIR_NAME);
-    fs::create_dir_all(&backup_root).map_err(|error| {
-        format!(
-            "创建会话历史备份目录失败 ({}): {}",
-            backup_root.display(),
-            error
-        )
-    })?;
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default();
-    let backup_file = backup_path.get_or_insert_with(|| {
-        backup_root.join(format!(
-            "sanitize-{timestamp}-{}.json",
-            uuid::Uuid::new_v4()
-        ))
-    });
-    let payload = HistoryBackupFile {
-        migration: ONE_TIME_MIGRATION_ID.to_string(),
-        created_at_ms: timestamp,
-        databases,
-    };
-    let serialized = serde_json::to_vec(&payload)
-        .map_err(|error| format!("序列化会话历史备份失败: {}", error))?;
-    super::atomic_write::write_bytes_atomic(backup_file, &serialized)?;
-    modules::logger::log_info(&format!(
-        "[Codex History Sanitize] 已记录可回滚备份: file={}, bytes={}",
-        backup_file.display(),
-        serialized.len()
-    ));
-    Ok(())
 }
 
 pub(super) fn prune_rollout_signature_backups(data_dir: &Path) {
@@ -766,6 +913,59 @@ mod tests {
             Some(r#"{"type":"reasoning","id":"r1","summary":[],"content":["thinking text"]}"#),
             "备份应保留被改动行的原始内容以便回滚"
         );
+    }
+
+    #[test]
+    fn sanitizes_rows_spanning_multiple_batches() {
+        let dir = make_temp_dir("codex-history-sanitize-batches");
+        let db = create_history_db(&dir);
+        let connection = Connection::open(&db).expect("open db");
+        let total = HISTORY_SANITIZE_BATCH_ROWS + 25;
+        for index in 0..total {
+            let item_json = format!(
+                r#"{{"type":"reasoning","id":"r{index}","summary":[],"content":["thinking {index}"]}}"#
+            );
+            insert_item(
+                &connection,
+                "thread-1",
+                &format!("item-{index}"),
+                &item_json,
+            );
+        }
+        drop(connection);
+
+        let summary = sanitize_official_incompatible_reasoning_history(&dir).expect("sanitize");
+        assert_eq!(summary.updated_item_count, total, "跨批次分页不应漏行");
+        assert_eq!(summary.changed_thread_count, 1);
+
+        let connection = Connection::open(&db).expect("reopen db");
+        let lingering: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM thread_items WHERE item_json LIKE '%thinking %'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count lingering reasoning content");
+        assert_eq!(lingering, 0);
+        let sanitized: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM thread_items WHERE item_json LIKE '%\"content\":[]%'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count sanitized rows");
+        assert_eq!(sanitized, total as i64);
+        drop(connection);
+
+        let backups = backup_files(&dir);
+        assert_eq!(backups.len(), 1);
+        let payload: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&backups[0]).expect("read backup"))
+                .expect("parse backup");
+        let rows = payload["databases"][0]["rows"]
+            .as_array()
+            .expect("backup rows");
+        assert_eq!(rows.len(), total, "备份应完整记录所有被改动行");
     }
 
     #[test]
@@ -1007,12 +1207,25 @@ mod tests {
         fs::write(&unrelated, "{}").expect("unrelated backup");
         let old_snapshot = parent.join("sanitize-old-snapshot");
         fs::create_dir_all(&old_snapshot).unwrap();
-        let mut first = None;
-        let mut second = None;
-        write_history_backup(&dir, &[], &mut first).unwrap();
-        write_history_backup(&dir, &[], &mut second).unwrap();
-        let first = first.unwrap();
-        let second = second.unwrap();
+        let mut first_writer = HistoryBackupWriter::create(&dir);
+        let mut second_writer = HistoryBackupWriter::create(&dir);
+        for writer in [&mut first_writer, &mut second_writer] {
+            writer
+                .write_row(
+                    &dir.join("thread_history_1.sqlite"),
+                    1,
+                    "thread",
+                    "turn",
+                    "item",
+                    "{}",
+                )
+                .unwrap();
+            writer.checkpoint().unwrap();
+        }
+        let first = first_writer.backup_file.clone();
+        let second = second_writer.backup_file.clone();
+        drop(first_writer);
+        drop(second_writer);
         assert_ne!(first, second);
         for index in 0..MAX_BACKUP_FILES {
             assert!(parent.join(format!("sanitize-000{index}.json")).is_file());
@@ -1030,6 +1243,135 @@ mod tests {
             fs::read_dir(parent).expect("backup parent").count(),
             MAX_BACKUP_FILES + 2
         );
+    }
+
+    #[test]
+    fn checkpoint_failure_rolls_back_all_scanned_batches() {
+        let dir = make_temp_dir("codex-history-checkpoint-failure");
+        let db = create_history_db(&dir);
+        let connection = Connection::open(&db).unwrap();
+        let original = r#"{"type":"reasoning","content":["keep original"]}"#;
+        for index in 0..HISTORY_SANITIZE_BATCH_ROWS + 1 {
+            insert_item(&connection, "thread", &format!("item-{index}"), original);
+        }
+        let mut backup = HistoryBackupWriter::create(&dir);
+        fs::create_dir_all(&backup.backup_file).unwrap();
+        assert!(sanitize_history_database(&db, &mut backup).is_err());
+        let unchanged: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM thread_items WHERE item_json = ?1",
+                [original],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(unchanged as usize, HISTORY_SANITIZE_BATCH_ROWS + 1);
+    }
+
+    #[test]
+    fn later_batch_failure_rolls_back_earlier_batch_updates() {
+        let dir = make_temp_dir("codex-history-later-batch-failure");
+        let db = create_history_db(&dir);
+        let connection = Connection::open(&db).unwrap();
+        let original = r#"{"type":"reasoning","content":["keep original"]}"#;
+        for index in 0..HISTORY_SANITIZE_BATCH_ROWS + 1 {
+            insert_item(&connection, "thread", &format!("item-{index}"), original);
+        }
+        connection
+            .execute_batch(&format!(
+                "CREATE TRIGGER fail_late BEFORE UPDATE ON thread_items WHEN OLD.rowid > {} \
+             BEGIN SELECT RAISE(ABORT, 'simulated late update failure'); END;",
+                HISTORY_SANITIZE_BATCH_ROWS,
+            ))
+            .unwrap();
+        assert!(sanitize_official_incompatible_reasoning_history(&dir).is_err());
+        let unchanged: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM thread_items WHERE item_json = ?1",
+                [original],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(unchanged as usize, HISTORY_SANITIZE_BATCH_ROWS + 1);
+    }
+
+    #[test]
+    fn later_database_failure_keeps_published_backup_and_old_backups() {
+        let dir = make_temp_dir("codex-history-later-database-failure");
+        let db = create_history_db(&dir);
+        let connection = Connection::open(&db).unwrap();
+        let original = r#"{"type":"reasoning","content":["keep original"]}"#;
+        insert_item(&connection, "thread", "item", original);
+        let parent = dir.join(BACKUP_DIR_NAME);
+        fs::create_dir_all(&parent).unwrap();
+        for index in 0..MAX_BACKUP_FILES {
+            fs::write(parent.join(format!("sanitize-000{index}.json")), "{}").unwrap();
+        }
+        fs::write(
+            dir.join("thread_history_z.sqlite"),
+            "invalid SQLite database",
+        )
+        .unwrap();
+        assert!(sanitize_official_incompatible_reasoning_history(&dir).is_err());
+        let saved: String = connection
+            .query_row("SELECT item_json FROM thread_items", [], |row| row.get(0))
+            .unwrap();
+        assert!(serde_json::from_str::<Value>(&saved).unwrap()["content"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        let backups = backup_files(&dir);
+        assert_eq!(
+            backups.len(),
+            MAX_BACKUP_FILES + 1,
+            "failure must not prune old backups"
+        );
+        let published: Vec<Value> = backups
+            .iter()
+            .map(|file| serde_json::from_slice(&fs::read(file).unwrap()).unwrap())
+            .filter(|value: &Value| value.get("databases").is_some())
+            .collect();
+        assert_eq!(published.len(), 1);
+        assert_eq!(
+            published[0]["databases"][0]["path"],
+            db.to_string_lossy().as_ref()
+        );
+        assert_eq!(
+            published[0]["databases"][0]["rows"][0]["item_json"],
+            original
+        );
+    }
+
+    #[test]
+    fn dropping_unpublished_rows_preserves_the_complete_checkpoint() {
+        let dir = make_temp_dir("codex-history-checkpoint-drop");
+        let mut backup = HistoryBackupWriter::create(&dir);
+        backup
+            .write_row(
+                &dir.join("thread_history_1.sqlite"),
+                1,
+                "first",
+                "turn",
+                "item",
+                "original",
+            )
+            .unwrap();
+        backup.checkpoint().unwrap();
+        let published = backup.backup_file.clone();
+        let original_checkpoint = fs::read(&published).unwrap();
+        backup
+            .write_row(
+                &dir.join("thread_history_2.sqlite"),
+                2,
+                "second",
+                "turn",
+                "item",
+                "uncommitted",
+            )
+            .unwrap();
+        drop(backup);
+        assert_eq!(fs::read(&published).unwrap(), original_checkpoint);
+        let parsed: Value = serde_json::from_slice(&original_checkpoint).unwrap();
+        assert_eq!(parsed["databases"].as_array().unwrap().len(), 1);
     }
 
     #[test]
