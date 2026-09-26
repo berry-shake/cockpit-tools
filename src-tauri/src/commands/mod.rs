@@ -16,6 +16,8 @@ mod codex_instance_gateway_watchdog_state;
 mod codex_instance_model_catalog;
 mod codex_instance_routing;
 pub mod codex_pelican;
+pub mod codex_proxy_engine;
+pub mod codex_unified_proxy;
 pub mod cursor;
 pub mod cursor_instance;
 pub mod data_transfer;
@@ -47,3 +49,5 @@ pub mod workbuddy_instance;
 pub mod zcode;
 pub mod zcode_instance;
 pub mod zed;
+
+pub mod codex_proxy_catalog;

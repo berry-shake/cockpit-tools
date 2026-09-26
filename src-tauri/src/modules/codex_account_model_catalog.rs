@@ -824,12 +824,14 @@ pub(crate) fn normalize_experimental_model_definitions(
         {
             return Err("EXPERIMENTAL_MODEL_CATALOG_CONTEXT_WINDOW_INVALID".to_string());
         }
-        if model.auto_compact_token_limit.is_some_and(|value| value <= 0)
-            || (model.context_window.is_some() && model.auto_compact_token_limit.is_none())
-        {
+        if model.auto_compact_token_limit.is_some_and(|value| value <= 0) {
             return Err("EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_INVALID".to_string());
         }
-        if let (Some(window), Some(compact)) = (model.context_window, model.auto_compact_token_limit) {
+        // 统一口径：给了上下文窗口就必须带压缩阈值；调用方只给窗口时按 90% 派生，
+        // 但显式给出的阈值必须严格小于窗口。
+        if let (Some(window), Some(compact)) =
+            (model.context_window, model.auto_compact_token_limit)
+        {
             if compact >= window {
                 return Err("EXPERIMENTAL_MODEL_CATALOG_AUTO_COMPACT_RANGE_INVALID".to_string());
             }
@@ -839,7 +841,13 @@ pub(crate) fn normalize_experimental_model_definitions(
             display_name: display_name.to_string(),
             reasoning_efforts: normalize_reasoning_efforts(model.reasoning_efforts.clone())?,
             context_window: model.context_window,
-            auto_compact_token_limit: model.auto_compact_token_limit,
+            auto_compact_token_limit: model.context_window.map(|window| {
+                model
+                    .auto_compact_token_limit
+                    .unwrap_or_else(|| {
+                        crate::modules::codex_protocol::derived_auto_compact_token_limit(window)
+                    })
+            }),
         });
     }
     Ok(normalized)
@@ -1029,13 +1037,13 @@ pub(crate) fn decorate_managed_model_catalog_for_profile(
     if !experimental_model_policy_enabled(base_dir) {
         return Ok(catalog_json.to_string());
     }
-    let models = read_experimental_model_definitions(base_dir);
-    if !models.iter().any(|model| model.context_window.is_some()) {
-        return Ok(catalog_json.to_string());
-    }
     let mut catalog = serde_json::from_str::<serde_json::Value>(catalog_json)
         .map_err(|error| format!("解析 Codex 受管模型目录失败: {}", error))?;
+    let models = read_experimental_model_definitions(base_dir);
     apply_model_context_config_to_catalog(&mut catalog, &models);
+    // 统一口径收口：即使没有任何逐模型覆盖，也要保证受管目录里每个声明了上下文窗口的
+    // 模型都带自动压缩阈值（缺失时按 90% 派生）。
+    crate::modules::codex_protocol::ensure_client_model_auto_compact_limits(&mut catalog);
     serde_json::to_string_pretty(&catalog)
         .map_err(|error| format!("序列化 Codex 受管模型目录失败: {}", error))
 }
@@ -1188,12 +1196,25 @@ fn read_catalog_model_definitions(
             let official = crate::modules::codex_protocol::build_codex_client_models_response(
                 &[model_id.to_string()],
             );
-            let (context_window, auto_compact_token_limit) = match (context, compact) {
-                (Some(window), Some(limit)) if window > limit && limit > 0
-                    && (official["models"][0]["context_window"].as_i64() != Some(window)
-                        || official["models"][0]["auto_compact_token_limit"].as_i64() != Some(limit)) =>
-                    (Some(window), Some(limit)),
-                _ => (None, None),
+            // 统一口径：外部目录只要声明了有效上下文窗口就采纳，压缩阈值缺失时按 90%
+            // 派生，不再因为「没有阈值」把整对覆盖丢掉。
+            let (context_window, auto_compact_token_limit) = match context.filter(|value| *value > 0)
+            {
+                Some(window) => {
+                    let limit = compact
+                        .filter(|value| *value > 0 && *value < window)
+                        .unwrap_or_else(|| {
+                            crate::modules::codex_protocol::derived_auto_compact_token_limit(window)
+                        });
+                    if official["models"][0]["context_window"].as_i64() == Some(window)
+                        && official["models"][0]["auto_compact_token_limit"].as_i64() == Some(limit)
+                    {
+                        (None, None)
+                    } else {
+                        (Some(window), Some(limit))
+                    }
+                }
+                None => (None, None),
             };
             Some(CodexExperimentalModelDefinition {
                 model_id: model_id.to_string(),
@@ -1713,17 +1734,21 @@ fn write_quick_config_to_config_toml_with_default_mode(
             if context_window <= 0 {
                 return Err("上下文窗口必须大于 0".to_string());
             }
-            doc[CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY] = value(context_window);
-        } else {
-            let _ = doc.remove(CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY);
-        }
-
-        if let Some(compact_limit) = auto_compact_token_limit {
-            if compact_limit <= 0 {
-                return Err("自动压缩阈值必须大于 0".to_string());
+            // 统一口径：写了上下文窗口就必须同时写自动压缩阈值；调用方没给阈值时按
+            // 90% 派生，避免 config.toml 里出现「有窗口无阈值」的半边配置。
+            let compact_limit = auto_compact_token_limit
+                .filter(|value| *value > 0)
+                .unwrap_or_else(|| {
+                    crate::modules::codex_protocol::derived_auto_compact_token_limit(context_window)
+                });
+            if compact_limit >= context_window {
+                return Err("自动压缩阈值必须小于上下文窗口".to_string());
             }
+            doc[CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY] = value(context_window);
             doc[CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY] = value(compact_limit);
         } else {
+            // 跟随官方：两个键必须一起移除，不允许留下孤立的压缩阈值。
+            let _ = doc.remove(CODEX_CONFIG_MODEL_CONTEXT_WINDOW_KEY);
             let _ = doc.remove(CODEX_CONFIG_MODEL_AUTO_COMPACT_TOKEN_LIMIT_KEY);
         }
     }
@@ -2008,6 +2033,205 @@ fn apply_forced_login_method_to_config_toml(
     Ok(true)
 }
 
+/// profile 级「工具写入的 provider 引用」快照文件名。
+///
+/// 切到第三方/自建供应商账号时，工具会把 `model_provider` 与 `[model_providers.<id>]` 写进官方
+/// profile 的 config.toml（含 DeepSeek、自建中转等）。切回官方内置 provider 时，官方账号投影只
+/// 清理受管 provider（`openai` / `codex_local_access` / `cockpit_api` / `openai_api_key`），其余 id
+/// 会被当作用户自定义 provider 保留——于是「账号已切回官方，客户端仍按上一个供应商发请求」
+/// （例如切回普通账号后一直显示 DeepSeek）。
+///
+/// 因此写入前按 profile 记录原值，切回官方内置 provider 时按同一份记录还原；这是 profile 级
+/// 状态，多开实例天然隔离，也不需要按供应商 id 写特判。
+const CODEX_PROVIDER_OVERRIDE_FILE: &str = "cockpit-provider-override.json";
+
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexProviderOverrideSnapshot {
+    provider_id: String,
+    /// 写入前 `model` 的原值；`None` 表示原本没有这个键。
+    #[serde(default)]
+    model: Option<String>,
+    /// 写入前 `model_provider` 的原值；`None` 表示原本没有这个键。
+    #[serde(default)]
+    model_provider: Option<String>,
+    /// 写入前 `[model_providers.<id>]` 的 TOML 片段；`None` 表示原本没有该表项。
+    #[serde(default)]
+    provider_table: Option<String>,
+}
+
+fn provider_override_snapshot_path(base_dir: &Path) -> PathBuf {
+    base_dir.join(CODEX_PROVIDER_OVERRIDE_FILE)
+}
+
+fn read_top_level_config_string(doc: &Document, key: &str) -> Option<String> {
+    doc.get(key).and_then(|item| item.as_str()).map(str::to_string)
+}
+
+/// 写入工具 provider 之前记录原值。已有快照时不覆盖：一份快照对应一次「工具接管」，
+/// 必须保留最早的用户原值，否则切走时只会还原成上一次的接管状态。
+fn record_provider_override_snapshot(
+    doc: &Document,
+    base_dir: &Path,
+    provider_id: &str,
+) -> Result<(), String> {
+    let provider_id = provider_id.trim();
+    if provider_id.is_empty() {
+        return Err("provider 快照缺少 provider_id".to_string());
+    }
+    let path = provider_override_snapshot_path(base_dir);
+    if read_provider_override_snapshot(&path)?.is_some() {
+        return Ok(());
+    }
+    let snapshot = CodexProviderOverrideSnapshot {
+        provider_id: provider_id.to_string(),
+        model: read_top_level_config_string(doc, CODEX_CONFIG_MODEL_KEY),
+        model_provider: read_top_level_config_string(doc, CODEX_CONFIG_MODEL_PROVIDER_KEY),
+        provider_table: doc
+            .get(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+            .and_then(|item| item.get(provider_id))
+            .map(ToString::to_string),
+    };
+    parse_provider_table_snapshot(&snapshot.provider_id, snapshot.provider_table.as_deref())?;
+    let content = serde_json::to_string_pretty(&snapshot)
+        .map_err(|_| "序列化 provider 引用快照失败".to_string())?;
+    crate::modules::atomic_write::write_string_atomic(&path, &content)
+        .map_err(|error| format!("记录 provider 引用快照失败: {}", error))
+}
+
+fn parse_provider_table_snapshot(
+    provider_id: &str,
+    snapshot: Option<&str>,
+) -> Result<Option<toml_edit::Item>, String> {
+    snapshot.map(|raw| {
+        let escaped = provider_id.replace('\\', "\\\\").replace('"', "\\\"");
+        crate::modules::codex_config_format::read_codex_config_doc_from_str(&format!(
+            "[model_providers.\"{escaped}\"]\n{raw}"
+        ))
+        .map_err(|_| "provider 引用快照中的表结构无效".to_string())
+        .and_then(|parsed| {
+            parsed
+                .get(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+                .and_then(|item| item.get(provider_id))
+                .cloned()
+                .ok_or_else(|| "provider 引用快照缺少供应商表".to_string())
+        })
+    }).transpose()
+}
+
+fn read_provider_override_snapshot(
+    path: &Path,
+) -> Result<Option<(CodexProviderOverrideSnapshot, [u8; 32])>, String> {
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("读取 provider 引用快照失败: {}", error)),
+    };
+    let snapshot: CodexProviderOverrideSnapshot = serde_json::from_str(&content)
+        .map_err(|_| "解析 provider 引用快照失败，保留快照与当前配置".to_string())?;
+    if snapshot.provider_id.trim().is_empty() {
+        return Err("provider 引用快照缺少 provider_id".to_string());
+    }
+    parse_provider_table_snapshot(&snapshot.provider_id, snapshot.provider_table.as_deref())?;
+    Ok(Some((snapshot, Sha256::digest(content.as_bytes()).into())))
+}
+
+/// 还原 `[model_providers.<id>]`：不能把损坏的原表误当成「原本不存在」。
+fn restore_provider_table_entry(
+    doc: &mut Document,
+    provider_id: &str,
+    snapshot: Option<&str>,
+) -> Result<(), String> {
+    let previous = parse_provider_table_snapshot(provider_id, snapshot)?;
+    if previous.is_some() && doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
+        doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
+    }
+    if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_some_and(|item| !item.is_table()) {
+        return Err("config.toml 中 model_providers 不是合法表结构".to_string());
+    }
+    let providers_empty = doc
+        .get_mut(CODEX_CONFIG_MODEL_PROVIDERS_KEY)
+        .and_then(|item| item.as_table_mut())
+        .map(|providers| {
+            match previous {
+                Some(item) => {
+                    providers.insert(provider_id, item);
+                }
+                None => {
+                    let _ = providers.remove(provider_id);
+                }
+            }
+            providers.is_empty()
+        })
+        .unwrap_or(false);
+    if providers_empty {
+        let _ = doc.remove(CODEX_CONFIG_MODEL_PROVIDERS_KEY);
+    }
+    Ok(())
+}
+
+/// 切回官方内置 provider 时按快照还原工具写入的 provider 引用。
+///
+/// 必须在清理当前 provider 前调用，才能识别用户在工具写入之后做出的选择。
+fn restore_provider_override_snapshot(
+    base_dir: &Path,
+    doc: &mut Document,
+) -> Result<Option<[u8; 32]>, String> {
+    let path = provider_override_snapshot_path(base_dir);
+    let Some((snapshot, snapshot_hash)) = read_provider_override_snapshot(&path)? else {
+        return Ok(None);
+    };
+    let provider_id = snapshot.provider_id.trim().to_string();
+    // 用户可能又手动切到了别的供应商：保留当前选择，配置落盘后再清理旧快照。
+    let current_provider = doc
+        .get(CODEX_CONFIG_MODEL_PROVIDER_KEY)
+        .and_then(|item| item.as_str())
+        .map(str::trim);
+    if current_provider != Some(provider_id.as_str()) {
+        return Ok(Some(snapshot_hash));
+    }
+
+    match snapshot.model_provider.as_deref() {
+        Some(previous) => doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(previous),
+        None => {
+            let _ = doc.remove(CODEX_CONFIG_MODEL_PROVIDER_KEY);
+        }
+    }
+    match snapshot.model.as_deref() {
+        Some(previous) => doc[CODEX_CONFIG_MODEL_KEY] = value(previous),
+        None => {
+            let _ = doc.remove(CODEX_CONFIG_MODEL_KEY);
+        }
+    }
+    restore_provider_table_entry(doc, &provider_id, snapshot.provider_table.as_deref())?;
+    Ok(Some(snapshot_hash))
+}
+
+fn persist_provider_config_with_snapshot_cleanup(
+    base_dir: &Path,
+    content: &str,
+    snapshot_hash: Option<[u8; 32]>,
+    write: impl FnOnce(&Path, &str) -> Result<(), String>,
+) -> Result<(), String> {
+    write(&get_config_toml_path(base_dir), content)
+        .map_err(|error| format!("写入 config.toml 失败: {}", error))?;
+    if let Some(snapshot_hash) = snapshot_hash {
+        // 仅在配置写入成功后清理本次读到的快照；保留期间被其他写入替换的新快照。
+        crate::modules::atomic_write::remove_file_if_hash_matches(
+            &provider_override_snapshot_path(base_dir), snapshot_hash,
+        )?;
+    }
+    Ok(())
+}
+
+fn read_provider_config_for_update(config_path: &Path) -> Result<String, String> {
+    match fs::read_to_string(config_path) {
+        Ok(content) => Ok(content),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(format!("读取 config.toml 失败: {}", error)),
+    }
+}
+
 fn write_api_provider_to_config_toml_with_options(
     base_dir: &Path,
     provider_config: &ApiProviderConfig,
@@ -2020,7 +2244,7 @@ fn write_api_provider_to_config_toml_with_options(
         return Ok(());
     }
 
-    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let existing = read_provider_config_for_update(&config_path)?;
     let mut doc = if existing.trim().is_empty() {
         Document::new()
     } else {
@@ -2028,8 +2252,12 @@ fn write_api_provider_to_config_toml_with_options(
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
 
+    let mut restored_snapshot_hash = None;
     match provider_config.mode {
         CodexApiProviderMode::OpenaiBuiltin => {
+            // 先根据尚未清理的当前选择还原快照；用户已改选（含移除 provider）时保留
+            // 当前 provider/model。之后再统一清理受管引用，旧快照也不能复活运行时 provider。
+            restored_snapshot_hash = restore_provider_override_snapshot(base_dir, &mut doc)?;
             let preserved_user_model_provider = doc
                 .get(CODEX_CONFIG_MODEL_PROVIDER_KEY)
                 .and_then(|item| item.as_str())
@@ -2079,6 +2307,7 @@ fn write_api_provider_to_config_toml_with_options(
                 .unwrap_or(provider_id);
             let base_url = normalized.as_deref().ok_or("自定义供应商缺少 Base URL")?;
 
+            record_provider_override_snapshot(&doc, base_dir, provider_id)?;
             doc[CODEX_CONFIG_MODEL_PROVIDER_KEY] = value(provider_id);
             if doc.get(CODEX_CONFIG_MODEL_PROVIDERS_KEY).is_none() {
                 doc[CODEX_CONFIG_MODEL_PROVIDERS_KEY] = toml_edit::table();
@@ -2104,8 +2333,10 @@ fn write_api_provider_to_config_toml_with_options(
         fs::create_dir_all(parent).map_err(|e| format!("创建 config.toml 目录失败: {}", e))?;
     }
     let content = crate::modules::codex_config_format::codex_config_doc_to_string(&mut doc);
-    crate::modules::codex_config_format::write_codex_config_toml_atomic(&config_path, &content)
-        .map_err(|e| format!("写入 config.toml 失败: {}", e))
+    persist_provider_config_with_snapshot_cleanup(
+        base_dir, &content, restored_snapshot_hash,
+        crate::modules::codex_config_format::write_codex_config_toml_atomic,
+    )
 }
 
 fn remove_managed_model_catalog_from_doc(doc: &mut Document) -> bool {
@@ -2828,18 +3059,8 @@ fn write_deepseek_official_responses_runtime_to_dir(
     let api_key = normalize_api_key(account.openai_api_key.as_deref().unwrap_or_default())
         .ok_or_else(|| "DeepSeek 账号缺少 API Key".to_string())?;
     let selected_model = resolve_deepseek_startup_model(account);
-    let _ = remove_leftover_deepseek_models_json(base_dir);
-    let _catalog_path = write_deepseek_official_model_catalog_file(base_dir, account)?;
-    if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir) {
-        logger::log_warn(&format!(
-            "[Codex切号] 清理 Codex 模型缓存失败: path={}, error={}",
-            base_dir.display(),
-            error
-        ));
-    }
-
     let config_path = get_config_toml_path(base_dir);
-    let existing = fs::read_to_string(&config_path).unwrap_or_default();
+    let existing = read_provider_config_for_update(&config_path)?;
     let mut doc = if existing.trim().is_empty() {
         Document::new()
     } else {
@@ -2847,6 +3068,16 @@ fn write_deepseek_official_responses_runtime_to_dir(
             .map_err(|e| format!("解析 config.toml 失败: {}", e))?
     };
 
+    // 记录写入前的 model / model_provider / provider 表，切回官方账号时按同一份快照还原。
+    record_provider_override_snapshot(&doc, base_dir, DEEPSEEK_PROVIDER_ID)?;
+    let _ = remove_leftover_deepseek_models_json(base_dir);
+    let _catalog_path = write_deepseek_official_model_catalog_file(base_dir, account)?;
+    if let Err(error) = crate::modules::codex_local_access::invalidate_codex_model_cache(base_dir) {
+        logger::log_warn(&format!(
+            "[Codex切号] 清理 Codex 模型缓存失败: path={}, error={}",
+            base_dir.display(), error
+        ));
+    }
     doc["model"] = value(selected_model.as_str());
     let _ = doc.remove(CODEX_CONFIG_MODEL_CATALOG_JSON_KEY);
     crate::modules::codex_account::apply_deepseek_reasoning_effort(&mut doc);
