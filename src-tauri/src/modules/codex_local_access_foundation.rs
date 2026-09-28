@@ -16,7 +16,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessImageGenerationStatus, CodexLocalAccessModelAlias,
     CodexLocalAccessModelPricing, CodexLocalAccessModelRoute, CodexLocalAccessModelRouting,
     CodexLocalAccessModelStats, CodexLocalAccessPortCleanupResult,
-    CodexLocalAccessProfileAttachment, CodexLocalAccessProviderGateway,
+    CodexLocalAccessProfileAttachment, CodexLocalAccessProviderGateway, CodexLocalAccessProxyRoute,
     CodexLocalAccessProviderGatewayModelCapability, CodexLocalAccessQuotaReserve,
     CodexLocalAccessQuotaReserveStatus, CodexLocalAccessRequestKind,
     CodexLocalAccessRoutingStrategy, CodexLocalAccessScope, CodexLocalAccessState,
@@ -297,10 +297,10 @@ const CODEX_LOCAL_ACCESS_TAKEOVER_BACKUP_VERSION: u32 = 1;
 const CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_ID: &str = "codex_local_access";
 /// 托管 profile 写入的 provider 显示名。
 ///
-/// 客户端只用它判断压缩能力：`ModelProviderInfo::is_openai()` 要求名字**恰好等于**
-/// `OpenAI` 才把 `remote_compaction` 判定为 V2（走 `/responses/compact`），其它名字一律
-/// 走本地压缩。本地 API 服务的上游可能是 DeepSeek / Chat Completions 等没有服务端压缩
-/// 的实现，所以这里必须保持非 `OpenAI` 的名字，避免远程压缩被错误启用。
+/// 客户端按 provider 能力选择压缩路径；当前 `ModelProviderInfo::is_openai()` 要求名字
+/// 恰好等于 `OpenAI`，远端 V2 使用 `/responses` 与 `compaction_trigger`，并非旧 V1 的
+/// `/responses/compact`。非 OpenAI provider 采用客户端摘要流程。本地 API 服务可能转发
+/// 到没有服务端压缩的上游，因此保留既有非 `OpenAI` 名称；不依赖已移除的 feature 开关。
 const CODEX_LOCAL_ACCESS_RUNTIME_PROVIDER_NAME: &str = "Codex API Service";
 const CODEX_LOCAL_ACCESS_RUNTIME_ACCOUNT_ID: &str = "codex_local_access_runtime";
 const CODEX_IMAGEGEN_ACTOR_HEADER: &str = "x-openai-actor-authorization";

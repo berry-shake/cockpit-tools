@@ -68,6 +68,7 @@ import {
   setAccountsOverviewFilterPersistenceEnabled,
 } from '../utils/accountsOverviewFilterPersistence';
 import { CodexSshSyncSettingsControl } from './codex/CodexSshSyncSettingsControl';
+import { CodexProxyDisplayControl } from './codex/CodexProxyDisplayControl';
 import { CodexContextManagementControl } from './codex/CodexContextManagementControl';
 import { getCodexExperimentalModelErrorMessage } from '../utils/codexExperimentalModel';
 import { CodexExperimentalModelEditor } from './codex/CodexExperimentalModelEditor';
@@ -2771,6 +2772,8 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     </select>
                   </div>
                 </div>
+
+                <CodexProxyDisplayControl />
 
                 <div
                   className="qs-field-group"

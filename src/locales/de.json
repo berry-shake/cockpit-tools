@@ -73,7 +73,7 @@
     "exportWarning": "Exportiertes HTML ist die unveränderte Modellausgabe. Außerhalb der App gilt der Isolationsschutz der Vorschau nicht.",
     "deliveryHelp": "Alle Konten erhalten dieselbe Ausgabeanweisung: eigenständiges HTML direkt zurückgeben, ohne Markdown-Codeblöcke oder externe Abhängigkeiten.",
     "errorTimeout": "Zeitüberschreitung. Du kannst einen neuen Test starten.",
-    "errorStream": "Die Antwort wurde nicht vollständig empfangen. Empfangene Inhalte bleiben erhalten.",
+    "errorStream": "Die Antwort ist fehlgeschlagen oder unvollständig",
     "errorLimit": "Die Antwort überschritt die Größenbegrenzung. Der Empfang wurde gestoppt.",
     "errorPreviewLimit": "Bitte zuerst ein Vorschaufenster schließen.",
     "retention": "Automatische Bereinigung",
@@ -86,6 +86,41 @@
     "viewError": "Fehler anzeigen"
   },
   "common": {
+    "dragSortHint": "Zum Sortieren am linken Griff ziehen. Beim Loslassen wird automatisch gespeichert.",
+    "dragSortFilteredHint": "Zum Sortieren die Suche leeren.",
+    "recycleBin": {
+      "loadTimeout": "Zeitüberschreitung beim Lesen des Papierkorbs. Aktualisieren Sie die Ansicht.",
+      "refreshFailed": "Konto wiederhergestellt, aber die Kontenliste konnte nicht aktualisiert werden. Laden Sie sie erneut.",
+      "moveStarted": "{{count}} Konten werden in den Papierkorb verschoben",
+      "title": "Papierkorb",
+      "description": "Gelöschte Konten bleiben lokal und können wiederhergestellt oder exportiert werden. Das Wiederherstellen wechselt keine Konten, startet keine Clients und stellt keine Aufgaben- oder API-Dienst-Zuordnungen wieder her.",
+      "empty": "Der Papierkorb ist leer",
+      "restore": "Wiederherstellen",
+      "deletePermanently": "Endgültig löschen",
+      "emptyBin": "Papierkorb leeren",
+      "deletedAt": "Gelöscht: {{time}}",
+      "confirmDelete": "„{{name}}“ endgültig löschen? Die Kontodaten im Papierkorb werden unwiderruflich entfernt.",
+      "confirmEmpty": "Diese {{count}} Konten endgültig löschen? Ihre Daten im Papierkorb werden unwiderruflich entfernt.",
+      "move": "In Papierkorb",
+      "confirmMove": "{{count}} Konten in den Papierkorb verschieben? Dort können Sie sie wiederherstellen, exportieren oder endgültig löschen.",
+      "moved": "In den Papierkorb verschoben",
+      "moveFailed": "Verschieben fehlgeschlagen: {{error}}",
+      "operationFailed": "Vorgang fehlgeschlagen: {{error}}",
+      "export": "Exportieren",
+      "exportAll": "Alle exportieren",
+      "exportAndDelete": "Exportieren & löschen",
+      "exportAndEmpty": "Exportieren & leeren",
+      "count": "{{count}} Konten",
+      "exportHint": "Exportiert eine erneut importierbare JSON-Datei mit Zugangsdaten der Konten. Bewahren Sie sie sicher auf. Bei Abbruch des Speicherns oder fehlgeschlagenem Export werden keine Konten gelöscht.",
+      "exported": "Konten exportiert.",
+      "confirmTitle": "Konten endgültig entfernen?"
+    },
+    "requestProxy": {
+      "value": "Proxyserver: {{name}}",
+      "direct": "Direkt",
+      "unknown": "Nicht erfasst",
+      "entryHint": "Nur der Proxy-Zugang wurde erfasst; der endgültige Knoten ist unbekannt."
+    },
     "retry": "Erneut versuchen",
     "quotaRefreshScheduler": {
       "busy": "Die Aktualisierungswarteschlange ist voll. Bitte später erneut versuchen.",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Instanzbereinigung",
+      "description": "Verwaltete Instanzordner manuell durchsuchen und Daten entfernen, auf die weder Instanzkonfigurationen noch laufende Prozesse verweisen. Es wird nichts automatisch gelöscht.",
+      "scan": "Prüfen",
+      "scanning": "Prüfung läuft…",
+      "remove": "Endgültig löschen",
+      "removing": "Wird gelöscht…",
+      "empty": "Keine verwaisten Ordner gefunden",
+      "summary": "{{count}} Ordner mit {{size}} gefunden",
+      "confirm": "Die folgenden Ordner samt Sitzungen, Arbeitsbereichen und Caches werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",
+      "cancel": "Abbrechen",
+      "confirmRemove": "Löschen bestätigen",
+      "done": "{{count}} Ordner gelöscht",
+      "failed": "Vorgang fehlgeschlagen",
+      "path": "Ordner",
+      "size": "Belegt",
+      "platform": "Plattform"
+    },
     "title": "App-Einstellungen",
     "subtitle": "Passen Sie Ihre Cockpit Tools Erfahrung an.",
     "tabs": {
@@ -2063,6 +2116,11 @@
     "other_group": "Andere Modelle"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Die Kontozuordnung konnte nicht bestätigt werden. Start abgebrochen; bitte den Kontowechsel erneut versuchen.",
+      "processScanFailed": "Die bisherigen Hintergrundprozesse konnten nicht geprüft werden. Start abgebrochen; bitte erneut versuchen.",
+      "proxyEntryFailed": "Der konfigurierte Proxy konnte nicht gestartet werden. Es wurde keine andere Route verwendet. Bitte erneut versuchen."
+    },
     "oauthProxy": {
       "toggle": "Mit Proxy anmelden",
       "hint": "Anmeldefenster, Token-Austausch und erste Kontingentabfrage nutzen diesen Proxy. Falls die Anmeldung ein Pop-up benötigt, diese Option ausschalten.",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} Server",
       "autoSyncBadge": "Automatisch"
     },
-    "exportAuthFailed": "Fehler export.",
-    "exportAuthFailedTitle": "Alle Auth-Fehler-Konten exportieren",
     "accounts": {
       "showRelayQuota": "Relay-Kontingent zeigen",
       "hideRelayQuota": "Relay-Kontingent ausblenden"
@@ -4569,6 +4625,18 @@
       "restartFailed": "Gateway konnte nicht gestartet werden: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Proxy-Anzeige",
+        "compact": "Kompakt",
+        "summary": "Übersicht",
+        "detailed": "Detailliert",
+        "hint": "Gilt für alle Codex-Kontokarten; die Auswahl wird sofort gespeichert und angewendet.",
+        "configuredNode": "Gewählter Knoten",
+        "lastRequest": "Letzte Anfrage",
+        "preview": "Stilvorschau",
+        "saveFailed": "Die Anzeigeeinstellung konnte nicht gespeichert werden. Bitte erneut versuchen.",
+        "refresh": "Details aktualisieren"
+      },
       "workspace": {
         "navLabel": "Proxy-Bereiche",
         "overview": "Überblick",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "Ausgangsregeln",
-        "intro": "Ein eigener Konto-Proxy hat Vorrang vor dem einheitlichen Proxy; greift keiner von beiden, behalten Anfragen den bisherigen Standardausgang des Clients.",
+        "intro": "Ein eigener Konto-Proxy hat Vorrang vor dem einheitlichen Proxy; greift keiner von beiden, behalten Anfragen den bisherigen Standardausgang des Clients. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen.",
         "order": "Reihenfolge",
         "tableTitle": "Konto-Ausgänge",
         "columnAccount": "Konto",
@@ -4707,8 +4775,8 @@
       "batchClearAll": "Auswahl aufheben",
       "unified": {
         "title": "Einheitlicher Proxy-Ausgang",
-        "hint": "Geeignete Konten ohne eigenen Proxy teilen diesen Ausgang; neue Konten folgen automatisch.",
-        "offState": "Aus: Eigene Kontozuordnungen gelten, sonst der Standardausgang.",
+        "hint": "Geeignete Konten ohne eigenen Proxy teilen diesen Ausgang; neue Konten folgen automatisch. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen.",
+        "offState": "Aus: Eigene Kontozuordnungen gelten, sonst der Standardausgang. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen.",
         "enable": "Für alle aktivieren",
         "disable": "Ausschalten",
         "change": "Ausgang wechseln",
@@ -4726,12 +4794,12 @@
         "changeMessage": "Laufende Clients mit lokalem Vermittler nutzen den neuen Ausgang bei neuen Verbindungen.",
         "changeConfirm": "Wechseln",
         "disableTitle": "Einheitlichen Proxy ausschalten",
-        "disableMessage": "Eigene Kontoproxys bleiben aktiv; ohne Zuordnung gilt der Standardausgang.",
+        "disableMessage": "Eigene Kontoproxys bleiben aktiv; ohne Zuordnung gilt der Standardausgang. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen.",
         "disableConfirm": "Ausschalten",
         "restartHint": "Über den lokalen Vermittler gestartete Clients wechseln bei neuen Verbindungen. Andere laufende Clients müssen einmal neu starten.",
         "staleWarning": "Die Quelle dieses Ausgangs ist nicht verfügbar. Anderen Ausgang wählen.",
         "removedWarning": "Der einheitliche Proxy wurde ausgeschaltet, weil seine Quelle gelöscht wurde.",
-        "accountsNotice": "Eigene Kontoproxys haben Vorrang; Konten ohne Zuordnung folgen dem einheitlichen Proxy.",
+        "accountsNotice": "Eigene Kontoproxys haben Vorrang; Konten ohne Zuordnung folgen dem einheitlichen Proxy. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen.",
         "unbindBlocked": "Nach dem Lösen der Zuordnung gilt der einheitliche Proxy.",
         "following": "Gemeinsam",
         "errorFailed": "Aktion fehlgeschlagen. Erneut versuchen.",
@@ -4794,6 +4862,11 @@
         "viewAll": "Alle anzeigen"
       },
       "previewTitle": "Proxy-Vorschau",
+      "modeDisabled": "Ohne Proxy",
+      "disableAction": "Proxy entfernen",
+      "setIndependent": "Eigenen Proxy setzen",
+      "disabledHint": "Individuelle und gemeinsame Proxys umgehen; neue Verbindungen erfolgen direkt.",
+      "disabledWarning": "Direktzugriff kann fehlschlagen. Bei Desktops mit lokaler Weiterleitung gilt die Änderung für neue Verbindungen; andere laufende Clients benötigen einen Neustart. Bestehende Verbindungen können die bisherige Route behalten.",
       "exitIp": "Ausgangs-IP",
       "sessionHistory": "Laufzeitverlauf",
       "sessionHistoryHint": "Statusprüfung alle 5 Sekunden. Nur Anfangszustand und Änderungen dieser Vorschau, höchstens 20 Einträge. Beim Schließen gelöscht; kein vollständiges Verlaufsprotokoll.",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "Letzte lokale Weiterleitung aufgebaut",
       "desktopRequest_failed": "Letzte lokale Weiterleitung fehlgeschlagen",
       "desktopEntryReadyHint": "Der Eingang lauscht; die Engine startet bei einer Verbindungsanfrage.",
+      "sharedRuntime": "Konto-Proxy",
       "runtimeMain": "Kontoanfragen",
       "runtimeDesktop": "Desktop-Brücke",
       "runtimeHint": "Der Status beschreibt nur den lokalen Eingang und die Engine. Eine aufgebaute Weiterleitung bestätigt weder Internetzugang noch den anfragenden Client.",
+      "restoreEntry": "Relay herstellen",
+      "restoringEntry": "Wird hergestellt…",
+      "restoreEntryFailed": "Das Desktop-Proxy-Relay konnte nicht wiederhergestellt werden. Bitte erneut versuchen.",
+      "restoreEntryPortBusy": "Der ursprüngliche Proxy-Port ist belegt. Geben Sie ihn frei und versuchen Sie es erneut; die Desktop-App kann nicht automatisch einen anderen Port verwenden.",
+      "restoreEntryNotRunning": "Keine laufende Desktop-App gefunden, die einen gespeicherten Proxy-Eingang dieser Cockpit-Instanz verwendet.",
+      "restoreEntryBusy": "Die Proxy-Wiederherstellung läuft bereits. Bitte gleich erneut versuchen.",
+      "restoreEntryTimeout": "Zeitüberschreitung bei der Proxy-Wiederherstellung. Bitte erneut versuchen.",
       "restartHint": "Über den lokalen Vermittler gestartete Clients wechseln bei neuen Verbindungen. Andere laufende Clients müssen einmal neu starten. Die Desktop-Brücke lauscht nur auf Loopback, isoliert aber keine anderen lokalen Benutzer. Der Systemproxy bleibt unverändert.",
       "exportHint": "Kontoexporte enthalten keine Proxy-Zugangsdaten. Richten Sie diese nach dem Import erneut ein.",
       "backToAccounts": "Zurück zu Konten",
@@ -5140,7 +5221,7 @@
         "assign": "Proxy zuweisen",
         "specific": "Ausgewählte Konten",
         "shared": "Gemeinsamer Proxy",
-        "sharedHint": "Codex-OAuth-Konten ohne eigenen Proxy nutzen diesen Proxy, auch später hinzugefügte geeignete Konten. Bestehende individuelle Einstellungen bleiben wirksam.",
+        "sharedHint": "Codex-OAuth-Konten ohne eigenen Proxy nutzen diesen Proxy, auch später hinzugefügte geeignete Konten. Bestehende individuelle Einstellungen bleiben wirksam. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen.",
         "apply": "Zuweisen"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "Aus",
         "choose": "Proxy festlegen",
-        "hint": "Konten ohne eigenen Proxy nutzen diesen Proxy."
+        "hint": "Konten ohne eigenen Proxy nutzen diesen Proxy. Konten mit der ausdrücklichen Einstellung „Ohne Proxy“ sind ausgenommen."
       },
       "setup": {
         "title": "Proxys einrichten",
@@ -5187,6 +5268,10 @@
         "collapse": "Details ausblenden"
       },
       "runtime_entry_failed": "Eingangsfehler",
+      "measureCurrentLatency": "Latenz prüfen",
+      "measuringCurrentLatency": "Prüfung läuft",
+      "currentLatencyNotRunning": "Kein laufender Knoten zum Prüfen verfügbar. Starten Sie einen Client mit diesem Proxy oder testen Sie den konfigurierten Knoten in der Proxy-Verwaltung.",
+      "currentLatencyHint": "Prüft die Latenz des laufenden Knotens zur Test-URL, ohne Knoten oder Proxy-Regeln zu ändern.",
       "latencyCheckedAt": "Geprüft um",
       "latencyPending": "Ungeprüft",
       "latencyTimeout": "Zeitüberschreitung",

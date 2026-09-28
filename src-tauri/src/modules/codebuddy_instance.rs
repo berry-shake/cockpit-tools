@@ -129,6 +129,7 @@ pub fn get_instance_defaults() -> Result<InstanceDefaults, String> {
 }
 
 pub fn create_instance(params: CreateInstanceParams) -> Result<InstanceProfile, String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = CODEBUDDY_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;
@@ -274,6 +275,7 @@ pub fn update_instance(params: UpdateInstanceParams) -> Result<InstanceProfile, 
 }
 
 pub fn delete_instance(instance_id: &str) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = CODEBUDDY_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;

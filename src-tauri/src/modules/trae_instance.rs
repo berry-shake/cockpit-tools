@@ -190,6 +190,7 @@ pub fn create_instance_for_platform(
     platform: crate::modules::trae_account::TraePlatformKind,
     params: CreateInstanceParams,
 ) -> Result<InstanceProfile, String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = TRAE_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;
@@ -348,6 +349,7 @@ pub fn delete_instance_for_platform(
     platform: crate::modules::trae_account::TraePlatformKind,
     instance_id: &str,
 ) -> Result<(), String> {
+    let _creation_guard = crate::modules::instance_storage_cleanup::protect_instance_creation()?;
     let _lock = TRAE_INSTANCE_STORE_LOCK
         .lock()
         .map_err(|_| "无法获取实例锁")?;

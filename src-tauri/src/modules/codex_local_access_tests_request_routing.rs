@@ -209,6 +209,7 @@ data: {"type":"response.completed","response":{"id":"resp_123","usage":{"input_t
     #[test]
     fn sidecar_response_failed_overrides_generic_request_failed() {
         let event = SidecarUsageEvent {
+            proxy_route: None,
             request_id: "req-1".to_string(),
             model: "gpt-5.4".to_string(),
             alias: String::new(),

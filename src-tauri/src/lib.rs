@@ -550,6 +550,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(modules::codex_proxy_catalog::auto_refresh_loop());
+            tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
 
             // 启动 WebSocket 服务（使用 Tauri 的 async runtime）
             tauri::async_runtime::spawn(async {
@@ -1126,6 +1127,11 @@ pub fn run() {
             commands::codex::codex_clear_client_auth_observation,
             commands::codex::switch_codex_account,
             commands::codex::codex_cancel_account_switch,
+            commands::codex::list_codex_recycled_accounts,
+            commands::codex::export_codex_recycled_accounts,
+            commands::codex::restore_codex_recycled_account,
+            commands::codex::delete_codex_recycled_account,
+            commands::codex::empty_codex_recycle_bin,
             commands::codex::delete_codex_account,
             commands::codex::delete_codex_accounts,
             commands::codex::start_codex_batch_delete,
@@ -1169,7 +1175,10 @@ pub fn run() {
             commands::codex::test_codex_account_egress_proxy,
             commands::codex::cancel_codex_account_egress_proxy,
             commands::codex::get_codex_account_proxy_status,
+            commands::codex::measure_codex_account_proxy_latency,
+            commands::codex::restore_codex_account_proxy_entry,
             commands::codex_proxy_catalog::codex_proxy_catalog_list,
+            commands::codex_proxy_catalog::codex_proxy_catalog_reorder,
             commands::codex_proxy_catalog::codex_proxy_catalog_import,
             commands::codex_proxy_catalog::codex_proxy_catalog_preview,
             commands::codex_proxy_catalog::codex_proxy_catalog_network,
@@ -1670,6 +1679,8 @@ pub fn run() {
             commands::codex_instance::codex_execute_instance_launch_command,
             // Instance Commands
             commands::instance::get_instance_defaults,
+            commands::instance_storage_cleanup::scan_orphan_instance_dirs,
+            commands::instance_storage_cleanup::delete_orphan_instance_dirs,
             commands::instance::list_instances,
             commands::instance::create_instance,
             commands::instance::update_instance,

@@ -11,6 +11,7 @@ include!("codex_account_storage_locks.rs");
 include!("codex_account_token_refresh.rs");
 include!("codex_account_index.rs");
 include!("codex_account_lifecycle.rs");
+include!("codex_account_recycle_bin.rs");
 include!("codex_account_authority_sync.rs");
 include!("codex_account_projection.rs");
 include!("codex_account_runtime_switch.rs");
@@ -27,6 +28,7 @@ mod tests {
     include!("codex_account_tests_provider_snapshot.rs");
     include!("codex_account_tests_quick_config.rs");
     include!("codex_account_tests_model_vision.rs");
+    include!("codex_account_tests_recycle_bin.rs");
 }
 
 include!("codex_account_mutations_quota.rs");

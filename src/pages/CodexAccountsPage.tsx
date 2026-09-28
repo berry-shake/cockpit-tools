@@ -523,7 +523,6 @@ export function useCodexAccountsPageController() {
   // ─── Filtering & Sorting ────────────────────────────────────────────
   const overviewController = useCodexAccountsOverviewController({ ...baseController, ...oauthController, ...accessController, ...localAccessController });
   const {
-    authFailedExportAccountIds,
     buildAccountLaunchPreviewActions,
     buildAccountLaunchPreviewSummary,
     buildLocalAccessLaunchPreviewActions,
@@ -541,7 +540,6 @@ export function useCodexAccountsPageController() {
     handleCodexBatchDelete,
     handleCustomSortDragMove,
     handleCustomSortDragStart,
-    handleExportAuthFailedAccounts,
     handlePauseBatchDelete,
     handleResumeBatchDelete,
     handleRetryFailedBatchDelete,
@@ -628,7 +626,6 @@ export function useCodexAccountsPageController() {
     apiModelContextWindowsInput,
     apiProviderPresetId,
     apiSyncModelCatalogToCodex,
-    authFailedExportAccountIds,
     availableTags,
     batchDeleteBusy,
     batchDeleteJob,
@@ -794,7 +791,6 @@ export function useCodexAccountsPageController() {
     handleExecuteLocalAccessLaunchPreview,
     handleLaunchPreviewInstanceChange,
     handleExport,
-    handleExportAuthFailedAccounts,
     handleFetchApiModelCatalog,
     handleFetchEditingApiModelCatalog,
     handleImportFromFiles,

@@ -73,7 +73,7 @@
     "exportWarning": "O HTML exportado é a saída original do modelo. Ao abri-lo fora do aplicativo, a proteção de isolamento da prévia não se aplica.",
     "deliveryHelp": "Todas as contas recebem a mesma instrução de entrega: retornar diretamente HTML independente, sem blocos de código Markdown ou dependências externas.",
     "errorTimeout": "A solicitação expirou. Você pode iniciar um novo teste.",
-    "errorStream": "A resposta não foi concluída. O conteúdo recebido foi mantido.",
+    "errorStream": "A resposta falhou ou não foi concluída",
     "errorLimit": "A resposta excedeu o limite de tamanho; o recebimento foi interrompido.",
     "errorPreviewLimit": "Feche uma janela de prévia primeiro.",
     "retention": "Limpeza automática",
@@ -86,6 +86,41 @@
     "viewError": "Ver erro"
   },
   "common": {
+    "dragSortHint": "Arraste a alça à esquerda para reordenar. As alterações são salvas ao soltar.",
+    "dragSortFilteredHint": "Limpe a busca para reordenar.",
+    "recycleBin": {
+      "loadTimeout": "O tempo de leitura da lixeira expirou. Atualize para tentar novamente.",
+      "refreshFailed": "Conta restaurada, mas não foi possível atualizar a lista. Recarregue a lista de contas.",
+      "moveStarted": "Iniciado o envio de {{count}} contas para a lixeira",
+      "title": "Lixeira",
+      "description": "As contas excluídas ficam salvas localmente e podem ser restauradas ou exportadas. Restaurar não troca contas, inicia clientes nem restaura vínculos com tarefas ou com o serviço API.",
+      "empty": "A lixeira está vazia",
+      "restore": "Restaurar",
+      "deletePermanently": "Excluir de vez",
+      "emptyBin": "Esvaziar lixeira",
+      "deletedAt": "Excluída em {{time}}",
+      "confirmDelete": "Excluir “{{name}}” permanentemente? Os dados da conta na lixeira serão removidos e não poderão ser recuperados.",
+      "confirmEmpty": "Excluir estas {{count}} contas permanentemente? Os dados na lixeira serão removidos e não poderão ser recuperados.",
+      "move": "Mover à lixeira",
+      "confirmMove": "Mover {{count}} contas para a lixeira? Lá você poderá restaurá-las, exportá-las ou excluí-las permanentemente.",
+      "moved": "Movidas para a lixeira",
+      "moveFailed": "Falha ao mover para a lixeira: {{error}}",
+      "operationFailed": "Falha na operação: {{error}}",
+      "export": "Exportar",
+      "exportAll": "Exportar tudo",
+      "exportAndDelete": "Exportar e excluir",
+      "exportAndEmpty": "Exportar e esvaziar",
+      "count": "{{count}} contas",
+      "exportHint": "Exporta um arquivo JSON que pode ser importado novamente. Ele contém credenciais das contas; guarde-o em segurança. Cancelar o salvamento ou uma falha na exportação não excluirá as contas.",
+      "exported": "Contas exportadas.",
+      "confirmTitle": "Remover contas permanentemente?"
+    },
+    "requestProxy": {
+      "value": "Servidor proxy: {{name}}",
+      "direct": "Direta",
+      "unknown": "Não registrado",
+      "entryHint": "Apenas a entrada do proxy foi registrada; o nó final é desconhecido."
+    },
     "retry": "Tentar novamente",
     "quotaRefreshScheduler": {
       "busy": "A fila de atualização está cheia. Tente novamente em instantes.",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Limpeza de instâncias",
+      "description": "Verifique manualmente as pastas de instâncias gerenciadas e remova os dados que não sejam referenciados por configurações de instâncias ou processos em execução. Nada é excluído automaticamente.",
+      "scan": "Verificar",
+      "scanning": "Verificando…",
+      "remove": "Excluir de vez",
+      "removing": "Excluindo…",
+      "empty": "Nenhuma pasta residual para limpar",
+      "summary": "Encontradas {{count}} pastas, ocupando {{size}}",
+      "confirm": "As pastas abaixo, com suas sessões, áreas de trabalho e caches, serão excluídas permanentemente. Esta ação não pode ser desfeita.",
+      "cancel": "Cancelar",
+      "confirmRemove": "Confirmar",
+      "done": "{{count}} pastas excluídas",
+      "failed": "Falha na operação",
+      "path": "Pasta",
+      "size": "Espaço usado",
+      "platform": "Plataforma"
+    },
     "title": "Configurações do App",
     "subtitle": "Personalize sua experiência no Cockpit Tools.",
     "tabs": {
@@ -2063,6 +2116,11 @@
     "other_group": "Outros modelos"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Não foi possível confirmar a conta vinculada. Inicialização interrompida; tente trocar de conta novamente.",
+      "processScanFailed": "Não foi possível verificar os processos anteriores em segundo plano. Inicialização interrompida; tente novamente.",
+      "proxyEntryFailed": "Não foi possível iniciar o proxy configurado. Nenhuma rota alternativa foi usada; tente novamente."
+    },
     "oauthProxy": {
       "toggle": "Autorizar via proxy",
       "hint": "A janela integrada, a troca de tokens e a primeira consulta de cota usam este proxy. Desative esta opção se o login exigir uma janela pop-up.",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} servidores",
       "autoSyncBadge": "Automático"
     },
-    "exportAuthFailed": "Exportar falhas",
-    "exportAuthFailedTitle": "Exportar todas as contas com falha de auth",
     "accounts": {
       "showRelayQuota": "Mostrar cota relay",
       "hideRelayQuota": "Ocultar cota relay"
@@ -4569,6 +4625,18 @@
       "restartFailed": "Falha ao reiniciar o gateway: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Exibição do proxy",
+        "compact": "Compacta",
+        "summary": "Resumo",
+        "detailed": "Detalhada",
+        "hint": "Aplica-se a todos os cartões de contas do Codex; a escolha é salva e aplicada imediatamente.",
+        "configuredNode": "Nó configurado",
+        "lastRequest": "Última solicitação",
+        "preview": "Prévia do estilo",
+        "saveFailed": "Não foi possível salvar a preferência de exibição. Tente novamente.",
+        "refresh": "Atualizar dados"
+      },
       "workspace": {
         "navLabel": "Seções do proxy",
         "overview": "Visão geral",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "Regras de saída",
-        "intro": "Um proxy de conta independente tem prioridade sobre o proxy unificado; quando nenhum se aplica, as solicitações mantêm a saída padrão anterior do cliente.",
+        "intro": "Um proxy de conta independente tem prioridade sobre o proxy unificado; quando nenhum se aplica, as solicitações mantêm a saída padrão anterior do cliente. Contas definidas explicitamente como «Sem proxy» ficam excluídas.",
         "order": "Ordem de aplicação",
         "tableTitle": "Saídas das contas",
         "columnAccount": "Conta",
@@ -4707,8 +4775,8 @@
       "batchClearAll": "Limpar seleção",
       "unified": {
         "title": "Saída proxy unificada",
-        "hint": "Contas elegíveis sem proxy próprio compartilham esta saída; novas contas passam a segui-la automaticamente.",
-        "offState": "Desativado: vale o proxy da conta; sem vínculo, vale a saída padrão.",
+        "hint": "Contas elegíveis sem proxy próprio compartilham esta saída; novas contas passam a segui-la automaticamente. Contas definidas explicitamente como «Sem proxy» ficam excluídas.",
+        "offState": "Desativado: vale o proxy da conta; sem vínculo, vale a saída padrão. Contas definidas explicitamente como «Sem proxy» ficam excluídas.",
         "enable": "Ativar para todas",
         "disable": "Desativar",
         "change": "Trocar saída",
@@ -4726,12 +4794,12 @@
         "changeMessage": "Clientes em execução com o encaminhador local usam a nova saída em novas conexões.",
         "changeConfirm": "Trocar",
         "disableTitle": "Desativar a saída proxy unificada",
-        "disableMessage": "Os proxies próprios continuam ativos; contas sem vínculo usam a saída padrão.",
+        "disableMessage": "Os proxies próprios continuam ativos; contas sem vínculo usam a saída padrão. Contas definidas explicitamente como «Sem proxy» ficam excluídas.",
         "disableConfirm": "Desativar",
         "restartHint": "Clientes iniciados pelo encaminhador local mudam em novas conexões. Os demais clientes em execução precisam reiniciar uma vez.",
         "staleWarning": "A origem desta saída está indisponível. Escolha outra.",
         "removedWarning": "A saída proxy unificada foi desativada porque sua origem foi excluída.",
-        "accountsNotice": "O proxy da conta tem prioridade; contas sem vínculo seguem o proxy unificado.",
+        "accountsNotice": "O proxy da conta tem prioridade; contas sem vínculo seguem o proxy unificado. Contas definidas explicitamente como «Sem proxy» ficam excluídas.",
         "unbindBlocked": "Após desvincular, esta conta seguirá o proxy unificado.",
         "following": "Unificada",
         "errorFailed": "A ação falhou. Tente novamente.",
@@ -4794,6 +4862,11 @@
         "viewAll": "Ver tudo"
       },
       "previewTitle": "Prévia do proxy",
+      "modeDisabled": "Sem proxy",
+      "disableAction": "Remover proxy",
+      "setIndependent": "Proxy próprio",
+      "disabledHint": "Ignorar proxies individuais e compartilhados e tentar conexões diretas.",
+      "disabledWarning": "O acesso direto pode falhar. A alteração vale para novas conexões de clientes com retransmissão local; os demais clientes abertos precisam ser reiniciados. Conexões existentes podem manter a rota anterior.",
       "exitIp": "IP de saída",
       "sessionHistory": "Atividade",
       "sessionHistoryHint": "Verifica o estado a cada 5 segundos. Mantém apenas o estado inicial e as mudanças desta prévia, até 20 registros, apagados ao fechar. Não é um histórico completo.",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "Último repasse local estabelecido",
       "desktopRequest_failed": "Falha no último repasse local",
       "desktopEntryReadyHint": "A entrada está escutando; o núcleo inicia quando chega uma solicitação de conexão.",
+      "sharedRuntime": "Proxy da conta",
       "runtimeMain": "Requisições da conta",
       "runtimeDesktop": "Ponte de desktop",
       "runtimeHint": "O status descreve apenas a entrada local e o núcleo. Um repasse estabelecido não confirma o acesso à Internet nem identifica o cliente solicitante.",
+      "restoreEntry": "Restaurar conexão",
+      "restoringEntry": "Restaurando…",
+      "restoreEntryFailed": "Não foi possível restaurar o encaminhamento proxy do desktop. Tente novamente.",
+      "restoreEntryPortBusy": "A porta proxy original está em uso. Libere-a e tente novamente; o desktop não pode usar outra porta automaticamente.",
+      "restoreEntryNotRunning": "Nenhum desktop em execução usa uma entrada proxy registrada desta instância do Cockpit.",
+      "restoreEntryBusy": "A restauração do proxy já está em andamento. Tente novamente em instantes.",
+      "restoreEntryTimeout": "A restauração do proxy excedeu o tempo limite. Tente novamente.",
       "restartHint": "Clientes iniciados pelo encaminhador local mudam em novas conexões. Os demais clientes em execução precisam reiniciar uma vez. A ponte de desktop escuta apenas no loopback, mas não isola outros usuários locais. O proxy do sistema não é alterado.",
       "exportHint": "As exportações de contas não incluem credenciais de proxy; configure-as novamente após importar.",
       "backToAccounts": "Voltar às contas",
@@ -5140,7 +5221,7 @@
         "assign": "Atribuir proxy",
         "specific": "Contas escolhidas",
         "shared": "Proxy compartilhado",
-        "sharedHint": "As contas Codex OAuth sem proxy próprio usam este proxy, incluindo as contas compatíveis adicionadas depois. As configurações individuais existentes continuam ativas.",
+        "sharedHint": "As contas Codex OAuth sem proxy próprio usam este proxy, incluindo as contas compatíveis adicionadas depois. As configurações individuais existentes continuam ativas. Contas definidas explicitamente como «Sem proxy» ficam excluídas.",
         "apply": "Atribuir"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "Desativado",
         "choose": "Definir proxy",
-        "hint": "As contas sem proxy próprio usam este proxy."
+        "hint": "As contas sem proxy próprio usam este proxy. Contas definidas explicitamente como «Sem proxy» ficam excluídas."
       },
       "setup": {
         "title": "Configure seus proxies",
@@ -5187,6 +5268,10 @@
         "collapse": "Ocultar detalhes"
       },
       "runtime_entry_failed": "Falha na entrada",
+      "measureCurrentLatency": "Medir latência",
+      "measuringCurrentLatency": "Medindo",
+      "currentLatencyNotRunning": "Não há nenhum nó em execução para testar. Inicie um cliente que use este proxy ou teste o nó configurado no gerenciamento de proxies.",
+      "currentLatencyHint": "Mede a latência do nó em execução até a URL de teste sem trocar de nó nem alterar as políticas do proxy.",
       "latencyCheckedAt": "Verificado às",
       "latencyPending": "Não testado",
       "latencyTimeout": "Tempo esgotado",

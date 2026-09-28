@@ -73,7 +73,7 @@
     "exportWarning": "Exportované HTML je původní výstup modelu. Při otevření mimo aplikaci není chráněno izolací náhledu.",
     "deliveryHelp": "Všechny účty dostanou stejný pokyn k výstupu: vrátit přímo samostatné HTML bez bloků kódu Markdown a externích závislostí.",
     "errorTimeout": "Časový limit požadavku vypršel. Můžete spustit nový test.",
-    "errorStream": "Odpověď nebyla dokončena. Přijatý obsah je zachován.",
+    "errorStream": "Odpověď selhala nebo nebyla dokončena",
     "errorLimit": "Odpověď překročila limit velikosti; příjem byl zastaven.",
     "errorPreviewLimit": "Nejprve zavřete jedno okno náhledu.",
     "retention": "Automatické čištění",
@@ -86,6 +86,41 @@
     "viewError": "Zobrazit chybu"
   },
   "common": {
+    "dragSortHint": "Přetažením úchytu vlevo změňte pořadí. Po uvolnění se automaticky uloží.",
+    "dragSortFilteredHint": "Pro změnu pořadí vymažte vyhledávání.",
+    "recycleBin": {
+      "loadTimeout": "Čas pro načtení koše vypršel. Obnovte zobrazení a zkuste to znovu.",
+      "refreshFailed": "Účet byl obnoven, ale seznam se nepodařilo aktualizovat. Načtěte seznam účtů znovu.",
+      "moveStarted": "Zahájeno přesouvání účtů ({{count}}) do koše",
+      "title": "Koš",
+      "description": "Smazané účty zůstávají místně a lze je obnovit nebo exportovat. Obnovení nepřepne účet, nespustí klienta ani neobnoví vazby na úlohy nebo službu API.",
+      "empty": "Koš je prázdný",
+      "restore": "Obnovit",
+      "deletePermanently": "Trvale smazat",
+      "emptyBin": "Vysypat koš",
+      "deletedAt": "Smazáno: {{time}}",
+      "confirmDelete": "Trvale smazat „{{name}}“? Data účtu v koši budou odstraněna bez možnosti obnovení.",
+      "confirmEmpty": "Trvale smazat tyto účty ({{count}})? Jejich data v koši budou odstraněna bez možnosti obnovení.",
+      "move": "Do koše",
+      "confirmMove": "Přesunout účty ({{count}}) do koše? V koši je můžete obnovit, exportovat nebo trvale smazat.",
+      "moved": "Přesunuto do koše",
+      "moveFailed": "Přesun do koše selhal: {{error}}",
+      "operationFailed": "Operace selhala: {{error}}",
+      "export": "Exportovat",
+      "exportAll": "Exportovat vše",
+      "exportAndDelete": "Exportovat a smazat",
+      "exportAndEmpty": "Exportovat a vysypat",
+      "count": "Účty: {{count}}",
+      "exportHint": "Exportuje soubor JSON, který lze znovu importovat. Obsahuje přihlašovací údaje účtů; uchovejte jej v bezpečí. Zrušení uložení ani neúspěšný export účty nesmaže.",
+      "exported": "Účty byly exportovány.",
+      "confirmTitle": "Trvale odstranit účty?"
+    },
+    "requestProxy": {
+      "value": "Proxy server: {{name}}",
+      "direct": "Přímo",
+      "unknown": "Nezaznamenáno",
+      "entryHint": "Zaznamenán je pouze vstup proxy; konečný uzel není znám."
+    },
     "retry": "Zkusit znovu",
     "quotaRefreshScheduler": {
       "busy": "Fronta aktualizací je plná. Zkuste to za chvíli.",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Úklid instancí",
+      "description": "Ručně prohledejte složky spravovaných instancí a odstraňte data, na která neodkazují konfigurace instancí ani běžící procesy. Nic se nemaže automaticky.",
+      "scan": "Prohledat",
+      "scanning": "Prohledávání…",
+      "remove": "Trvale smazat",
+      "removing": "Mazání…",
+      "empty": "Žádné zbylé složky k odstranění",
+      "summary": "Nalezeno {{count}} složek zabírajících {{size}}",
+      "confirm": "Následující složky včetně relací, pracovních prostorů a mezipaměti budou trvale smazány. Tuto akci nelze vrátit zpět.",
+      "cancel": "Zrušit",
+      "confirmRemove": "Potvrdit smazání",
+      "done": "Smazáno {{count}} složek",
+      "failed": "Operace se nezdařila",
+      "path": "Složka",
+      "size": "Využito",
+      "platform": "Platforma"
+    },
     "title": "Nastavení aplikace",
     "subtitle": "Přizpůsobte si prostředí Cockpit Tools.",
     "tabs": {
@@ -2063,6 +2116,11 @@
     "other_group": "Ostatní modely"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Nelze potvrdit přiřazení účtu. Spuštění zastaveno. Zkuste účet přepnout znovu.",
+      "processScanFailed": "Nelze zkontrolovat předchozí procesy na pozadí. Spuštění zastaveno. Zkuste to znovu.",
+      "proxyEntryFailed": "Nakonfigurovaný proxy server nelze spustit. Jiná trasa nebyla použita. Zkuste to znovu."
+    },
     "oauthProxy": {
       "toggle": "Přihlásit přes proxy",
       "hint": "Vestavěné okno, výměna tokenu a první kontrola kvóty používají tuto proxy. Pokud přihlášení vyžaduje vyskakovací okno, tuto volbu vypněte.",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} serverů",
       "autoSyncBadge": "Automaticky"
     },
-    "exportAuthFailed": "Export chyb",
-    "exportAuthFailedTitle": "Exportovat všechny účty s chybou auth",
     "accounts": {
       "showRelayQuota": "Zobrazit relay kvótu",
       "hideRelayQuota": "Skrýt relay kvótu"
@@ -4569,6 +4625,18 @@
       "restartFailed": "Bránu se nepodařilo restartovat: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Zobrazení proxy",
+        "compact": "Stručné",
+        "summary": "Souhrnné",
+        "detailed": "Podrobné",
+        "hint": "Platí pro všechny karty účtů Codex; volba se ihned uloží a použije.",
+        "configuredNode": "Nastavený uzel",
+        "lastRequest": "Poslední požadavek",
+        "preview": "Náhled stylu",
+        "saveFailed": "Nastavení zobrazení se nepodařilo uložit. Zkuste to znovu.",
+        "refresh": "Obnovit údaje"
+      },
       "workspace": {
         "navLabel": "Sekce proxy",
         "overview": "Přehled",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "Pravidla výstupu",
-        "intro": "Vlastní proxy účtu má přednost před společnou proxy; pokud neplatí ani jedno, požadavky používají původní výchozí výstup klienta.",
+        "intro": "Vlastní proxy účtu má přednost před společnou proxy; pokud neplatí ani jedno, požadavky používají původní výchozí výstup klienta. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány.",
         "order": "Pořadí uplatnění",
         "tableTitle": "Výstupy účtů",
         "columnAccount": "Účet",
@@ -4707,8 +4775,8 @@
       "batchClearAll": "Zrušit výběr",
       "unified": {
         "title": "Společný proxy výstup",
-        "hint": "Způsobilé účty bez vlastního proxy sdílejí tento výstup; nové účty jej následují automaticky.",
-        "offState": "Vypnuto: platí proxy účtu, jinak výchozí výstup.",
+        "hint": "Způsobilé účty bez vlastního proxy sdílejí tento výstup; nové účty jej následují automaticky. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány.",
+        "offState": "Vypnuto: platí proxy účtu, jinak výchozí výstup. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány.",
         "enable": "Zapnout pro všechny",
         "disable": "Vypnout",
         "change": "Změnit výstup",
@@ -4726,12 +4794,12 @@
         "changeMessage": "Běžící klienti s místním přeposíláním použijí nový výstup pro nová spojení.",
         "changeConfirm": "Změnit",
         "disableTitle": "Vypnout společný proxy výstup",
-        "disableMessage": "Vlastní proxy zůstávají aktivní; bez přiřazení platí výchozí výstup.",
+        "disableMessage": "Vlastní proxy zůstávají aktivní; bez přiřazení platí výchozí výstup. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány.",
         "disableConfirm": "Vypnout",
         "restartHint": "Klienti spuštění přes místní přeposílání přejdou při novém spojení. Ostatní běžící klienti vyžadují jeden restart.",
         "staleWarning": "Zdroj tohoto výstupu není dostupný. Vyberte jiný.",
         "removedWarning": "Společný proxy výstup byl vypnut, protože byl jeho zdroj smazán.",
-        "accountsNotice": "Proxy účtu má přednost; účty bez přiřazení následují společný proxy.",
+        "accountsNotice": "Proxy účtu má přednost; účty bez přiřazení následují společný proxy. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány.",
         "unbindBlocked": "Po zrušení přiřazení bude účet následovat společný proxy.",
         "following": "Společný",
         "errorFailed": "Akce se nezdařila. Zkuste to znovu.",
@@ -4794,6 +4862,11 @@
         "viewAll": "Zobrazit vše"
       },
       "previewTitle": "Náhled proxy",
+      "modeDisabled": "Bez proxy",
+      "disableAction": "Odpojit proxy",
+      "setIndependent": "Vlastní proxy",
+      "disabledHint": "Vynechat vlastní i sdílené proxy a zkusit přímé připojení.",
+      "disabledWarning": "Přímý přístup může selhat. U klientů s místním předáváním platí změna pro nová spojení; ostatní spuštěné klienty je nutné restartovat. Stávající spojení mohou zachovat původní trasu.",
       "exitIp": "Výstupní IP",
       "sessionHistory": "Průběh provozu",
       "sessionHistoryHint": "Kontrola stavu každých 5 sekund. Jen počáteční stav a změny během tohoto náhledu, nejvýše 20 záznamů. Při zavření se smažou; nejde o úplnou historii.",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "Poslední místní předání navázáno",
       "desktopRequest_failed": "Poslední místní předání selhalo",
       "desktopEntryReadyHint": "Vstup naslouchá; jádro se spustí po přijetí požadavku na připojení.",
+      "sharedRuntime": "Proxy účtu",
       "runtimeMain": "Požadavky účtu",
       "runtimeDesktop": "Most klienta",
       "runtimeHint": "Stav popisuje pouze místní vstup a jádro. Navázané předání nepotvrzuje přístup k internetu ani neurčuje klienta, který požadavek odeslal.",
+      "restoreEntry": "Obnovit přenos",
+      "restoringEntry": "Obnovování…",
+      "restoreEntryFailed": "Přenos přes proxy pro desktop se nepodařilo obnovit. Zkuste to znovu.",
+      "restoreEntryPortBusy": "Původní port proxy je obsazený. Uvolněte jej a zkuste to znovu; desktop nemůže automaticky použít jiný port.",
+      "restoreEntryNotRunning": "Nebyl nalezen spuštěný desktop využívající zaznamenaný vstup proxy spravovaný touto instancí Cockpit.",
+      "restoreEntryBusy": "Obnova proxy již probíhá. Zkuste to za chvíli znovu.",
+      "restoreEntryTimeout": "Časový limit obnovy proxy vypršel. Zkuste to znovu.",
       "restartHint": "Klienti spuštění přes místní přeposílání přejdou při novém spojení. Ostatní běžící klienti vyžadují jeden restart. Most klienta naslouchá pouze na místní smyčce, ale neizoluje ostatní místní uživatele. Systémová proxy zůstává beze změny.",
       "exportHint": "Export účtů neobsahuje přihlašovací údaje proxy; po importu je nastavte znovu.",
       "backToAccounts": "Zpět k účtům",
@@ -5140,7 +5221,7 @@
         "assign": "Přiřadit proxy",
         "specific": "Vybrané účty",
         "shared": "Sdílená proxy",
-        "sharedHint": "Účty Codex OAuth bez vlastní proxy použijí tuto proxy, včetně podporovaných účtů přidaných později. Stávající individuální nastavení zůstávají platná.",
+        "sharedHint": "Účty Codex OAuth bez vlastní proxy použijí tuto proxy, včetně podporovaných účtů přidaných později. Stávající individuální nastavení zůstávají platná. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány.",
         "apply": "Přiřadit"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "Vypnuto",
         "choose": "Nastavit proxy",
-        "hint": "Tuto proxy používají účty bez vlastní proxy."
+        "hint": "Tuto proxy používají účty bez vlastní proxy. Účty s výslovně zvoleným režimem „Bez proxy“ jsou vynechány."
       },
       "setup": {
         "title": "Nastavení proxy",
@@ -5187,6 +5268,10 @@
         "collapse": "Skrýt podrobnosti"
       },
       "runtime_entry_failed": "Vstup selhal",
+      "measureCurrentLatency": "Změřit odezvu",
+      "measuringCurrentLatency": "Měření",
+      "currentLatencyNotRunning": "Není k dispozici žádný běžící uzel k měření. Spusťte klienta s touto proxy nebo otestujte nastavený uzel ve správě proxy.",
+      "currentLatencyHint": "Změří odezvu běžícího uzlu na testovací URL beze změny uzlu či pravidel proxy.",
       "latencyCheckedAt": "Čas kontroly",
       "latencyPending": "Neotestováno",
       "latencyTimeout": "Čas vypršel",

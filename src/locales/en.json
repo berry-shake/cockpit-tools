@@ -73,7 +73,7 @@
     "exportWarning": "Exported HTML is the original model output. Opening it outside the app is not protected by preview isolation.",
     "deliveryHelp": "All accounts use the same delivery instruction: return standalone HTML without Markdown fences or external dependencies.",
     "errorTimeout": "Request timed out. You can start a new test.",
-    "errorStream": "The response did not complete. Received output is kept.",
+    "errorStream": "Response failed or did not complete",
     "errorLimit": "Response exceeded the size limit; reception stopped.",
     "errorPreviewLimit": "Close a preview window first.",
     "retention": "Automatic cleanup",
@@ -86,6 +86,41 @@
     "viewError": "View error"
   },
   "common": {
+    "dragSortHint": "Drag the left handle to reorder. Changes save automatically on release.",
+    "dragSortFilteredHint": "Clear the search to reorder.",
+    "recycleBin": {
+      "loadTimeout": "Reading the recycle bin timed out. Refresh to retry.",
+      "refreshFailed": "Account restored, but the account list could not be refreshed. Reload the account list.",
+      "moveStarted": "Started moving {{count}} accounts to the recycle bin",
+      "title": "Recycle bin",
+      "description": "Deleted accounts stay locally and can be restored or exported. Restoring does not switch accounts, launch clients, or restore task or API Service bindings.",
+      "empty": "The recycle bin is empty",
+      "restore": "Restore",
+      "deletePermanently": "Delete forever",
+      "emptyBin": "Empty bin",
+      "deletedAt": "Deleted {{time}}",
+      "confirmDelete": "Permanently delete “{{name}}”? Its account data in the recycle bin will be removed and cannot be recovered.",
+      "confirmEmpty": "Permanently delete these {{count}} accounts? Their data in the recycle bin will be removed and cannot be recovered.",
+      "move": "Move to bin",
+      "confirmMove": "Move {{count}} accounts to the recycle bin? You can restore, export or permanently delete them there.",
+      "moved": "Moved to recycle bin",
+      "moveFailed": "Could not move to recycle bin: {{error}}",
+      "operationFailed": "Operation failed: {{error}}",
+      "export": "Export",
+      "exportAll": "Export all",
+      "exportAndDelete": "Export & delete",
+      "exportAndEmpty": "Export & empty",
+      "count": "{{count}} accounts",
+      "exportHint": "Exports a JSON file that can be imported again. It contains account credentials; keep it safe. Canceling the save or a failed export will not delete accounts.",
+      "exported": "Accounts exported.",
+      "confirmTitle": "Permanently remove accounts?"
+    },
+    "requestProxy": {
+      "value": "Proxy: {{name}}",
+      "direct": "Direct",
+      "unknown": "Not recorded",
+      "entryHint": "Only the proxy entry was recorded; the final node is unknown."
+    },
     "retry": "Retry",
     "quotaRefreshScheduler": {
       "busy": "The refresh queue is full. Try again shortly.",
@@ -984,6 +1019,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Instance cleanup",
+      "description": "Manually scan managed instance folders and remove data that is not referenced by instance configurations or running processes. Nothing is deleted automatically.",
+      "scan": "Scan",
+      "scanning": "Scanning…",
+      "remove": "Delete permanently",
+      "removing": "Deleting…",
+      "empty": "No leftover folders to clean up",
+      "summary": "Found {{count}} folders using {{size}}",
+      "confirm": "The following folders and their sessions, workspaces, and caches will be permanently deleted. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirmRemove": "Confirm deletion",
+      "done": "Deleted {{count}} folders",
+      "failed": "Operation failed",
+      "path": "Folder",
+      "size": "Space used",
+      "platform": "Platform"
+    },
     "title": "Settings",
     "subtitle": "Customize your Cockpit Tools experience.",
     "general": {
@@ -2283,6 +2336,11 @@
     "other_group": "Other Models"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Account binding could not be confirmed. Launch stopped; retry switching accounts.",
+      "processScanFailed": "Could not inspect the old background processes. Launch stopped; retry.",
+      "proxyEntryFailed": "The configured proxy entry could not start. No alternative route was used; retry."
+    },
     "oauthProxy": {
       "toggle": "Authorize via proxy",
       "hint": "The built-in sign-in window, token exchange and first quota check use this proxy. Turn this off if sign-in requires a pop-up.",
@@ -4755,8 +4813,6 @@
       "serverCount": "{{count}}",
       "autoSyncBadge": "Auto"
     },
-    "exportAuthFailed": "Export failed",
-    "exportAuthFailedTitle": "Export all auth-failed accounts",
     "accounts": {
       "showRelayQuota": "Show relay quota",
       "hideRelayQuota": "Hide relay quota"
@@ -4789,6 +4845,18 @@
       "restartFailed": "Failed to start the gateway: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Proxy display",
+        "compact": "Compact",
+        "summary": "Summary",
+        "detailed": "Detailed",
+        "hint": "Applies to all Codex account cards; saved and applied immediately.",
+        "configuredNode": "Configured node",
+        "lastRequest": "Last request",
+        "preview": "Style preview",
+        "saveFailed": "Could not save the display preference. Try again.",
+        "refresh": "Refresh details"
+      },
       "workspace": {
         "navLabel": "Proxy sections",
         "overview": "Overview",
@@ -4881,7 +4949,7 @@
       },
       "rules": {
         "title": "Exit rules",
-        "intro": "An independent account proxy takes priority over the unified proxy; when neither applies, requests keep the client's previous default exit.",
+        "intro": "An independent account proxy takes priority over the unified proxy; when neither applies, requests keep the client's previous default exit. Accounts explicitly set to No proxy are excluded.",
         "order": "Resolution order",
         "tableTitle": "Account exits",
         "columnAccount": "Account",
@@ -4926,8 +4994,8 @@
       },
       "unified": {
         "title": "Unified proxy egress",
-        "hint": "Eligible accounts without their own proxy share this egress; new accounts follow automatically.",
-        "offState": "Off: account bindings apply; otherwise the default egress applies.",
+        "hint": "Eligible accounts without their own proxy share this egress; new accounts follow automatically. Accounts explicitly set to No proxy are excluded.",
+        "offState": "Off: account bindings apply; otherwise the default egress applies. Accounts explicitly set to No proxy are excluded.",
         "enable": "Enable unified proxy",
         "disable": "Turn off",
         "change": "Change egress",
@@ -4945,12 +5013,12 @@
         "changeMessage": "Running clients using the local relay use the new egress for new connections.",
         "changeConfirm": "Change",
         "disableTitle": "Turn off unified proxy",
-        "disableMessage": "Own account proxies remain active; accounts without one use the default egress.",
+        "disableMessage": "Own account proxies remain active; accounts without one use the default egress. Accounts explicitly set to No proxy are excluded.",
         "disableConfirm": "Turn off",
         "restartHint": "Clients launched through the local relay switch on new connections. Other running clients need one restart.",
         "staleWarning": "The source of this egress is unavailable. Select another one.",
         "removedWarning": "Unified proxy was turned off because its source was deleted.",
-        "accountsNotice": "Own account proxies take priority; unbound accounts follow the unified proxy.",
+        "accountsNotice": "Own account proxies take priority; unbound accounts follow the unified proxy. Accounts explicitly set to No proxy are excluded.",
         "unbindBlocked": "After unbinding, this account follows the unified proxy.",
         "following": "Unified",
         "errorFailed": "Action failed. Try again.",
@@ -5014,6 +5082,11 @@
         "viewAll": "View all"
       },
       "previewTitle": "Proxy preview",
+      "modeDisabled": "No proxy",
+      "disableAction": "Remove proxy",
+      "setIndependent": "Set own proxy",
+      "disabledHint": "Skip individual and shared proxies; try direct connections.",
+      "disabledWarning": "Direct access may fail. New connections from desktops using the local relay take effect immediately; other running clients need a restart. Existing connections may keep the previous route.",
       "exitIp": "Exit IP",
       "sessionHistory": "Runtime activity",
       "sessionHistoryHint": "Checks status every 5 seconds. Keeps the initial state and up to 20 recent snapshots from this preview only; cleared on close, not a full historical log.",
@@ -5044,9 +5117,17 @@
       "desktopRequest_forwarded": "Last local relay established",
       "desktopRequest_failed": "Last local relay failed",
       "desktopEntryReadyHint": "The entry is listening; the engine starts when a connection request arrives.",
+      "sharedRuntime": "Account proxy",
       "runtimeMain": "Account requests",
       "runtimeDesktop": "Desktop bridge",
       "runtimeHint": "Status describes the local entry and engine only. An established relay does not verify Internet access or identify the requesting client.",
+      "restoreEntry": "Restore relay",
+      "restoringEntry": "Restoring…",
+      "restoreEntryFailed": "Could not restore the desktop proxy relay. Please retry.",
+      "restoreEntryPortBusy": "The original proxy port is in use. Free the port and retry; the desktop cannot use a different port automatically.",
+      "restoreEntryNotRunning": "No running desktop using a recorded proxy relay owned by this Cockpit was found.",
+      "restoreEntryBusy": "Proxy recovery is already in progress. Please try again shortly.",
+      "restoreEntryTimeout": "Proxy recovery timed out. Please retry.",
       "restartHint": "Clients launched through the local relay switch on new connections. Other running clients need one restart. The desktop bridge listens on loopback only but does not isolate other local users. System proxy settings stay unchanged.",
       "exportHint": "Account exports exclude proxy credentials; configure them again after import.",
       "backToAccounts": "Back to accounts",
@@ -5360,7 +5441,7 @@
         "assign": "Assign proxy",
         "specific": "Selected accounts",
         "shared": "Shared proxy",
-        "sharedHint": "Codex OAuth accounts without their own proxy use this one, including eligible accounts added later. Existing individual settings stay in effect.",
+        "sharedHint": "Codex OAuth accounts without their own proxy use this one, including eligible accounts added later. Existing individual settings stay in effect. Accounts explicitly set to No proxy are excluded.",
         "apply": "Assign"
       },
       "managerResources": {
@@ -5393,7 +5474,7 @@
       "managerUnified": {
         "off": "Off",
         "choose": "Set proxy",
-        "hint": "Accounts without an individual proxy use this one."
+        "hint": "Accounts without an individual proxy use this one. Accounts explicitly set to No proxy are excluded."
       },
       "setup": {
         "title": "Set up your proxies",
@@ -5407,6 +5488,10 @@
         "collapse": "Hide details"
       },
       "runtime_entry_failed": "Entry failed",
+      "measureCurrentLatency": "Check latency",
+      "measuringCurrentLatency": "Checking",
+      "currentLatencyNotRunning": "No running node is available to check. Start a client using this proxy, or test the configured node in Proxy Management.",
+      "currentLatencyHint": "Checks the running node’s latency to the test URL without changing nodes or proxy policies.",
       "latencyCheckedAt": "Checked at",
       "latencyPending": "Not tested",
       "latencyTimeout": "Timed out",

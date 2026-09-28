@@ -73,7 +73,7 @@
     "exportWarning": "HTML xuất ra là đầu ra gốc của mô hình. Khi mở bên ngoài ứng dụng, tệp không được bảo vệ bằng cơ chế cô lập của bản xem trước.",
     "deliveryHelp": "Mọi tài khoản dùng cùng chỉ dẫn đầu ra: trả về trực tiếp HTML độc lập, không dùng khối mã Markdown hoặc thành phần phụ thuộc bên ngoài.",
     "errorTimeout": "Yêu cầu hết thời gian chờ. Bạn có thể bắt đầu lần thử mới.",
-    "errorStream": "Phản hồi chưa hoàn tất. Nội dung đã nhận được giữ lại.",
+    "errorStream": "Phản hồi thất bại hoặc chưa hoàn tất",
     "errorLimit": "Phản hồi vượt giới hạn dung lượng; đã dừng nhận.",
     "errorPreviewLimit": "Hãy đóng một cửa sổ xem trước trước.",
     "retention": "Tự động dọn dẹp",
@@ -86,6 +86,41 @@
     "viewError": "Xem lỗi"
   },
   "common": {
+    "dragSortHint": "Kéo tay nắm bên trái để đổi thứ tự. Thay đổi tự động lưu khi thả.",
+    "dragSortFilteredHint": "Xóa nội dung tìm kiếm để đổi thứ tự.",
+    "recycleBin": {
+      "loadTimeout": "Đọc thùng rác đã hết thời gian chờ. Hãy làm mới để thử lại.",
+      "refreshFailed": "Đã khôi phục tài khoản nhưng không thể làm mới danh sách. Hãy tải lại danh sách tài khoản.",
+      "moveStarted": "Đã bắt đầu chuyển {{count}} tài khoản vào thùng rác",
+      "title": "Thùng rác",
+      "description": "Tài khoản đã xóa được lưu cục bộ và có thể khôi phục hoặc xuất. Khôi phục không tự chuyển tài khoản, mở ứng dụng hoặc khôi phục liên kết tác vụ hay dịch vụ API.",
+      "empty": "Thùng rác trống",
+      "restore": "Khôi phục",
+      "deletePermanently": "Xóa vĩnh viễn",
+      "emptyBin": "Dọn thùng rác",
+      "deletedAt": "Đã xóa: {{time}}",
+      "confirmDelete": "Xóa vĩnh viễn “{{name}}”? Dữ liệu tài khoản trong thùng rác sẽ bị xóa và không thể khôi phục.",
+      "confirmEmpty": "Xóa vĩnh viễn {{count}} tài khoản này? Dữ liệu trong thùng rác sẽ bị xóa và không thể khôi phục.",
+      "move": "Vào thùng rác",
+      "confirmMove": "Chuyển {{count}} tài khoản vào thùng rác? Bạn có thể khôi phục, xuất hoặc xóa vĩnh viễn tại đó.",
+      "moved": "Đã chuyển vào thùng rác",
+      "moveFailed": "Không thể chuyển vào thùng rác: {{error}}",
+      "operationFailed": "Thao tác thất bại: {{error}}",
+      "export": "Xuất",
+      "exportAll": "Xuất tất cả",
+      "exportAndDelete": "Xuất và xóa",
+      "exportAndEmpty": "Xuất và dọn sạch",
+      "count": "{{count}} tài khoản",
+      "exportHint": "Xuất tệp JSON có thể nhập lại, chứa thông tin xác thực tài khoản. Hãy lưu giữ an toàn. Hủy lưu hoặc xuất thất bại sẽ không xóa tài khoản.",
+      "exported": "Đã xuất tài khoản.",
+      "confirmTitle": "Xóa tài khoản vĩnh viễn?"
+    },
+    "requestProxy": {
+      "value": "Ủy nhiệm: {{name}}",
+      "direct": "Trực tiếp",
+      "unknown": "Chưa ghi nhận",
+      "entryHint": "Chỉ ghi nhận điểm vào ủy nhiệm; nút cuối chưa được xác định."
+    },
     "retry": "Thử lại",
     "quotaRefreshScheduler": {
       "busy": "Hàng đợi làm mới đã đầy. Vui lòng thử lại sau.",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Dọn dữ liệu phiên bản",
+      "description": "Quét thủ công thư mục của các phiên bản được quản lý và xóa dữ liệu không được cấu hình phiên bản hoặc tiến trình đang chạy tham chiếu. Không tự động xóa dữ liệu.",
+      "scan": "Quét",
+      "scanning": "Đang quét…",
+      "remove": "Xóa vĩnh viễn",
+      "removing": "Đang xóa…",
+      "empty": "Không có thư mục dư thừa để dọn",
+      "summary": "Tìm thấy {{count}} thư mục, chiếm {{size}}",
+      "confirm": "Các thư mục sau cùng phiên làm việc, không gian làm việc và bộ nhớ đệm bên trong sẽ bị xóa vĩnh viễn. Không thể hoàn tác thao tác này.",
+      "cancel": "Hủy",
+      "confirmRemove": "Xác nhận xóa",
+      "done": "Đã xóa {{count}} thư mục",
+      "failed": "Thao tác thất bại",
+      "path": "Thư mục",
+      "size": "Dung lượng",
+      "platform": "Nền tảng"
+    },
     "title": "Cài đặt ứng dụng",
     "subtitle": "Cá nhân hóa trải nghiệm Antigravity Cockpit Tools của bạn.",
     "tabs": {
@@ -2063,6 +2116,11 @@
     "other_group": "Mô hình khác"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Không thể xác nhận tài khoản liên kết. Đã dừng khởi động; hãy thử chuyển tài khoản lại.",
+      "processScanFailed": "Không thể kiểm tra các tiến trình nền cũ. Đã dừng khởi động; hãy thử lại.",
+      "proxyEntryFailed": "Không thể khởi động proxy đã cấu hình. Không sử dụng tuyến thay thế; hãy thử lại."
+    },
     "oauthProxy": {
       "toggle": "Đăng nhập qua proxy",
       "hint": "Cửa sổ tích hợp, trao đổi token và lần kiểm tra hạn mức đầu dùng proxy này. Tắt tùy chọn này nếu đăng nhập cần cửa sổ bật lên.",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} máy chủ",
       "autoSyncBadge": "Tự động"
     },
-    "exportAuthFailed": "Xuất lỗi",
-    "exportAuthFailedTitle": "Xuất tất cả tài khoản auth lỗi",
     "accounts": {
       "showRelayQuota": "Hiện hạn mức relay",
       "hideRelayQuota": "Ẩn hạn mức relay"
@@ -4569,6 +4625,18 @@
       "restartFailed": "Không khởi động lại được gateway: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Hiển thị proxy",
+        "compact": "Gọn",
+        "summary": "Tóm tắt",
+        "detailed": "Chi tiết",
+        "hint": "Áp dụng cho mọi thẻ tài khoản Codex; lựa chọn được lưu và áp dụng ngay.",
+        "configuredNode": "Nút đã chọn",
+        "lastRequest": "Yêu cầu gần nhất",
+        "preview": "Xem trước kiểu",
+        "saveFailed": "Không thể lưu tùy chọn hiển thị. Vui lòng thử lại.",
+        "refresh": "Làm mới thông tin"
+      },
       "workspace": {
         "navLabel": "Các mục proxy",
         "overview": "Tổng quan",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "Quy tắc đầu ra",
-        "intro": "Proxy riêng của tài khoản được ưu tiên hơn proxy hợp nhất; khi cả hai đều không áp dụng, yêu cầu giữ nguyên đầu ra mặc định trước đó của ứng dụng.",
+        "intro": "Proxy riêng của tài khoản được ưu tiên hơn proxy hợp nhất; khi cả hai đều không áp dụng, yêu cầu giữ nguyên đầu ra mặc định trước đó của ứng dụng. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy.",
         "order": "Thứ tự áp dụng",
         "tableTitle": "Đầu ra theo tài khoản",
         "columnAccount": "Tài khoản",
@@ -4706,8 +4774,8 @@
       },
       "unified": {
         "title": "Đầu ra proxy hợp nhất",
-        "hint": "Tài khoản đủ điều kiện chưa có proxy riêng dùng chung đầu ra này; tài khoản mới tự động theo.",
-        "offState": "Tắt: proxy của tài khoản được ưu tiên; nếu không có thì dùng đầu ra mặc định.",
+        "hint": "Tài khoản đủ điều kiện chưa có proxy riêng dùng chung đầu ra này; tài khoản mới tự động theo. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy.",
+        "offState": "Tắt: proxy của tài khoản được ưu tiên; nếu không có thì dùng đầu ra mặc định. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy.",
         "enable": "Bật proxy hợp nhất",
         "disable": "Tắt",
         "change": "Đổi đầu ra",
@@ -4725,12 +4793,12 @@
         "changeMessage": "Ứng dụng đang chạy qua bộ chuyển tiếp cục bộ dùng đầu ra mới cho kết nối mới.",
         "changeConfirm": "Đổi",
         "disableTitle": "Tắt proxy hợp nhất",
-        "disableMessage": "Proxy riêng vẫn có hiệu lực; tài khoản chưa liên kết dùng đầu ra mặc định.",
+        "disableMessage": "Proxy riêng vẫn có hiệu lực; tài khoản chưa liên kết dùng đầu ra mặc định. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy.",
         "disableConfirm": "Tắt",
         "restartHint": "Ứng dụng khởi chạy qua bộ chuyển tiếp cục bộ chuyển ở kết nối mới. Ứng dụng khác đang chạy cần khởi động lại một lần.",
         "staleWarning": "Nguồn của đầu ra này không khả dụng. Hãy chọn đầu ra khác.",
         "removedWarning": "Proxy hợp nhất đã tắt vì nguồn của nó đã bị xóa.",
-        "accountsNotice": "Proxy tài khoản được ưu tiên; tài khoản chưa liên kết theo proxy hợp nhất.",
+        "accountsNotice": "Proxy tài khoản được ưu tiên; tài khoản chưa liên kết theo proxy hợp nhất. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy.",
         "unbindBlocked": "Sau khi bỏ liên kết, tài khoản này theo proxy hợp nhất.",
         "following": "Hợp nhất",
         "errorFailed": "Thao tác thất bại. Vui lòng thử lại.",
@@ -4794,6 +4862,11 @@
         "viewAll": "Xem tất cả"
       },
       "previewTitle": "Xem trước proxy",
+      "modeDisabled": "Không dùng proxy",
+      "disableAction": "Gỡ proxy",
+      "setIndependent": "Proxy riêng",
+      "disabledHint": "Bỏ qua proxy riêng và chung; thử kết nối trực tiếp cho kết nối mới.",
+      "disabledWarning": "Truy cập trực tiếp có thể thất bại. Thay đổi áp dụng cho kết nối mới của ứng dụng dùng bộ chuyển tiếp cục bộ; các ứng dụng khác đang chạy cần khởi động lại. Kết nối hiện có có thể tiếp tục dùng tuyến cũ.",
       "exitIp": "IP đầu ra",
       "sessionHistory": "Nhật ký chạy",
       "sessionHistoryHint": "Kiểm tra trạng thái mỗi 5 giây. Chỉ lưu trạng thái ban đầu và thay đổi trong lần xem này, tối đa 20 bản ghi; xóa khi đóng, không phải toàn bộ lịch sử.",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "Đã thiết lập chuyển tiếp cục bộ gần nhất",
       "desktopRequest_failed": "Chuyển tiếp cục bộ gần nhất thất bại",
       "desktopEntryReadyHint": "Cổng vào đang lắng nghe; nhân sẽ khởi động khi nhận yêu cầu kết nối.",
+      "sharedRuntime": "Proxy tài khoản",
       "runtimeMain": "Yêu cầu tài khoản",
       "runtimeDesktop": "Cầu nối máy tính",
       "runtimeHint": "Trạng thái chỉ phản ánh cổng vào và nhân cục bộ. Chuyển tiếp được thiết lập không xác nhận truy cập Internet hay xác định ứng dụng gửi yêu cầu.",
+      "restoreEntry": "Khôi phục chuyển tiếp",
+      "restoringEntry": "Đang khôi phục…",
+      "restoreEntryFailed": "Không thể khôi phục chuyển tiếp proxy cho máy tính. Vui lòng thử lại.",
+      "restoreEntryPortBusy": "Cổng proxy ban đầu đang được sử dụng. Hãy giải phóng cổng rồi thử lại; ứng dụng máy tính không thể tự động đổi sang cổng khác.",
+      "restoreEntryNotRunning": "Không tìm thấy ứng dụng máy tính đang chạy sử dụng đầu vào proxy đã ghi thuộc phiên bản Cockpit này.",
+      "restoreEntryBusy": "Proxy đang được khôi phục. Vui lòng thử lại sau ít phút.",
+      "restoreEntryTimeout": "Khôi phục proxy đã hết thời gian chờ. Vui lòng thử lại.",
       "restartHint": "Ứng dụng khởi chạy qua bộ chuyển tiếp cục bộ chuyển ở kết nối mới. Ứng dụng khác đang chạy cần khởi động lại một lần. Cầu nối máy tính chỉ lắng nghe trên loopback nhưng không cách ly người dùng khác trên máy. Proxy hệ thống không thay đổi.",
       "exportHint": "Dữ liệu xuất tài khoản không chứa thông tin xác thực proxy; cần thiết lập lại sau khi nhập.",
       "backToAccounts": "Về danh sách tài khoản",
@@ -5140,7 +5221,7 @@
         "assign": "Chỉ định proxy",
         "specific": "Tài khoản đã chọn",
         "shared": "Proxy dùng chung",
-        "sharedHint": "Các tài khoản Codex OAuth chưa có proxy riêng sẽ dùng proxy này, kể cả tài khoản phù hợp được thêm sau. Các thiết lập riêng hiện có vẫn có hiệu lực.",
+        "sharedHint": "Các tài khoản Codex OAuth chưa có proxy riêng sẽ dùng proxy này, kể cả tài khoản phù hợp được thêm sau. Các thiết lập riêng hiện có vẫn có hiệu lực. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy.",
         "apply": "Chỉ định"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "Chưa bật",
         "choose": "Đặt proxy",
-        "hint": "Tài khoản không có proxy riêng sẽ dùng proxy này."
+        "hint": "Tài khoản không có proxy riêng sẽ dùng proxy này. Loại trừ các tài khoản đã chọn rõ chế độ Không dùng proxy."
       },
       "setup": {
         "title": "Thiết lập proxy",
@@ -5187,6 +5268,10 @@
         "collapse": "Thu gọn chi tiết"
       },
       "runtime_entry_failed": "Cổng vào lỗi",
+      "measureCurrentLatency": "Đo độ trễ",
+      "measuringCurrentLatency": "Đang đo",
+      "currentLatencyNotRunning": "Không có nút đang chạy để kiểm tra. Hãy khởi động ứng dụng dùng proxy này hoặc kiểm tra nút đã cấu hình trong Quản lý proxy.",
+      "currentLatencyHint": "Đo độ trễ từ nút đang chạy đến URL kiểm tra mà không chuyển nút hay thay đổi chính sách proxy.",
       "latencyCheckedAt": "Thời điểm kiểm tra",
       "latencyPending": "Chưa kiểm tra",
       "latencyTimeout": "Hết thời gian",

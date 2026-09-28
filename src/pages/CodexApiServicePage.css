@@ -2484,6 +2484,15 @@ html[data-reduced-motion="true"] .codex-api-service-key-advanced-toggle[aria-exp
   color: var(--danger);
 }
 
+.codex-api-service-log-row > div:last-child .codex-request-proxy-label {
+  display: inline-block;
+  min-width: 0;
+  max-width: min(24ch, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .codex-api-service-empty {
   display: flex;
   align-items: center;

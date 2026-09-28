@@ -73,7 +73,7 @@
     "exportWarning": "Le HTML exporté est la sortie originale du modèle. S’il est ouvert hors de l’application, l’isolation de l’aperçu ne le protège pas.",
     "deliveryHelp": "Tous les comptes reçoivent la même consigne de livraison : renvoyer directement du HTML autonome, sans blocs de code Markdown ni dépendances externes.",
     "errorTimeout": "La requête a expiré. Vous pouvez lancer un nouveau test.",
-    "errorStream": "La réponse n’a pas été reçue en entier. Le contenu reçu est conservé.",
+    "errorStream": "La réponse a échoué ou est incomplète",
     "errorLimit": "La réponse a dépassé la taille limite ; la réception a été arrêtée.",
     "errorPreviewLimit": "Fermez d’abord une fenêtre d’aperçu.",
     "retention": "Nettoyage automatique",
@@ -86,6 +86,41 @@
     "viewError": "Voir l’erreur"
   },
   "common": {
+    "dragSortHint": "Faites glisser la poignée à gauche pour réordonner. L’ordre est enregistré au relâchement.",
+    "dragSortFilteredHint": "Effacez la recherche pour réordonner.",
+    "recycleBin": {
+      "loadTimeout": "La lecture de la corbeille a expiré. Actualisez pour réessayer.",
+      "refreshFailed": "Compte restauré, mais l’actualisation de la liste a échoué. Rechargez la liste des comptes.",
+      "moveStarted": "Déplacement de {{count}} comptes vers la corbeille lancé",
+      "title": "Corbeille",
+      "description": "Les comptes supprimés restent en local et peuvent être restaurés ou exportés. La restauration ne change pas de compte, ne lance aucun client et ne rétablit pas les liens avec les tâches ou le service API.",
+      "empty": "La corbeille est vide",
+      "restore": "Restaurer",
+      "deletePermanently": "Supprimer à jamais",
+      "emptyBin": "Vider la corbeille",
+      "deletedAt": "Supprimé le {{time}}",
+      "confirmDelete": "Supprimer définitivement « {{name}} » ? Ses données dans la corbeille seront effacées sans possibilité de restauration.",
+      "confirmEmpty": "Supprimer définitivement ces {{count}} comptes ? Leurs données dans la corbeille seront effacées sans possibilité de restauration.",
+      "move": "À la corbeille",
+      "confirmMove": "Déplacer {{count}} comptes dans la corbeille ? Vous pourrez y restaurer, exporter ou supprimer définitivement ces comptes.",
+      "moved": "Déplacé dans la corbeille",
+      "moveFailed": "Échec du déplacement : {{error}}",
+      "operationFailed": "Échec de l’opération : {{error}}",
+      "export": "Exporter",
+      "exportAll": "Tout exporter",
+      "exportAndDelete": "Exporter et supprimer",
+      "exportAndEmpty": "Exporter et vider",
+      "count": "{{count}} comptes",
+      "exportHint": "Exporte un fichier JSON réimportable contenant les identifiants des comptes. Conservez-le en lieu sûr. Annuler l’enregistrement ou un échec d’exportation ne supprime aucun compte.",
+      "exported": "Comptes exportés.",
+      "confirmTitle": "Supprimer définitivement les comptes ?"
+    },
+    "requestProxy": {
+      "value": "Proxy : {{name}}",
+      "direct": "Connexion directe",
+      "unknown": "Non enregistré",
+      "entryHint": "Seule l’entrée du proxy a été enregistrée ; le nœud final est inconnu."
+    },
     "retry": "Réessayer",
     "quotaRefreshScheduler": {
       "busy": "La file d’actualisation est pleine. Réessayez dans un instant.",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Nettoyage des instances",
+      "description": "Analysez manuellement les dossiers des instances gérées et supprimez les données auxquelles aucune configuration d’instance ni aucun processus actif ne fait référence. Rien n’est supprimé automatiquement.",
+      "scan": "Analyser",
+      "scanning": "Analyse…",
+      "remove": "Supprimer définitivement",
+      "removing": "Suppression…",
+      "empty": "Aucun dossier résiduel à nettoyer",
+      "summary": "{{count}} dossiers trouvés, occupant {{size}}",
+      "confirm": "Les dossiers suivants, ainsi que leurs sessions, espaces de travail et caches, seront définitivement supprimés. Cette action est irréversible.",
+      "cancel": "Annuler",
+      "confirmRemove": "Confirmer",
+      "done": "{{count}} dossiers supprimés",
+      "failed": "Échec de l’opération",
+      "path": "Dossier",
+      "size": "Espace utilisé",
+      "platform": "Plateforme"
+    },
     "title": "Paramètres de l'application",
     "subtitle": "Personnalisez votre expérience Cockpit Tools.",
     "tabs": {
@@ -2063,6 +2116,11 @@
     "other_group": "Autres modèles"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Impossible de confirmer le compte associé. Démarrage arrêté ; réessayez de changer de compte.",
+      "processScanFailed": "Impossible de vérifier les anciens processus en arrière-plan. Démarrage arrêté ; réessayez.",
+      "proxyEntryFailed": "Impossible de démarrer le proxy configuré. Aucun autre itinéraire utilisé ; réessayez."
+    },
     "oauthProxy": {
       "toggle": "Autoriser via proxy",
       "hint": "La fenêtre intégrée, l’échange du jeton et le premier contrôle de quota utilisent ce proxy. Désactivez cette option si la connexion nécessite une fenêtre surgissante.",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} serveurs",
       "autoSyncBadge": "Automatique"
     },
-    "exportAuthFailed": "Exporter échecs",
-    "exportAuthFailedTitle": "Exporter tous les comptes en échec d’auth",
     "accounts": {
       "showRelayQuota": "Afficher quota relais",
       "hideRelayQuota": "Masquer quota relais"
@@ -4569,6 +4625,18 @@
       "restartFailed": "Échec du redémarrage de la passerelle : {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Affichage du proxy",
+        "compact": "Condensé",
+        "summary": "Résumé",
+        "detailed": "Détaillé",
+        "hint": "S’applique à toutes les fiches de comptes Codex ; le choix est enregistré et appliqué immédiatement.",
+        "configuredNode": "Nœud configuré",
+        "lastRequest": "Dernière requête",
+        "preview": "Aperçu du style",
+        "saveFailed": "Impossible d’enregistrer le mode d’affichage. Réessayez.",
+        "refresh": "Actualiser les infos"
+      },
       "workspace": {
         "navLabel": "Sections proxy",
         "overview": "Aperçu",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "Règles de sortie",
-        "intro": "Un proxy de compte indépendant prime sur le proxy unifié ; si aucun ne s’applique, les requêtes gardent la sortie par défaut précédente du client.",
+        "intro": "Un proxy de compte indépendant prime sur le proxy unifié ; si aucun ne s’applique, les requêtes gardent la sortie par défaut précédente du client. Les comptes explicitement réglés sur « Sans proxy » sont exclus.",
         "order": "Ordre d’application",
         "tableTitle": "Sorties des comptes",
         "columnAccount": "Compte",
@@ -4707,8 +4775,8 @@
       "batchClearAll": "Tout désélectionner",
       "unified": {
         "title": "Sortie proxy unifiée",
-        "hint": "Les comptes éligibles sans proxy propre partagent cette sortie ; les nouveaux comptes suivent automatiquement.",
-        "offState": "Désactivé : le proxy du compte prévaut, sinon la sortie par défaut s’applique.",
+        "hint": "Les comptes éligibles sans proxy propre partagent cette sortie ; les nouveaux comptes suivent automatiquement. Les comptes explicitement réglés sur « Sans proxy » sont exclus.",
+        "offState": "Désactivé : le proxy du compte prévaut, sinon la sortie par défaut s’applique. Les comptes explicitement réglés sur « Sans proxy » sont exclus.",
         "enable": "Activer pour tous",
         "disable": "Désactiver",
         "change": "Changer de sortie",
@@ -4726,12 +4794,12 @@
         "changeMessage": "Les clients actifs utilisant le relais local passent à la nouvelle sortie lors des nouvelles connexions.",
         "changeConfirm": "Changer",
         "disableTitle": "Désactiver la sortie proxy unifiée",
-        "disableMessage": "Les proxys propres restent actifs ; sans liaison, la sortie par défaut s’applique.",
+        "disableMessage": "Les proxys propres restent actifs ; sans liaison, la sortie par défaut s’applique. Les comptes explicitement réglés sur « Sans proxy » sont exclus.",
         "disableConfirm": "Désactiver",
         "restartHint": "Les clients lancés via le relais local basculent aux nouvelles connexions. Les autres clients actifs doivent redémarrer une fois.",
         "staleWarning": "La source de cette sortie est indisponible. Choisissez-en une autre.",
         "removedWarning": "La sortie proxy unifiée a été désactivée car sa source a été supprimée.",
-        "accountsNotice": "Le proxy du compte prévaut ; les comptes sans liaison suivent le proxy unifié.",
+        "accountsNotice": "Le proxy du compte prévaut ; les comptes sans liaison suivent le proxy unifié. Les comptes explicitement réglés sur « Sans proxy » sont exclus.",
         "unbindBlocked": "Après suppression de la liaison, ce compte suit le proxy unifié.",
         "following": "Unifiée",
         "errorFailed": "Échec de l’action. Réessayez.",
@@ -4794,6 +4862,11 @@
         "viewAll": "Tout voir"
       },
       "previewTitle": "Aperçu du proxy",
+      "modeDisabled": "Sans proxy",
+      "disableAction": "Retirer le proxy",
+      "setIndependent": "Proxy individuel",
+      "disabledHint": "Ignorer les proxys individuels et partagés ; tenter une connexion directe.",
+      "disabledWarning": "L’accès direct peut échouer. Les nouvelles connexions des applications utilisant le relais local prennent en compte ce choix ; les autres clients en cours nécessitent un redémarrage. Les connexions existantes peuvent conserver leur ancien itinéraire.",
       "exitIp": "IP de sortie",
       "sessionHistory": "Activité",
       "sessionHistoryHint": "État vérifié toutes les 5 secondes. État initial et changements de cet aperçu uniquement, 20 entrées maximum, effacées à la fermeture. Ce n’est pas un historique complet.",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "Dernier relais local établi",
       "desktopRequest_failed": "Échec du dernier relais local",
       "desktopEntryReadyHint": "L’entrée est à l’écoute ; le moteur démarre à la réception d’une demande de connexion.",
+      "sharedRuntime": "Proxy du compte",
       "runtimeMain": "Requêtes du compte",
       "runtimeDesktop": "Relais bureau",
       "runtimeHint": "L’état décrit uniquement l’entrée locale et le moteur. Un relais établi ne confirme ni l’accès à Internet ni l’identité du client demandeur.",
+      "restoreEntry": "Rétablir le relais",
+      "restoringEntry": "Rétablissement…",
+      "restoreEntryFailed": "Impossible de rétablir le relais proxy du bureau. Réessayez.",
+      "restoreEntryPortBusy": "Le port proxy initial est occupé. Libérez-le puis réessayez ; l’application de bureau ne peut pas changer de port automatiquement.",
+      "restoreEntryNotRunning": "Aucune application de bureau en cours utilisant une entrée proxy enregistrée de cette instance Cockpit n’a été trouvée.",
+      "restoreEntryBusy": "Le rétablissement du proxy est déjà en cours. Réessayez dans un instant.",
+      "restoreEntryTimeout": "Le rétablissement du proxy a expiré. Réessayez.",
       "restartHint": "Les clients lancés via le relais local basculent aux nouvelles connexions. Les autres clients actifs doivent redémarrer une fois. Le relais bureau écoute uniquement en boucle locale, sans isoler les autres utilisateurs locaux. Le proxy système reste inchangé.",
       "exportHint": "Les exports de comptes excluent les identifiants du proxy ; reconfigurez-les après l’import.",
       "backToAccounts": "Retour aux comptes",
@@ -5140,7 +5221,7 @@
         "assign": "Attribuer un proxy",
         "specific": "Comptes choisis",
         "shared": "Proxy partagé",
-        "sharedHint": "Les comptes Codex OAuth sans proxy propre utiliseront celui-ci, y compris les comptes compatibles ajoutés ensuite. Les réglages individuels existants restent actifs.",
+        "sharedHint": "Les comptes Codex OAuth sans proxy propre utiliseront celui-ci, y compris les comptes compatibles ajoutés ensuite. Les réglages individuels existants restent actifs. Les comptes explicitement réglés sur « Sans proxy » sont exclus.",
         "apply": "Attribuer"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "Désactivé",
         "choose": "Définir le proxy",
-        "hint": "Les comptes sans proxy propre utilisent celui-ci."
+        "hint": "Les comptes sans proxy propre utilisent celui-ci. Les comptes explicitement réglés sur « Sans proxy » sont exclus."
       },
       "setup": {
         "title": "Configurer les proxys",
@@ -5187,6 +5268,10 @@
         "collapse": "Masquer les détails"
       },
       "runtime_entry_failed": "Échec de l’entrée",
+      "measureCurrentLatency": "Mesurer",
+      "measuringCurrentLatency": "Mesure en cours",
+      "currentLatencyNotRunning": "Aucun nœud actif à tester. Lancez un client utilisant ce proxy ou testez le nœud configuré dans la gestion des proxys.",
+      "currentLatencyHint": "Mesure la latence du nœud actif vers l’URL de test sans changer de nœud ni modifier les règles du proxy.",
       "latencyCheckedAt": "Vérifié à",
       "latencyPending": "Non testé",
       "latencyTimeout": "Délai dépassé",

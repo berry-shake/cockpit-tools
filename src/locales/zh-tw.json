@@ -73,7 +73,7 @@
     "exportWarning": "匯出的是模型原始 HTML；在應用程式外開啟時，不受預覽隔離保護。",
     "deliveryHelp": "所有帳號使用相同的交付約定：直接傳回獨立 HTML，不使用 Markdown 程式碼區塊或外部相依項目。",
     "errorTimeout": "請求逾時，可手動重新測試",
-    "errorStream": "回應未完整結束，已保留收到的內容",
+    "errorStream": "回應失敗或未完整結束",
     "errorLimit": "回應超過大小上限，已停止接收",
     "errorPreviewLimit": "請先關閉一個預覽視窗",
     "retention": "自動清理",
@@ -86,6 +86,41 @@
     "viewError": "查看錯誤"
   },
   "common": {
+    "dragSortHint": "拖曳左側把手調整順序，放開後自動儲存。",
+    "dragSortFilteredHint": "清除搜尋後可調整順序。",
+    "recycleBin": {
+      "loadTimeout": "讀取回收筒逾時，請重新整理再試。",
+      "refreshFailed": "帳號已還原，但帳號清單重新整理失敗，請重新載入清單。",
+      "moveStarted": "已開始移至回收筒（{{count}} 個帳號）",
+      "title": "資源回收筒",
+      "description": "刪除的帳號保留在本機，可還原或匯出。還原不會自動切換帳號、啟動用戶端或還原任務及 API 服務綁定。",
+      "empty": "資源回收筒是空的",
+      "restore": "還原",
+      "deletePermanently": "永久刪除",
+      "emptyBin": "清空回收筒",
+      "deletedAt": "刪除於 {{time}}",
+      "confirmDelete": "永久刪除「{{name}}」？回收筒中的帳號資料將永久移除，無法還原。",
+      "confirmEmpty": "永久刪除這 {{count}} 個帳號？回收筒中的帳號資料將永久移除，無法還原。",
+      "move": "移至回收筒",
+      "confirmMove": "將 {{count}} 個帳號移至回收筒？之後可在回收筒中還原、匯出或永久刪除。",
+      "moved": "已移至回收筒",
+      "moveFailed": "移至回收筒失敗：{{error}}",
+      "operationFailed": "操作失敗：{{error}}",
+      "export": "匯出",
+      "exportAll": "全部匯出",
+      "exportAndDelete": "匯出並刪除",
+      "exportAndEmpty": "匯出並清空",
+      "count": "{{count}} 個帳號",
+      "exportHint": "匯出為可重新匯入的 JSON 檔案，內含帳號憑證，請妥善保管。取消儲存或匯出失敗時不會刪除帳號。",
+      "exported": "帳號已匯出。",
+      "confirmTitle": "永久移除帳號？"
+    },
+    "requestProxy": {
+      "value": "代理：{{name}}",
+      "direct": "直連",
+      "unknown": "未記錄",
+      "entryHint": "僅記錄代理入口，最終節點未記錄。"
+    },
     "retry": "重試",
     "quotaRefreshScheduler": {
       "busy": "重新整理佇列忙碌，請稍後再試。",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "執行個體殘留清理",
+      "description": "手動掃描受管執行個體目錄，清理未被執行個體設定或執行中程序參照的資料。不會自動刪除。",
+      "scan": "掃描",
+      "scanning": "掃描中…",
+      "remove": "永久刪除",
+      "removing": "刪除中…",
+      "empty": "未發現可清理的殘留目錄",
+      "summary": "發現 {{count}} 個目錄，共 {{size}}",
+      "confirm": "將永久刪除下列目錄及其中的工作階段、工作區和快取，無法復原。",
+      "cancel": "取消",
+      "confirmRemove": "確認刪除",
+      "done": "已刪除 {{count}} 個目錄",
+      "failed": "操作失敗",
+      "path": "目錄",
+      "size": "占用",
+      "platform": "平台"
+    },
     "title": "應用程式設定",
     "subtitle": "個性化您的 Cockpit Tools 體驗。",
     "tabs": {
@@ -782,7 +835,7 @@
       "themeDark": "深色 (Dark)",
       "themeSystem": "跟隨系統",
       "uiScale": "介面縮放",
-      "uiScaleDesc": "調整介面縮放比例（⌘+/⌘- 縮放，⌘0 重設）",
+      "uiScaleDesc": "調整介面縮放比例（⌘+/⌘- 或 Ctrl+/Ctrl-，⌘0/Ctrl+0 重設）",
       "accountManagement": "帳號管理",
       "autoRefresh": "Antigravity IDE 自動刷新配額",
       "codexAutoRefresh": "Codex 自動刷新配額",
@@ -2063,6 +2116,11 @@
     "other_group": "其他模型"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "無法確認帳號綁定，已停止啟動，請重試切換帳號。",
+      "processScanFailed": "無法檢查舊背景程序，已停止啟動，請重試。",
+      "proxyEntryFailed": "設定的代理入口無法啟動，未改用其他出口，請重試。"
+    },
     "oauthProxy": {
       "toggle": "透過代理授權",
       "hint": "內建授權視窗、權杖交換與首次額度查詢使用此代理。 若登入需要彈出視窗，請關閉此選項。",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} 台",
       "autoSyncBadge": "汽車"
     },
-    "exportAuthFailed": "匯出失敗帳號",
-    "exportAuthFailedTitle": "匯出全部授權失敗帳號",
     "accounts": {
       "showRelayQuota": "顯示中轉額度",
       "hideRelayQuota": "隱藏中轉額度"
@@ -4569,6 +4625,18 @@
       "restartFailed": "重新啟動閘道失敗：{{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "代理顯示",
+        "compact": "簡略",
+        "summary": "摘要",
+        "detailed": "詳細",
+        "hint": "套用至所有 Codex 帳號卡片，立即生效並記住選擇。",
+        "configuredNode": "已設定節點",
+        "lastRequest": "最近請求",
+        "preview": "樣式預覽",
+        "saveFailed": "無法儲存顯示偏好，請重試。",
+        "refresh": "重新整理"
+      },
       "workspace": {
         "navLabel": "代理分區導覽",
         "overview": "總覽",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "出口規則",
-        "intro": "帳號獨立代理優先於統一代理；兩者都未生效時，請求沿用用戶端原有的預設出口。",
+        "intro": "帳號獨立代理優先於統一代理；兩者都未生效時，請求沿用用戶端原有的預設出口。 明確選擇「不使用代理」的帳號除外。",
         "order": "生效順序",
         "tableTitle": "帳號出口一覽",
         "columnAccount": "帳號",
@@ -4706,8 +4774,8 @@
       },
       "unified": {
         "title": "統一代理出口",
-        "hint": "未綁定獨立代理的適用帳號共用此出口，新增帳號會自動跟隨。",
-        "offState": "未啟用：使用帳號獨立代理；未綁定時使用預設出口。",
+        "hint": "未綁定獨立代理的適用帳號共用此出口，新增帳號會自動跟隨。 明確選擇「不使用代理」的帳號除外。",
+        "offState": "未啟用：使用帳號獨立代理；未綁定時使用預設出口。 明確選擇「不使用代理」的帳號除外。",
         "enable": "啟用統一代理",
         "disable": "關閉",
         "change": "更換出口",
@@ -4725,12 +4793,12 @@
         "changeMessage": "更換後，透過本機轉接的執行中用戶端會從新連線起使用新出口。",
         "changeConfirm": "確認更換",
         "disableTitle": "關閉統一代理",
-        "disableMessage": "關閉後，帳號獨立代理繼續生效；未綁定時使用預設出口。",
+        "disableMessage": "關閉後，帳號獨立代理繼續生效；未綁定時使用預設出口。 明確選擇「不使用代理」的帳號除外。",
         "disableConfirm": "確認關閉",
         "restartHint": "透過本機轉接啟動的用戶端，新連線會自動使用新出口；其他執行中的用戶端需重啟一次。",
         "staleWarning": "統一代理引用的來源已失效，請重新選擇出口。",
         "removedWarning": "統一代理引用的來源已被刪除，功能已自動關閉。",
-        "accountsNotice": "帳號獨立代理優先；未綁定帳號跟隨統一代理。",
+        "accountsNotice": "帳號獨立代理優先；未綁定帳號跟隨統一代理。 明確選擇「不使用代理」的帳號除外。",
         "unbindBlocked": "解除綁定後將跟隨統一代理。",
         "following": "統一",
         "errorFailed": "操作失敗，請重試。",
@@ -4794,6 +4862,11 @@
         "viewAll": "查看全部"
       },
       "previewTitle": "代理預覽",
+      "modeDisabled": "不使用代理",
+      "disableAction": "解除代理",
+      "setIndependent": "設定獨立代理",
+      "disabledHint": "略過獨立與統一代理，新連線嘗試直連。",
+      "disabledWarning": "直連可能無法存取服務。已接入本機轉接的桌面對新連線生效，其他執行中的用戶端需重新啟動；既有連線可能繼續使用舊出口。",
       "exitIp": "出口 IP",
       "sessionHistory": "執行記錄",
       "sessionHistoryHint": "每 5 秒讀取狀態，僅記錄本次預覽的初始狀態與變化（最多 20 筆）；關閉後清空，並非完整歷史日誌。",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "最近一次本機轉接已建立",
       "desktopRequest_failed": "最近一次本機轉接失敗",
       "desktopEntryReadyHint": "入口已監聽，核心會在收到連線請求後啟動。",
+      "sharedRuntime": "帳號代理",
       "runtimeMain": "帳號請求",
       "runtimeDesktop": "桌面轉接",
       "runtimeHint": "狀態僅反映本機入口與核心；轉接建立不代表外網可達，也不能確認請求來自哪個用戶端。",
+      "restoreEntry": "恢復轉接",
+      "restoringEntry": "恢復中…",
+      "restoreEntryFailed": "桌面代理轉接恢復失敗，請重試。",
+      "restoreEntryPortBusy": "原代理連接埠已被占用，請釋放後重試；桌面端無法自動改用其他連接埠。",
+      "restoreEntryNotRunning": "找不到仍在執行且使用目前 Cockpit 已記錄代理入口的桌面端。",
+      "restoreEntryBusy": "代理正在恢復，請稍後重試。",
+      "restoreEntryTimeout": "代理恢復逾時，請重試。",
       "restartHint": "透過本機轉接啟動的用戶端，新連線會自動使用新出口；其他執行中的用戶端需重啟一次。桌面轉接僅監聽本機，但不隔離本機其他使用者；不變更系統代理。",
       "exportHint": "帳號匯出不含代理憑證，匯入後需重新設定。",
       "backToAccounts": "返回帳號",
@@ -5140,7 +5221,7 @@
         "assign": "指派代理",
         "specific": "指定帳號",
         "shared": "設為共用代理",
-        "sharedHint": "未個別設定的 Codex OAuth 帳號會使用此代理，之後新增的適用帳號也會跟隨。既有的個別設定維持不變。",
+        "sharedHint": "未個別設定的 Codex OAuth 帳號會使用此代理，之後新增的適用帳號也會跟隨。既有的個別設定維持不變。 明確選擇「不使用代理」的帳號除外。",
         "apply": "確認指派"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "未開啟",
         "choose": "設定代理",
-        "hint": "未個別設定的帳號使用此代理。"
+        "hint": "未個別設定的帳號使用此代理。 明確選擇「不使用代理」的帳號除外。"
       },
       "setup": {
         "title": "開始使用代理",
@@ -5187,6 +5268,10 @@
         "collapse": "收合詳情"
       },
       "runtime_entry_failed": "入口失敗",
+      "measureCurrentLatency": "檢測延遲",
+      "measuringCurrentLatency": "檢測中",
+      "currentLatencyNotRunning": "目前沒有可檢測的執行中節點，請先啟動使用此代理的用戶端，或在代理管理中檢測已設定的節點。",
+      "currentLatencyHint": "檢測目前執行中節點到測試網址的延遲；不會切換節點或修改代理策略。",
       "latencyCheckedAt": "檢測時間",
       "latencyPending": "待檢測",
       "latencyTimeout": "逾時",

@@ -80,6 +80,7 @@ pub mod hermes_auth;
 pub mod i18n;
 pub mod import;
 pub mod instance;
+pub mod instance_storage_cleanup;
 pub mod instance_store;
 pub mod kiro_account;
 pub mod kiro_instance;

@@ -1598,15 +1598,33 @@ async fn import_account_from_json_value(
     value: serde_json::Value,
 ) -> Result<Option<CodexAccount>, String> {
     let metadata = CodexPortableAccountMetadata::from_value(&value);
+    let exchange_api_key = read_imported_oauth_exchange_api_key(&value);
     let Some(mut account) = import_account_core_from_json_value(value).await? else {
         return Ok(None);
     };
 
-    if apply_portable_account_metadata(&mut account, &metadata) {
+    let mut changed = apply_portable_account_metadata(&mut account, &metadata);
+    if !account.is_api_key_auth() {
+        if let Some(key) = exchange_api_key {
+            if account.oauth_exchange_api_key.as_ref() != Some(&key) {
+                account.oauth_exchange_api_key = Some(key);
+                changed = true;
+            }
+        }
+    }
+    if changed {
         save_account(&account)?;
     }
     apply_imported_group_assignment(&account, &metadata);
     Ok(Some(account))
+}
+
+// Native account exports and official auth.json use different names for the
+// optional OAuth exchange result. Keep it separate from API-key authentication.
+fn read_imported_oauth_exchange_api_key(value: &serde_json::Value) -> Option<String> {
+    ["oauth_exchange_api_key", "OPENAI_API_KEY"]
+        .iter()
+        .find_map(|key| value.get(*key).and_then(serde_json::Value::as_str).and_then(normalize_api_key))
 }
 
 async fn import_account_core_from_json_value(
@@ -1783,7 +1801,10 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
         }
 
         if let Some(tokens) = auth_file.tokens {
-            let mut account = upsert_account_from_auth_tokens(tokens, fallback_api_key)?;
+            let exchange_api_key = fallback_api_key.or_else(|| {
+                raw_value.as_ref().and_then(read_imported_oauth_exchange_api_key)
+            });
+            let mut account = upsert_account_from_auth_tokens(tokens, exchange_api_key)?;
             if let Some(value) = raw_value.as_ref() {
                 save_account_note_update_if_present(
                     &mut account,
@@ -1882,7 +1903,11 @@ pub fn export_accounts(account_ids: &[String]) -> Result<String, String> {
         .filter_map(|id| load_account(id))
         .collect();
 
-    serde_json::to_string_pretty(&accounts).map_err(|e| format!("序列化失败: {}", e))
+    serialize_accounts_for_export(&accounts)
+}
+
+fn serialize_accounts_for_export(accounts: &[CodexAccount]) -> Result<String, String> {
+    serde_json::to_string_pretty(accounts).map_err(|e| format!("序列化失败: {}", e))
 }
 
 #[derive(serde::Serialize, Clone)]

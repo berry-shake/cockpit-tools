@@ -202,6 +202,9 @@ pub struct CodexAccount {
         serialize_with = "crate::modules::codex_account_proxy::serialize_summary"
     )]
     pub egress_proxy_url: Option<String>,
+    /// Explicit opt-out: bypass account/shared proxies without changing other accounts.
+    #[serde(default)]
+    pub egress_proxy_disabled: bool,
     /// Codex OAuth 设备指纹收敛模式。未设置时按 `off` 处理。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     // Legacy import/export metadata only; never projected into runtime credentials.
@@ -613,6 +616,7 @@ impl CodexAccount {
             account_structure: None,
             account_note: None,
             egress_proxy_url: None,
+            egress_proxy_disabled: false,
             codex_fingerprint_mode: None,
             codex_cli_only: false,
             codex_cli_only_allow_app_server: false,

@@ -197,6 +197,25 @@ func TestSanitizeCodexInputItemIDsNormalizesCustomToolCallOutputIDs(t *testing.T
 	}
 }
 
+func TestSanitizeCodexInputItemIDsPreservesEncryptedReasoningIdentity(t *testing.T) {
+	for _, id := range []string{"third-party-id", strings.Repeat("a", 64), "rs_original"} {
+		t.Run(id, func(t *testing.T) {
+			item := fmt.Sprintf(`{"type":"reasoning","id":%q,"encrypted_content":"opaque-ciphertext","summary":[]}`, id)
+			body := []byte(`{"input":[` + item + `,{"type":"reasoning","id":"rs_` + id + `"},{"type":"message","id":"user"}]}`)
+			got := SanitizeCodexInputItemIDs(body)
+			if actual := gjson.GetBytes(got, "input.0").Raw; actual != item {
+				t.Fatalf("encrypted reasoning changed: %s", actual)
+			}
+			if actual := gjson.GetBytes(got, "input.2.id").String(); actual != "msg_user" {
+				t.Fatalf("message normalization lost: %q", actual)
+			}
+			if again := SanitizeCodexInputItemIDs(got); string(again) != string(got) {
+				t.Fatalf("repeated sanitization changed history: %s", again)
+			}
+		})
+	}
+}
+
 func TestSanitizeCodexInputItemIDsDropsOverlongEncryptedReasoningItem(t *testing.T) {
 	longReasoningID := "rs_" + strings.Repeat("a", 64)
 	shortReasoningID := "rs_" + strings.Repeat("b", 48)

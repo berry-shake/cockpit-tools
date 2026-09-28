@@ -73,7 +73,7 @@
     "exportWarning": "HTML yang diekspor adalah keluaran asli model. Jika dibuka di luar aplikasi, perlindungan isolasi pratinjau tidak berlaku.",
     "deliveryHelp": "Semua akun menggunakan instruksi keluaran yang sama: kembalikan HTML mandiri secara langsung tanpa blok kode Markdown atau komponen eksternal.",
     "errorTimeout": "Waktu permintaan habis. Anda dapat memulai pengujian baru.",
-    "errorStream": "Balasan belum selesai. Konten yang diterima tetap disimpan.",
+    "errorStream": "Respons gagal atau tidak selesai",
     "errorLimit": "Balasan melebihi batas ukuran; penerimaan dihentikan.",
     "errorPreviewLimit": "Tutup satu jendela pratinjau terlebih dahulu.",
     "retention": "Pembersihan otomatis",
@@ -86,6 +86,41 @@
     "viewError": "Lihat kesalahan"
   },
   "common": {
+    "dragSortHint": "Seret pegangan kiri untuk mengubah urutan. Perubahan otomatis disimpan saat dilepas.",
+    "dragSortFilteredHint": "Hapus pencarian untuk mengubah urutan.",
+    "recycleBin": {
+      "loadTimeout": "Waktu membaca sampah habis. Segarkan untuk mencoba lagi.",
+      "refreshFailed": "Akun dipulihkan, tetapi daftar akun gagal disegarkan. Muat ulang daftar akun.",
+      "moveStarted": "Mulai memindahkan {{count}} akun ke sampah",
+      "title": "Sampah",
+      "description": "Akun yang dihapus disimpan secara lokal dan dapat dipulihkan atau diekspor. Pemulihan tidak mengganti akun, menjalankan klien, atau memulihkan tautan tugas maupun layanan API.",
+      "empty": "Sampah kosong",
+      "restore": "Pulihkan",
+      "deletePermanently": "Hapus permanen",
+      "emptyBin": "Kosongkan sampah",
+      "deletedAt": "Dihapus: {{time}}",
+      "confirmDelete": "Hapus “{{name}}” secara permanen? Data akun di sampah akan dihapus dan tidak dapat dipulihkan.",
+      "confirmEmpty": "Hapus {{count}} akun ini secara permanen? Data di sampah akan dihapus dan tidak dapat dipulihkan.",
+      "move": "Ke sampah",
+      "confirmMove": "Pindahkan {{count}} akun ke sampah? Di sana Anda dapat memulihkan, mengekspor, atau menghapusnya secara permanen.",
+      "moved": "Dipindahkan ke sampah",
+      "moveFailed": "Gagal memindahkan ke sampah: {{error}}",
+      "operationFailed": "Operasi gagal: {{error}}",
+      "export": "Ekspor",
+      "exportAll": "Ekspor semua",
+      "exportAndDelete": "Ekspor & hapus",
+      "exportAndEmpty": "Ekspor & kosongkan",
+      "count": "{{count}} akun",
+      "exportHint": "Mengekspor berkas JSON yang dapat diimpor kembali. Berkas berisi kredensial akun; simpan dengan aman. Membatalkan penyimpanan atau ekspor yang gagal tidak akan menghapus akun.",
+      "exported": "Akun diekspor.",
+      "confirmTitle": "Hapus akun secara permanen?"
+    },
+    "requestProxy": {
+      "value": "Proksi: {{name}}",
+      "direct": "Langsung",
+      "unknown": "Tidak tercatat",
+      "entryHint": "Hanya pintu masuk proksi yang tercatat; simpul akhir tidak diketahui."
+    },
     "retry": "Coba lagi",
     "quotaRefreshScheduler": {
       "busy": "Antrean pembaruan penuh. Coba lagi sebentar.",
@@ -811,6 +846,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Pembersihan instans",
+      "description": "Pindai folder instans terkelola secara manual dan hapus data yang tidak dirujuk oleh konfigurasi instans atau proses yang sedang berjalan. Tidak ada penghapusan otomatis.",
+      "scan": "Pindai",
+      "scanning": "Memindai…",
+      "remove": "Hapus permanen",
+      "removing": "Menghapus…",
+      "empty": "Tidak ada folder sisa untuk dibersihkan",
+      "summary": "Ditemukan {{count}} folder yang menggunakan {{size}}",
+      "confirm": "Folder berikut beserta sesi, ruang kerja, dan cache di dalamnya akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
+      "cancel": "Batal",
+      "confirmRemove": "Konfirmasi",
+      "done": "{{count}} folder dihapus",
+      "failed": "Operasi gagal",
+      "path": "Direktori",
+      "size": "Ruang terpakai",
+      "platform": "Jenis platform"
+    },
     "title": "Pengaturan",
     "subtitle": "Sesuaikan pengalaman Cockpit Tools Anda.",
     "tabs": {
@@ -2110,6 +2163,11 @@
     "other_group": "Model Lainnya"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Tidak dapat memastikan akun yang terhubung. Proses mulai dihentikan; coba beralih akun lagi.",
+      "processScanFailed": "Tidak dapat memeriksa proses latar belakang sebelumnya. Proses mulai dihentikan; coba lagi.",
+      "proxyEntryFailed": "Proxy yang dikonfigurasi tidak dapat dimulai. Rute lain tidak digunakan; coba lagi."
+    },
     "oauthProxy": {
       "toggle": "Masuk lewat proksi",
       "hint": "Jendela bawaan, pertukaran token, dan pemeriksaan kuota pertama memakai proksi ini. Matikan opsi ini jika proses masuk memerlukan jendela pop-up.",
@@ -4582,8 +4640,6 @@
       "serverCount": "{{count}} server",
       "autoSyncBadge": "Mobil"
     },
-    "exportAuthFailed": "Ekspor gagal",
-    "exportAuthFailedTitle": "Ekspor semua akun auth gagal",
     "accounts": {
       "showRelayQuota": "Tampilkan kuota relay",
       "hideRelayQuota": "Sembunyikan kuota relay"
@@ -4616,6 +4672,18 @@
       "restartFailed": "Gagal memulai ulang gateway: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Tampilan proksi",
+        "compact": "Ringkas",
+        "summary": "Ringkasan",
+        "detailed": "Terperinci",
+        "hint": "Berlaku untuk semua kartu akun Codex; pilihan langsung disimpan dan diterapkan.",
+        "configuredNode": "Simpul terkonfigurasi",
+        "lastRequest": "Permintaan terakhir",
+        "preview": "Pratinjau gaya",
+        "saveFailed": "Preferensi tampilan tidak dapat disimpan. Coba lagi.",
+        "refresh": "Segarkan info"
+      },
       "workspace": {
         "navLabel": "Bagian proksi",
         "overview": "Ringkasan",
@@ -4708,7 +4776,7 @@
       },
       "rules": {
         "title": "Aturan keluar",
-        "intro": "Proksi khusus akun diprioritaskan di atas proksi terpadu; jika keduanya tidak berlaku, permintaan memakai jalur keluar bawaan klien sebelumnya.",
+        "intro": "Proksi khusus akun diprioritaskan di atas proksi terpadu; jika keduanya tidak berlaku, permintaan memakai jalur keluar bawaan klien sebelumnya. Akun yang secara khusus memilih Tanpa proksi dikecualikan.",
         "order": "Urutan berlaku",
         "tableTitle": "Daftar jalur keluar akun",
         "columnAccount": "Akun",
@@ -4753,8 +4821,8 @@
       },
       "unified": {
         "title": "Egress proxy terpadu",
-        "hint": "Akun yang memenuhi syarat tanpa proksi sendiri memakai egress ini bersama; akun baru ikut otomatis.",
-        "offState": "Nonaktif: proksi akun berlaku; jika tidak ada, egress bawaan digunakan.",
+        "hint": "Akun yang memenuhi syarat tanpa proksi sendiri memakai egress ini bersama; akun baru ikut otomatis. Akun yang secara khusus memilih Tanpa proksi dikecualikan.",
+        "offState": "Nonaktif: proksi akun berlaku; jika tidak ada, egress bawaan digunakan. Akun yang secara khusus memilih Tanpa proksi dikecualikan.",
         "enable": "Aktifkan egress proxy",
         "disable": "Matikan",
         "change": "Ganti egress",
@@ -4772,12 +4840,12 @@
         "changeMessage": "Klien aktif dengan penerus lokal memakai egress baru untuk koneksi baru.",
         "changeConfirm": "Ganti",
         "disableTitle": "Matikan egress proxy terpadu",
-        "disableMessage": "Proksi akun tetap berlaku; tanpa ikatan, egress bawaan digunakan.",
+        "disableMessage": "Proksi akun tetap berlaku; tanpa ikatan, egress bawaan digunakan. Akun yang secara khusus memilih Tanpa proksi dikecualikan.",
         "disableConfirm": "Matikan",
         "restartHint": "Klien yang dibuka melalui penerus lokal beralih pada koneksi baru. Klien aktif lainnya perlu sekali dimulai ulang.",
         "staleWarning": "Sumber egress ini tidak tersedia. Pilih egress lain.",
         "removedWarning": "Egress proxy terpadu dimatikan karena sumbernya dihapus.",
-        "accountsNotice": "Proksi akun diutamakan; akun tanpa ikatan mengikuti proksi terpadu.",
+        "accountsNotice": "Proksi akun diutamakan; akun tanpa ikatan mengikuti proksi terpadu. Akun yang secara khusus memilih Tanpa proksi dikecualikan.",
         "unbindBlocked": "Setelah dilepas, akun ini mengikuti proksi terpadu.",
         "following": "Terpadu",
         "errorFailed": "Tindakan gagal. Coba lagi.",
@@ -4841,6 +4909,11 @@
         "viewAll": "Lihat semua"
       },
       "previewTitle": "Pratinjau proksi",
+      "modeDisabled": "Tanpa proksi",
+      "disableAction": "Lepas proksi",
+      "setIndependent": "Proksi sendiri",
+      "disabledHint": "Lewati proksi akun dan bersama; coba koneksi langsung untuk sambungan baru.",
+      "disabledWarning": "Akses langsung bisa gagal. Perubahan berlaku pada sambungan baru klien dengan penerus lokal; klien lain yang sedang berjalan perlu dimulai ulang. Sambungan yang ada dapat tetap memakai rute sebelumnya.",
       "exitIp": "IP keluar",
       "sessionHistory": "Riwayat operasi",
       "sessionHistoryHint": "Memeriksa status setiap 5 detik. Hanya menyimpan status awal dan perubahan selama pratinjau ini, maksimal 20 catatan. Dihapus saat ditutup; bukan riwayat lengkap.",
@@ -4871,9 +4944,17 @@
       "desktopRequest_forwarded": "Penerusan lokal terakhir tersambung",
       "desktopRequest_failed": "Penerusan lokal terakhir gagal",
       "desktopEntryReadyHint": "Pintu masuk sedang mendengarkan; mesin dimulai saat permintaan koneksi diterima.",
+      "sharedRuntime": "Proksi akun",
       "runtimeMain": "Permintaan akun",
       "runtimeDesktop": "Jembatan desktop",
       "runtimeHint": "Status hanya menjelaskan pintu masuk dan mesin lokal. Penerusan yang tersambung tidak memastikan akses Internet atau mengidentifikasi klien pengirim permintaan.",
+      "restoreEntry": "Pulihkan relai",
+      "restoringEntry": "Memulihkan…",
+      "restoreEntryFailed": "Relai proksi desktop tidak dapat dipulihkan. Coba lagi.",
+      "restoreEntryPortBusy": "Port proksi semula sedang digunakan. Bebaskan port lalu coba lagi; desktop tidak dapat memakai port lain secara otomatis.",
+      "restoreEntryNotRunning": "Tidak ditemukan desktop aktif yang memakai pintu masuk proksi tercatat milik Cockpit ini.",
+      "restoreEntryBusy": "Pemulihan proksi sedang berlangsung. Coba lagi sebentar.",
+      "restoreEntryTimeout": "Pemulihan proksi kehabisan waktu. Coba lagi.",
       "restartHint": "Klien yang dibuka melalui penerus lokal beralih pada koneksi baru. Klien aktif lainnya perlu sekali dimulai ulang. Jembatan desktop hanya mendengarkan pada loopback, tetapi tidak mengisolasi pengguna lokal lain. Proksi sistem tidak berubah.",
       "exportHint": "Ekspor akun tidak menyertakan kredensial proksi; atur kembali setelah mengimpor.",
       "backToAccounts": "Kembali ke akun",
@@ -5187,7 +5268,7 @@
         "assign": "Tetapkan proksi",
         "specific": "Akun terpilih",
         "shared": "Proksi bersama",
-        "sharedHint": "Akun Codex OAuth tanpa proksi sendiri menggunakan proksi ini, termasuk akun yang memenuhi syarat yang ditambahkan nanti. Pengaturan individual yang ada tetap berlaku.",
+        "sharedHint": "Akun Codex OAuth tanpa proksi sendiri menggunakan proksi ini, termasuk akun yang memenuhi syarat yang ditambahkan nanti. Pengaturan individual yang ada tetap berlaku. Akun yang secara khusus memilih Tanpa proksi dikecualikan.",
         "apply": "Tetapkan"
       },
       "managerResources": {
@@ -5220,7 +5301,7 @@
       "managerUnified": {
         "off": "Nonaktif",
         "choose": "Atur proksi",
-        "hint": "Akun tanpa proksi sendiri menggunakan proksi ini."
+        "hint": "Akun tanpa proksi sendiri menggunakan proksi ini. Akun yang secara khusus memilih Tanpa proksi dikecualikan."
       },
       "setup": {
         "title": "Siapkan proksi",
@@ -5234,6 +5315,10 @@
         "collapse": "Sembunyikan rincian"
       },
       "runtime_entry_failed": "Pintu masuk gagal",
+      "measureCurrentLatency": "Uji latensi",
+      "measuringCurrentLatency": "Menguji",
+      "currentLatencyNotRunning": "Tidak ada simpul aktif yang dapat diuji. Jalankan klien yang menggunakan proksi ini, atau uji simpul yang dikonfigurasi di Manajemen Proksi.",
+      "currentLatencyHint": "Menguji latensi simpul aktif ke URL pengujian tanpa mengganti simpul atau mengubah kebijakan proksi.",
       "latencyCheckedAt": "Waktu pemeriksaan",
       "latencyPending": "Belum diuji",
       "latencyTimeout": "Waktu habis",

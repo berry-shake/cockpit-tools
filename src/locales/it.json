@@ -73,7 +73,7 @@
     "exportWarning": "L’HTML esportato è l’output originale del modello. Se aperto fuori dall’app, non è protetto dall’isolamento dell’anteprima.",
     "deliveryHelp": "Tutti gli account ricevono la stessa istruzione di consegna: restituire direttamente HTML autonomo, senza blocchi di codice Markdown o dipendenze esterne.",
     "errorTimeout": "La richiesta è scaduta. Puoi avviare un nuovo test.",
-    "errorStream": "La risposta non è stata completata. Il contenuto ricevuto viene conservato.",
+    "errorStream": "Risposta non riuscita o incompleta",
     "errorLimit": "La risposta ha superato il limite di dimensione; la ricezione è stata interrotta.",
     "errorPreviewLimit": "Chiudi prima una finestra di anteprima.",
     "retention": "Pulizia automatica",
@@ -86,6 +86,41 @@
     "viewError": "Visualizza errore"
   },
   "common": {
+    "dragSortHint": "Trascina la maniglia a sinistra per riordinare. Le modifiche vengono salvate al rilascio.",
+    "dragSortFilteredHint": "Cancella la ricerca per riordinare.",
+    "recycleBin": {
+      "loadTimeout": "Tempo scaduto durante la lettura del cestino. Aggiorna per riprovare.",
+      "refreshFailed": "Account ripristinato, ma impossibile aggiornare l’elenco. Ricarica l’elenco degli account.",
+      "moveStarted": "Avviato lo spostamento di {{count}} account nel cestino",
+      "title": "Cestino",
+      "description": "Gli account eliminati restano in locale e possono essere ripristinati o esportati. Il ripristino non cambia account, non avvia client e non ripristina i collegamenti ad attività o al servizio API.",
+      "empty": "Il cestino è vuoto",
+      "restore": "Ripristina",
+      "deletePermanently": "Elimina per sempre",
+      "emptyBin": "Svuota cestino",
+      "deletedAt": "Eliminato: {{time}}",
+      "confirmDelete": "Eliminare definitivamente “{{name}}”? I dati nel cestino verranno rimossi e non saranno recuperabili.",
+      "confirmEmpty": "Eliminare definitivamente questi {{count}} account? I dati nel cestino verranno rimossi e non saranno recuperabili.",
+      "move": "Nel cestino",
+      "confirmMove": "Spostare {{count}} account nel cestino? Da lì sarà possibile ripristinarli, esportarli o eliminarli definitivamente.",
+      "moved": "Spostati nel cestino",
+      "moveFailed": "Spostamento nel cestino non riuscito: {{error}}",
+      "operationFailed": "Operazione non riuscita: {{error}}",
+      "export": "Esporta",
+      "exportAll": "Esporta tutto",
+      "exportAndDelete": "Esporta ed elimina",
+      "exportAndEmpty": "Esporta e svuota",
+      "count": "{{count}} account",
+      "exportHint": "Esporta un file JSON che può essere reimportato. Contiene le credenziali degli account: conservalo al sicuro. Annullare il salvataggio o un errore di esportazione non elimina gli account.",
+      "exported": "Account esportati.",
+      "confirmTitle": "Rimuovere gli account per sempre?"
+    },
+    "requestProxy": {
+      "value": "Server proxy: {{name}}",
+      "direct": "Diretta",
+      "unknown": "Non registrato",
+      "entryHint": "È stato registrato solo l’ingresso del proxy; il nodo finale è sconosciuto."
+    },
     "retry": "Riprova",
     "quotaRefreshScheduler": {
       "busy": "La coda di aggiornamento è piena. Riprova tra poco.",
@@ -764,6 +799,24 @@
     }
   },
   "settings": {
+    "instanceCleanup": {
+      "title": "Pulizia istanze",
+      "description": "Scansiona manualmente le cartelle delle istanze gestite e rimuovi i dati non referenziati dalle configurazioni delle istanze o dai processi in esecuzione. Nessuna eliminazione automatica.",
+      "scan": "Scansiona",
+      "scanning": "Scansione…",
+      "remove": "Elimina per sempre",
+      "removing": "Eliminazione…",
+      "empty": "Nessuna cartella residua da rimuovere",
+      "summary": "Trovate {{count}} cartelle, spazio occupato: {{size}}",
+      "confirm": "Le seguenti cartelle, con sessioni, spazi di lavoro e cache, verranno eliminate definitivamente. Questa operazione è irreversibile.",
+      "cancel": "Annulla",
+      "confirmRemove": "Conferma",
+      "done": "Eliminate {{count}} cartelle",
+      "failed": "Operazione non riuscita",
+      "path": "Cartella",
+      "size": "Spazio usato",
+      "platform": "Piattaforma"
+    },
     "title": "Impostazioni App",
     "subtitle": "Personalizza la tua esperienza con Cockpit Tools.",
     "tabs": {
@@ -2063,6 +2116,11 @@
     "other_group": "Altri modelli"
   },
   "codex": {
+    "launchErrors": {
+      "bindingFailed": "Impossibile confermare l’account associato. Avvio interrotto; riprova a cambiare account.",
+      "processScanFailed": "Impossibile verificare i processi precedenti in background. Avvio interrotto; riprova.",
+      "proxyEntryFailed": "Impossibile avviare il proxy configurato. Nessun percorso alternativo utilizzato; riprova."
+    },
     "oauthProxy": {
       "toggle": "Autorizza tramite proxy",
       "hint": "La finestra integrata, lo scambio dei token e il primo controllo quota usano questo proxy. Disattiva questa opzione se l’accesso richiede una finestra a comparsa.",
@@ -4535,8 +4593,6 @@
       "serverCount": "{{count}} server",
       "autoSyncBadge": "Automatico"
     },
-    "exportAuthFailed": "Esporta errori",
-    "exportAuthFailedTitle": "Esporta tutti gli account con auth non riuscita",
     "accounts": {
       "showRelayQuota": "Mostra quota relay",
       "hideRelayQuota": "Nascondi quota relay"
@@ -4569,6 +4625,18 @@
       "restartFailed": "Riavvio del gateway non riuscito: {{error}}"
     },
     "proxy": {
+      "display": {
+        "title": "Vista proxy",
+        "compact": "Compatta",
+        "summary": "Riepilogo",
+        "detailed": "Dettagliata",
+        "hint": "Si applica a tutte le schede degli account Codex; la scelta viene salvata e applicata subito.",
+        "configuredNode": "Nodo configurato",
+        "lastRequest": "Ultima richiesta",
+        "preview": "Anteprima stile",
+        "saveFailed": "Impossibile salvare la preferenza di visualizzazione. Riprova.",
+        "refresh": "Aggiorna dettagli"
+      },
       "workspace": {
         "navLabel": "Sezioni del proxy",
         "overview": "Panoramica",
@@ -4661,7 +4729,7 @@
       },
       "rules": {
         "title": "Regole di uscita",
-        "intro": "Un proxy di account indipendente ha priorità sul proxy unificato; se nessuno dei due si applica, le richieste mantengono l’uscita predefinita precedente del client.",
+        "intro": "Un proxy di account indipendente ha priorità sul proxy unificato; se nessuno dei due si applica, le richieste mantengono l’uscita predefinita precedente del client. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
         "order": "Ordine di applicazione",
         "tableTitle": "Uscite degli account",
         "columnAccount": "Account",
@@ -4707,8 +4775,8 @@
       "batchClearAll": "Deseleziona",
       "unified": {
         "title": "Uscita proxy unificata",
-        "hint": "Gli account idonei senza proxy proprio condividono questa uscita; i nuovi account la seguono automaticamente.",
-        "offState": "Disattivato: prevale il proxy dell’account; altrimenti si usa l’uscita predefinita.",
+        "hint": "Gli account idonei senza proxy proprio condividono questa uscita; i nuovi account la seguono automaticamente. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
+        "offState": "Disattivato: prevale il proxy dell’account; altrimenti si usa l’uscita predefinita. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
         "enable": "Attiva per tutti",
         "disable": "Disattiva",
         "change": "Cambia uscita",
@@ -4726,12 +4794,12 @@
         "changeMessage": "I client attivi con inoltro locale usano la nuova uscita per le nuove connessioni.",
         "changeConfirm": "Cambia",
         "disableTitle": "Disattiva l’uscita proxy unificata",
-        "disableMessage": "I proxy propri restano attivi; senza associazione si usa l’uscita predefinita.",
+        "disableMessage": "I proxy propri restano attivi; senza associazione si usa l’uscita predefinita. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
         "disableConfirm": "Disattiva",
         "restartHint": "I client avviati tramite inoltro locale cambiano per le nuove connessioni. Gli altri client attivi richiedono un riavvio.",
         "staleWarning": "La fonte di questa uscita non è disponibile. Scegline un’altra.",
         "removedWarning": "L’uscita proxy unificata è stata disattivata perché la sua fonte è stata eliminata.",
-        "accountsNotice": "Il proxy dell’account ha priorità; gli account senza associazione seguono il proxy unificato.",
+        "accountsNotice": "Il proxy dell’account ha priorità; gli account senza associazione seguono il proxy unificato. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
         "unbindBlocked": "Dopo la rimozione, questo account seguirà il proxy unificato.",
         "following": "Unificata",
         "errorFailed": "Operazione non riuscita. Riprova.",
@@ -4794,6 +4862,11 @@
         "viewAll": "Vedi tutto"
       },
       "previewTitle": "Anteprima proxy",
+      "modeDisabled": "Senza proxy",
+      "disableAction": "Rimuovi proxy",
+      "setIndependent": "Proxy dedicato",
+      "disabledHint": "Ignora i proxy individuali e condivisi e tenta connessioni dirette.",
+      "disabledWarning": "L’accesso diretto potrebbe non riuscire. La modifica vale per le nuove connessioni dei client con inoltro locale; gli altri client aperti richiedono un riavvio. Le connessioni esistenti possono mantenere il percorso precedente.",
       "exitIp": "IP di uscita",
       "sessionHistory": "Attività",
       "sessionHistoryHint": "Controlla lo stato ogni 5 secondi. Conserva solo lo stato iniziale e le variazioni di questa anteprima, fino a 20 voci, eliminate alla chiusura. Non è un registro storico completo.",
@@ -4824,9 +4897,17 @@
       "desktopRequest_forwarded": "Ultimo inoltro locale stabilito",
       "desktopRequest_failed": "Ultimo inoltro locale fallito",
       "desktopEntryReadyHint": "L’ingresso è in ascolto; il motore si avvia all’arrivo di una richiesta di connessione.",
+      "sharedRuntime": "Proxy account",
       "runtimeMain": "Richieste account",
       "runtimeDesktop": "Ponte desktop",
       "runtimeHint": "Lo stato descrive solo l’ingresso locale e il motore. Un inoltro stabilito non conferma l’accesso a Internet né identifica il client richiedente.",
+      "restoreEntry": "Ripristina inoltro",
+      "restoringEntry": "Ripristino…",
+      "restoreEntryFailed": "Impossibile ripristinare l’inoltro proxy del desktop. Riprova.",
+      "restoreEntryPortBusy": "La porta proxy originale è occupata. Liberala e riprova; il desktop non può utilizzare automaticamente un’altra porta.",
+      "restoreEntryNotRunning": "Nessun desktop in esecuzione utilizza un ingresso proxy registrato di questa istanza di Cockpit.",
+      "restoreEntryBusy": "Il ripristino del proxy è già in corso. Riprova tra poco.",
+      "restoreEntryTimeout": "Tempo scaduto per il ripristino del proxy. Riprova.",
       "restartHint": "I client avviati tramite inoltro locale cambiano per le nuove connessioni. Gli altri client attivi richiedono un riavvio. Il ponte desktop ascolta solo su loopback, ma non isola gli altri utenti locali. Il proxy di sistema resta invariato.",
       "exportHint": "Le esportazioni degli account non includono le credenziali del proxy; riconfigurale dopo l’importazione.",
       "backToAccounts": "Torna agli account",
@@ -5140,7 +5221,7 @@
         "assign": "Assegna proxy",
         "specific": "Account selezionati",
         "shared": "Proxy condiviso",
-        "sharedHint": "Gli account Codex OAuth senza proxy proprio usano questo proxy, inclusi gli account compatibili aggiunti in seguito. Le impostazioni individuali esistenti restano attive.",
+        "sharedHint": "Gli account Codex OAuth senza proxy proprio usano questo proxy, inclusi gli account compatibili aggiunti in seguito. Le impostazioni individuali esistenti restano attive. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
         "apply": "Assegna"
       },
       "managerResources": {
@@ -5173,7 +5254,7 @@
       "managerUnified": {
         "off": "Disattivato",
         "choose": "Imposta proxy",
-        "hint": "Gli account senza proxy proprio usano questo proxy."
+        "hint": "Gli account senza proxy proprio usano questo proxy. Sono esclusi gli account impostati esplicitamente su «Senza proxy»."
       },
       "setup": {
         "title": "Configura i proxy",
@@ -5187,6 +5268,10 @@
         "collapse": "Nascondi dettagli"
       },
       "runtime_entry_failed": "Ingresso fallito",
+      "measureCurrentLatency": "Misura latenza",
+      "measuringCurrentLatency": "Misurazione",
+      "currentLatencyNotRunning": "Nessun nodo attivo da verificare. Avvia un client che utilizzi questo proxy oppure testa il nodo configurato in Gestione proxy.",
+      "currentLatencyHint": "Misura la latenza del nodo attivo verso l’URL di test senza cambiare nodo o criteri del proxy.",
       "latencyCheckedAt": "Verificato alle",
       "latencyPending": "Non testato",
       "latencyTimeout": "Tempo scaduto",

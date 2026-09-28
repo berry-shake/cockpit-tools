@@ -79,7 +79,7 @@ fn resolve_checked<'a>(
     account: &'a CodexAccount,
     unified: impl FnOnce() -> Result<Option<String>, String>,
 ) -> Result<Option<Cow<'a, str>>, String> {
-    if !eligible(account) {
+    if !eligible(account) || account.egress_proxy_disabled {
         return Ok(None);
     }
     if let Some(own) = resolve_effective(account, None) {
@@ -93,6 +93,9 @@ pub(crate) fn resolve_effective<'a>(
     account: &'a CodexAccount,
     unified: Option<String>,
 ) -> Option<Cow<'a, str>> {
+    if account.egress_proxy_disabled {
+        return None;
+    }
     let own = account
         .egress_proxy_url
         .as_deref()
@@ -105,6 +108,7 @@ pub(crate) fn resolve_effective<'a>(
 /// 是否已有生效出口：账号自身绑定或统一代理。纯函数版本，便于启动路径与测试显式传入状态。
 pub fn has_effective_proxy(account: &CodexAccount, unified_active: bool) -> bool {
     eligible(account)
+        && !account.egress_proxy_disabled
         && (unified_active
             || account
                 .egress_proxy_url
@@ -156,6 +160,30 @@ mod tests {
                 id_token: "id".into(),
             },
         )
+    }
+
+    #[test]
+    fn explicit_disabled_mode_survives_storage_and_skips_shared_reads() {
+        let mut account = account();
+        let mut legacy = storage_value(&account).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("egress_proxy_disabled");
+        let legacy: CodexAccount = serde_json::from_value(legacy).unwrap();
+        assert!(!legacy.egress_proxy_disabled);
+        account.egress_proxy_disabled = true;
+        account.egress_proxy_url = Some("http://old.example:8080".into());
+        assert!(resolve_effective(&account, Some("http://shared.example:8080".into())).is_none());
+        assert!(!has_effective_proxy(&account, true));
+        assert!(resolve_checked(&account, || panic!(
+            "disabled mode must not read shared settings"
+        ))
+        .unwrap()
+        .is_none());
+        let restored: CodexAccount =
+            serde_json::from_value(storage_value(&account).unwrap()).unwrap();
+        assert!(restored.egress_proxy_disabled);
     }
 
     #[test]

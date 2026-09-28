@@ -692,10 +692,12 @@ export async function updateCodexAccountTags(
 export async function updateCodexAccountEgressProxy(
   accountId: string,
   egressProxyUrl: string | null,
+  disabled = false,
 ): Promise<CodexAccount> {
   const request = invoke<CodexAccount>('update_codex_account_egress_proxy', {
     accountId,
     egressProxyUrl,
+    disabled,
   });
   return egressProxyUrl ? withProxyEnginePrerequisite(request) : request;
 }

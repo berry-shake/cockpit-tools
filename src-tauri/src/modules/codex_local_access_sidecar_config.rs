@@ -151,6 +151,8 @@ struct SidecarUsageDetails {
 #[serde(rename_all = "camelCase")]
 struct SidecarUsageEvent {
     #[serde(default)]
+    proxy_route: Option<CodexLocalAccessProxyRoute>,
+    #[serde(default)]
     request_id: String,
     #[serde(default)]
     model: String,
@@ -2007,6 +2009,10 @@ fn sidecar_proxy_url_for_account(
     account: &CodexAccount,
     default_proxy_url: Option<&str>,
 ) -> Result<Option<String>, String> {
+    if crate::modules::codex_account_proxy::eligible(account) && account.egress_proxy_disabled {
+        // CLIProxyAPI recognizes this as an explicit bypass of global/environment proxies.
+        return Ok(Some("direct".into()));
+    }
     if crate::modules::codex_account_proxy::has_configured_url(account)? {
         return crate::modules::codex_proxy_runtime::prepared_sidecar_url(account);
     }
@@ -2349,6 +2355,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
     let default_proxy_url = proxy_signature.proxy_url.as_deref();
 
     let mut manifest_accounts = Vec::new();
+    let mut proxy_route_observers = Vec::new();
     let mut codex_keys = Vec::new();
     let mut expected_auth_files = HashSet::new();
     let mut routing_accounts = HashMap::new();
@@ -2410,6 +2417,11 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         }
         let account_proxy_url = sidecar_proxy_url_for_account(&account, default_proxy_url)?;
         let account_proxy_url_ref = account_proxy_url.as_deref();
+        if let Some(observer) = account_proxy_url_ref.and_then(|url| {
+            crate::modules::codex_proxy_runtime::prepared_request_route_observer(&account, url)
+        }) {
+            proxy_route_observers.push(observer);
+        }
         account_proxy_fingerprints.push(account_proxy_fingerprint(account_proxy_url_ref));
         if codex_account::is_grok_upstream_provider(&account) {
             // Grok 供应商账号：把绑定的 Grok 平台账号令牌写成 xai auth 文件，
@@ -2579,6 +2591,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         "locale": app_locale,
         "apiKeys": api_key_manifest_values,
         "accounts": manifest_accounts,
+        "proxyRouteObservers": proxy_route_observers,
         "modelIds": model_ids,
         "imageGenerationModel": collection.image_generation_model.clone(),
         "modelAliases": collection.model_aliases.iter().map(|alias| json!({
@@ -2740,7 +2753,7 @@ fn prepare_sidecar_launch_config_in_dir_sync(
         &account_proxy_fingerprints,
     );
     write_string_atomic_if_changed(&config_path, &config_content)?;
-    write_string_atomic_if_changed(&manifest_path, &manifest_content)?;
+    write_secret_string_atomic_if_changed(&manifest_path, &manifest_content)?;
     write_sidecar_api_key_priority_state_in_dir(collection, &base_dir)?;
     write_sidecar_quota_reserve_state_in_dir(collection, &base_dir)?;
     write_sidecar_quota_pool_state_in_dir(collection, &base_dir)?;

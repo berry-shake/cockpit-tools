@@ -98,18 +98,19 @@ type accountModelRule struct {
 }
 
 type manifest struct {
-	Locale                     string              `json:"locale"`
-	APIKeys                    []apiKeySpec        `json:"apiKeys"`
-	Accounts                   []accountSpec       `json:"accounts"`
-	ModelIDs                   []string            `json:"modelIds"`
-	ImageGenerationModel       string              `json:"imageGenerationModel"`
-	ModelAliases               []modelAliasSpec    `json:"modelAliases"`
-	ExcludedModels             []string            `json:"excludedModels"`
-	AccountModelRules          []accountModelRule  `json:"accountModelRules"`
-	RoutingStrategy            string              `json:"routingStrategy"`
-	CustomRoutingRules         []customRoutingRule `json:"customRoutingRules"`
-	ImmediateSSEResponse       bool                `json:"immediateSseResponse"`
-	MaxConcurrentImageRequests int                 `json:"maxConcurrentImageRequests"`
+	ProxyRouteObservers        []proxyRouteObserverSpec `json:"proxyRouteObservers,omitempty"`
+	Locale                     string                   `json:"locale"`
+	APIKeys                    []apiKeySpec             `json:"apiKeys"`
+	Accounts                   []accountSpec            `json:"accounts"`
+	ModelIDs                   []string                 `json:"modelIds"`
+	ImageGenerationModel       string                   `json:"imageGenerationModel"`
+	ModelAliases               []modelAliasSpec         `json:"modelAliases"`
+	ExcludedModels             []string                 `json:"excludedModels"`
+	AccountModelRules          []accountModelRule       `json:"accountModelRules"`
+	RoutingStrategy            string                   `json:"routingStrategy"`
+	CustomRoutingRules         []customRoutingRule      `json:"customRoutingRules"`
+	ImmediateSSEResponse       bool                     `json:"immediateSseResponse"`
+	MaxConcurrentImageRequests int                      `json:"maxConcurrentImageRequests"`
 	// MaxAccountConcurrency 限制单个账号同时处理的会话数；0 表示不限制。
 	MaxAccountConcurrency int `json:"maxAccountConcurrency"`
 	// AccountConcurrencyWaitMs 账号并发达到上限后的等待时长（毫秒）；0 表示不等待，直接拒绝。
@@ -432,34 +433,35 @@ type customRoutingRule struct {
 }
 
 type usagePayload struct {
-	Type      string `json:"type"`
-	RequestID string `json:"requestId,omitempty"`
-	Provider  string `json:"provider,omitempty"`
-	Model     string `json:"model,omitempty"`
-	Alias     string `json:"alias,omitempty"`
+	ProxyRoute *coreusage.ProxyRoute `json:"proxyRoute,omitempty"`
+	Type       string                `json:"type"`
+	RequestID  string                `json:"requestId,omitempty"`
+	Provider   string                `json:"provider,omitempty"`
+	Model      string                `json:"model,omitempty"`
+	Alias      string                `json:"alias,omitempty"`
 	// RequestedModel keeps the client-requested model (route namespace intact)
 	// while Model/UpstreamModel carry the model that actually reached upstream.
-	RequestedModel   string       `json:"requestedModel,omitempty"`
-	UpstreamModel    string       `json:"upstreamModel,omitempty"`
-	AccountID        string       `json:"accountId,omitempty"`
-	AccountEmail     string       `json:"accountEmail,omitempty"`
-	AuthID           string       `json:"authId,omitempty"`
-	APIKeyID         string       `json:"apiKeyId,omitempty"`
-	APIKeyLabel      string       `json:"apiKeyLabel,omitempty"`
-	ClientInstanceID string       `json:"clientInstanceId,omitempty"`
-	RequestKind      string       `json:"requestKind,omitempty"`
-	ServiceTier      string       `json:"serviceTier,omitempty"`
-	ReasoningEffort  string       `json:"reasoningEffort,omitempty"`
-	Success          bool         `json:"success"`
-	Status           int          `json:"status,omitempty"`
-	ErrorCategory    string       `json:"errorCategory,omitempty"`
-	ErrorMessage     string       `json:"errorMessage,omitempty"`
-	LatencyMS        int64        `json:"latencyMs,omitempty"`
+	RequestedModel   string `json:"requestedModel,omitempty"`
+	UpstreamModel    string `json:"upstreamModel,omitempty"`
+	AccountID        string `json:"accountId,omitempty"`
+	AccountEmail     string `json:"accountEmail,omitempty"`
+	AuthID           string `json:"authId,omitempty"`
+	APIKeyID         string `json:"apiKeyId,omitempty"`
+	APIKeyLabel      string `json:"apiKeyLabel,omitempty"`
+	ClientInstanceID string `json:"clientInstanceId,omitempty"`
+	RequestKind      string `json:"requestKind,omitempty"`
+	ServiceTier      string `json:"serviceTier,omitempty"`
+	ReasoningEffort  string `json:"reasoningEffort,omitempty"`
+	Success          bool   `json:"success"`
+	Status           int    `json:"status,omitempty"`
+	ErrorCategory    string `json:"errorCategory,omitempty"`
+	ErrorMessage     string `json:"errorMessage,omitempty"`
+	LatencyMS        int64  `json:"latencyMs,omitempty"`
 	// TurnStateLength/TurnStateClass 来自上游响应头的旁路观测；state 原文不保存。
-	TurnStateLength *int   `json:"turnStateLength,omitempty"`
-	TurnStateClass  string `json:"turnStateClass,omitempty"`
-	Usage            usageDetails `json:"usage"`
-	RequestedAtMS    int64        `json:"requestedAtMs,omitempty"`
+	TurnStateLength *int         `json:"turnStateLength,omitempty"`
+	TurnStateClass  string       `json:"turnStateClass,omitempty"`
+	Usage           usageDetails `json:"usage"`
+	RequestedAtMS   int64        `json:"requestedAtMs,omitempty"`
 }
 
 type requestDiagnosticPayload struct {
@@ -892,14 +894,26 @@ func (t *requestUsageTracker) finalize(requestID string, input usageFinalizeInpu
 	if strings.TrimSpace(payload.RequestKind) == "" {
 		payload.RequestKind = strings.TrimSpace(input.requestKind)
 	}
-	if selectedOK {
+	// Successful usage keeps the route observed by the attempt that reported it.
+	// For a final HTTP failure, only the last recorded attempt can describe the
+	// final route. A different selection without usage leaves that route unknown.
+	if input.status >= http.StatusBadRequest && len(records) > 0 {
+		routeRecord := records[len(records)-1]
+		payload.ProxyRoute = routeRecord.ProxyRoute
+		if selectedOK && (strings.TrimSpace(routeRecord.AuthID) == "" ||
+			!strings.EqualFold(strings.TrimSpace(routeRecord.AuthID), strings.TrimSpace(selected.AuthID))) {
+			payload.ProxyRoute = nil
+		}
+	}
+	// Token usage belongs to the attempt that reported it, not the last account
+	// selected for this downstream request. Async callbacks and retries may differ.
+	canUseSelected := len(records) == 0 ||
+		(strings.TrimSpace(payload.AccountID) == "" && strings.TrimSpace(payload.AuthID) != "" &&
+			strings.EqualFold(strings.TrimSpace(payload.AuthID), strings.TrimSpace(selected.AuthID)))
+	if selectedOK && canUseSelected {
 		payload.AccountID = selected.AccountID
 		payload.AccountEmail = selected.AccountEmail
 		payload.AuthID = selected.AuthID
-	} else {
-		payload.AccountID = ""
-		payload.AccountEmail = ""
-		payload.AuthID = ""
 	}
 	if input.status > 0 {
 		payload.Status = input.status

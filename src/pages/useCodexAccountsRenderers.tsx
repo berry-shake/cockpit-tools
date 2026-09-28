@@ -5,6 +5,7 @@ import { isCodexApiKeyAccount, isCodexAgentIdentityAccount, isCodexChatCompletio
 import { isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
 import { CodexQuotaMiniRows } from "../components/codex/CodexQuotaMiniRows";
 import { CodexAccountProxyButton } from "../components/codex/CodexAccountProxyButton";
+import { CodexAccountProxyCard } from "../components/codex/CodexAccountProxyCard";
 import { canUseCodexAccountProxy } from "../utils/codexAccountProxy";
 import { CodexTeamQuotaHistory } from "../components/codex/CodexTeamQuotaHistory";
 import { isCodexClientReauthNoticeOnly, isCodexRefreshTokenNoticeOnly, isCodexRefreshTokenReusedAccount, isCodexServerRevokedReauth } from "../utils/codexSwitchAuthFailure";
@@ -878,6 +879,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 <CodexAccountProxyButton account={account} />
               </div>
             )}
+            <CodexAccountProxyCard account={account} placement="summary" />
             {!isApiKeyAccount && (
               <div className="account-sub-line">
                 <span className="codex-login-subline" title={signInLine}>
@@ -1065,6 +1067,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
               </div>
             )}
             <div className="codex-card-bottom">
+              <CodexAccountProxyCard account={account} placement="detailed" />
               <span className="card-date">{formatDate(account.created_at)}</span>
               <div className="card-footer">
                 <div className="card-actions">
@@ -1188,7 +1191,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                   <button
                     className="card-action-btn danger"
                     onClick={() => handleDelete(account.id)}
-                    title={t("common.delete", "删除")}
+                    title={t("common.recycleBin.move")}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -2570,7 +2573,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                 <button
                   className="action-btn danger"
                   onClick={() => handleDelete(account.id)}
-                  title={t("common.delete", "删除")}
+                  title={t("common.recycleBin.move")}
                 >
                   <Trash2 size={14} />
                 </button>

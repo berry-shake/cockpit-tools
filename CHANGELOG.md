@@ -7,6 +7,75 @@ All notable changes to Cockpit Tools will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+## [1.3.61] - 2026-09-27
+
+### Added
+
+- Codex accounts now have a compact recycle bin next to the intelligence test action. Deleted accounts stay locally for recovery and can be exported individually or all at once as reimportable JSON. Permanent deletion and emptying the bin can optionally export first; canceling or failing the export keeps the accounts. Restoring does not switch accounts, launch clients, or restore task and API Service bindings.
+
+- Codex proxy preview now lets you check the current running node’s latency on demand, with account cards and the preview showing the same delay in milliseconds and check time.
+
+- Cockpit now restores the original local proxy ports used by running Codex desktops after restarting or upgrading. Port conflicts remain visible and can be retried from the proxy preview, without restarting the desktop or keeping a separate background service.
+
+- Codex account cards now offer Compact, Summary and Detailed proxy views, with single-row node and latency summaries and space-saving detail rows anchored above the footer actions. Switch the shared display preference in Codex settings, General Settings or the proxy preview; Compact remains the default, and the original Proxy button stays available in every view.
+
+- Codex API request logs now show the recorded proxy node or direct connection for each request, including regular and streaming requests from official accounts, preserving past routes after proxy changes. Proxy entries without a known final node are identified in the tooltip; older logs show “Not recorded”.
+
+- Data Management now lets you scan and permanently remove unused managed instance directories manually, protecting registered instances and directories used by running clients.
+
+- Proxy management now supports drag-and-drop ordering and Move up / Move down actions, with the chosen order preserved after restarting.
+
+### Changed
+
+- Proxy resource “Assign” buttons now consistently open the assignment dialog, where subscription nodes can be selected before applying to accounts or the shared proxy.
+
+- The proxy assignment account list now shows subscription badges using the same colors and badge style preference as the Codex account page.
+
+- Removed the dedicated “Export failed accounts” button from the Codex account toolbar. Failed accounts can be moved to the recycle bin and exported there; the deletion confirmation now explains restoration and export.
+
+- Expanded CodeBuddy quota details now scroll within the account card instead of stretching the page. Thanks [@xhrxgr](https://github.com/xhrxgr) ([#2608](https://github.com/jlcodes99/cockpit-tools/pull/2608)).
+
+- API Service streams now report structured image failures and upstream truncation instead of synthesizing a successful completion; Codex proxy cancellation and WebSocket HTTPS proxy handling are also aligned with current upstream behavior.
+
+- Chat and Responses requests preserve supported `service_tier` values (`priority` and `ultrafast`) while dropping unsupported values.
+
+- Requests from official Codex accounts now carry routing information consistent with the selected model and service tier; API-key passthrough remains unchanged.
+
+- New custom proxy strategies now default to a 30-second health-check interval, configurable in Advanced Settings. Saved strategy intervals and subscription-provided intervals remain unchanged.
+
+- Codex desktop launches now also apply the enabled global proxy to Chromium when no account proxy is selected; proxy URLs containing credentials retain environment-only injection.
+
+- Codex account requests, API service traffic, and desktop relays now share one stable account proxy entry and routing engine, avoiding independent node selections across channels while allowing existing connections to finish when the route changes.
+
+- Stop writing the removed Codex remote-compaction switch or reporting local compaction as enabled merely because that setting was saved.
+
+- Codex proxy preview and account proxy settings now offer separate shared, individual and no-proxy modes. Removing a proxy explicitly bypasses the shared proxy; desktop clients using the local relay keep their entry while new connections switch routes.
+
+- Codex proxy preview now expands runtime history, recent requests and proxy logs vertically within one scrollable dialog body, keeping the title and footer actions visible.
+
+### Fixed
+
+- Pelican test error details now preserve upstream messages and error codes, incomplete-response reasons, and connection or decoding failures instead of replacing them with one generic message. Account credentials are redacted, and received output remains available when present.
+
+- Fixed strict third-party Responses services rejecting Codex multi-agent conversation requests, while preserving the agent messages and their routing information. Thanks [@lwwtl](https://github.com/lwwtl) ([#2609](https://github.com/jlcodes99/cockpit-tools/pull/2609)).
+- Fixed some non-streaming Responses requests timing out after the upstream had already finished, while preserving failed and incomplete response states. Thanks [@wzxsph](https://github.com/wzxsph) ([#2332](https://github.com/jlcodes99/cockpit-tools/pull/2332)).
+- Fixed API Service retries attributing token usage to another account or losing its account attribution. Historical usage records are unchanged. Thanks [@yangeni](https://github.com/yangeni) ([#2379](https://github.com/jlcodes99/cockpit-tools/pull/2379)).
+- Fixed closing the Codex launch preview during configuration saving still allowing a pending launch or instance switch to continue. Successfully saved configuration remains available. Thanks [@y4ho0](https://github.com/y4ho0) ([#2545](https://github.com/jlcodes99/cockpit-tools/pull/2545)).
+- Completed Korean localization for the 2FA query page and OTP input guidance. Thanks [@jakero](https://github.com/jakero) ([#2595](https://github.com/jlcodes99/cockpit-tools/pull/2595)).
+- Fixed account page titles and account filters falling back to English, and added Ctrl shortcuts to the Chinese interface scaling instructions. Thanks [@HUF457](https://github.com/HUF457) ([#2113](https://github.com/jlcodes99/cockpit-tools/pull/2113)).
+
+- Fixed account switching on newer macOS ChatGPT clients leaving bundled background servers unrecognized. Switching now checks the target account binding before launch, reports local proxy entry failures instead of silently using another route, and keeps these failures distinct from authorization errors.
+
+- Fixed Windows ChatGPT account switching mistaking an existing or managed instance for a newly started default instance; closing now checks instance ownership and startup confirms a stable new process. Windows desktop detection now targets ChatGPT.exe instead of the legacy Codex.exe.
+
+- Fixed Codex provider gateway ID rewriting breaking encrypted reasoning validation when continuing conversations, while preserving message and tool-call ID compatibility handling.
+
+- Deleting a Codex instance on macOS now also removes its corresponding application data directory.
+
+- Fixed HTTP connection failures after switching Codex accounts with a proxy, and improved connection diagnostics for interrupted replies and compaction without recording credentials or conversation content.
+
+- Preserve custom platform sidebar selections after updates and restarts, including Grok CLI.
+
 ## [1.3.60] - 2026-09-25
 
 ### Added

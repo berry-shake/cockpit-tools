@@ -2996,10 +2996,15 @@ async fn codex_start_instance_internal(
     skip_failed_step: Option<&str>,
     emit_launch_progress: bool,
     launch_operation: Option<&str>,
+    expected_prepared_binding: Option<&str>,
 ) -> Result<CodexInstanceProfileView, String> {
     let _start_guard = CodexInstanceStartGuard::acquire(&instance_id)?;
     clear_codex_instance_start_cancel(&instance_id);
     let mut launch_target = resolve_codex_instance_start_target(&instance_id)?;
+    modules::codex_instance::verify_prepared_launch_binding(
+        expected_prepared_binding,
+        launch_target.bind_account_id.as_deref(),
+    )?;
     let configured_launch_mode = launch_target.launch_mode.clone();
     // 绑定账号不再是可直接登录的 OAuth 订阅账号时，路由按关闭处理：
     // 这里必须用归一化结果，否则启动阶段仍会尝试建立混合路由网关。
@@ -3206,6 +3211,10 @@ async fn codex_start_instance_internal(
         let previous_kind = read_applied_launch_credential_kind_for_dir(&default_dir);
         let default_settings = modules::codex_instance::load_default_settings()?;
         let default_bind_account_id = resolve_default_account_id(&default_settings);
+        modules::codex_instance::verify_prepared_launch_binding(
+            expected_prepared_binding,
+            default_bind_account_id.as_deref(),
+        )?;
         if default_settings.launch_mode != InstanceLaunchMode::Cli {
             modules::process::ensure_codex_launch_path_configured()?;
         }
@@ -3464,6 +3473,8 @@ async fn codex_start_instance_internal(
         .await?;
         if let Some(proxy_url) = egress_proxy_url.as_deref() {
             modules::process::append_electron_proxy_args(&mut injection_plan.args, proxy_url);
+        } else {
+            modules::process::append_global_electron_proxy_args(&mut injection_plan.args);
         }
         emit_codex_instance_launch_step(
             &app,
@@ -3544,6 +3555,10 @@ async fn codex_start_instance_internal(
         .find(|item| item.id == instance_id)
         .ok_or("实例不存在")?;
 
+    modules::codex_instance::verify_prepared_launch_binding(
+        expected_prepared_binding,
+        instance.bind_account_id.as_deref(),
+    )?;
     modules::codex_instance::ensure_instance_shared_skills(Path::new(&instance.user_data_dir))?;
     let instance_dir = Path::new(&instance.user_data_dir);
     let previous_kind = read_applied_launch_credential_kind_for_dir(instance_dir);
@@ -3558,10 +3573,15 @@ async fn codex_start_instance_internal(
 
     let close_started = Instant::now();
     modules::codex_app_injection::stop_for_profile(instance_dir);
-    if let Some(pid) =
-        modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
+    if modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
+        .is_some()
     {
-        modules::process::close_pid(pid, 20)?;
+        let target_home = instance.user_data_dir.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            modules::process::close_codex_instances(&[target_home], 20)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
         let _ = modules::codex_instance::update_instance_pid(&instance.id, None)?;
     }
     modules::codex_local_access::stop_provider_gateways_for_profile(instance_dir).await;
@@ -3779,6 +3799,8 @@ async fn codex_start_instance_internal(
     .await?;
     if let Some(proxy_url) = egress_proxy_url.as_deref() {
         modules::process::append_electron_proxy_args(&mut injection_plan.args, proxy_url);
+    } else {
+        modules::process::append_global_electron_proxy_args(&mut injection_plan.args);
     }
     emit_codex_instance_launch_step(
         &app,
@@ -3857,6 +3879,7 @@ pub(crate) async fn codex_start_default_with_prepared_profile(
     emit_launch_progress: bool,
     launch_operation: Option<&str>,
     skip_failed_step: Option<&str>,
+    expected_prepared_binding: Option<&str>,
 ) -> Result<CodexInstanceProfileView, String> {
     let mut launch_target = resolve_codex_instance_start_target(DEFAULT_INSTANCE_ID)?;
     launch_target.launch_operation = launch_operation.map(str::to_owned);
@@ -3868,6 +3891,7 @@ pub(crate) async fn codex_start_default_with_prepared_profile(
         skip_failed_step,
         emit_launch_progress,
         launch_operation,
+        expected_prepared_binding,
     )
     .await;
     let result = match result {
@@ -3936,6 +3960,7 @@ pub(crate) async fn codex_start_instance_with_prepared_profile(
         skip_failed_step,
         emit_launch_progress,
         launch_operation,
+        launch_target.bind_account_id.as_deref(),
     )
     .await;
     let result = match result {
@@ -4005,6 +4030,7 @@ pub async fn codex_start_instance(
         transfer_conflicting_account.unwrap_or(false),
         skip_failed_step.as_deref(),
         true,
+        None,
         None,
     )
     .await;
@@ -4100,10 +4126,15 @@ pub async fn codex_stop_instance(instance_id: String) -> Result<CodexInstancePro
         .ok_or("实例不存在")?;
 
     modules::codex_app_injection::stop_for_profile(Path::new(&instance.user_data_dir));
-    if let Some(pid) =
-        modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
+    if modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
+        .is_some()
     {
-        modules::process::close_pid(pid, 20)?;
+        let target_home = instance.user_data_dir.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            modules::process::close_codex_instances(&[target_home], 20)
+        })
+        .await
+        .map_err(|error| error.to_string())??;
     }
     modules::codex_local_access::stop_provider_gateways_for_profile(Path::new(
         &instance.user_data_dir,

@@ -653,9 +653,9 @@ fn score_windows_candidate(
         return Some(score);
     }
 
-    // The legacy Codex and current ChatGPT clients share this scanner. Do not
-    // accept helper executables whose paths merely contain one of those names.
-    if exe_names_lower.contains("chatgpt.exe") && exe_names_lower.contains("codex.exe") {
+    // The ChatGPT scanner must not accept helper executables whose paths merely
+    // contain "chatgpt" or the old "codex" GUI name.
+    if exe_names_lower.contains("chatgpt.exe") {
         return None;
     }
 
@@ -789,17 +789,12 @@ fn windows_app_launch_signature(app: &str) -> Option<WindowsAppLaunchSignature> 
             supports_multi_instance: true,
         }),
         "codex" => Some(WindowsAppLaunchSignature {
-            label: "ChatGPT / Codex",
-            exe_names: &["ChatGPT.exe", "Codex.exe"],
+            label: "ChatGPT",
+            exe_names: &["ChatGPT.exe"],
             command_names: &["chatgpt", "codex"],
             protocol_names: &["chatgpt", "codex"],
-            display_keywords: &["chatgpt", "codex", "openai chatgpt", "openai codex"],
-            common_paths: &[
-                "ChatGPT\\ChatGPT.exe",
-                "OpenAI ChatGPT\\ChatGPT.exe",
-                "Codex\\Codex.exe",
-                "OpenAI Codex\\Codex.exe",
-            ],
+            display_keywords: &["chatgpt", "openai chatgpt"],
+            common_paths: &["ChatGPT\\ChatGPT.exe", "OpenAI ChatGPT\\ChatGPT.exe"],
             supports_multi_instance: true,
         }),
         "claude" => Some(WindowsAppLaunchSignature {
@@ -1792,6 +1787,20 @@ mod account_egress_proxy_tests {
     }
 
     #[test]
+    fn global_proxy_launch_args_respect_enabled_state_and_protocol() {
+        for (enabled, proxy) in [(false, "http://127.0.0.1:7897"), (true, "  "), (true, "http://user:secret@127.0.0.1:7897")] {
+            let mut args = vec!["--other".to_string()];
+            append_global_electron_proxy_args_from_config(&mut args, enabled, proxy);
+            assert_eq!(args, vec!["--other"]);
+        }
+        for (proxy, expected) in [("http://127.0.0.1:7897", "http://127.0.0.1:7897"), ("socks5h://127.0.0.1:7897", "socks5://127.0.0.1:7897")] {
+            let mut args = vec!["--other".to_string()];
+            append_global_electron_proxy_args_from_config(&mut args, true, proxy);
+            assert_eq!(args, vec!["--other".to_string(), format!("--proxy-server={expected}"), "--proxy-bypass-list=localhost;127.0.0.1;[::1]".to_string()]);
+        }
+    }
+
+    #[test]
     fn bound_account_proxy_cannot_be_bypassed_by_extra_arguments() {
         let mut args = ["--proxy-server=http://127.0.0.1:8080", "--proxy-bypass-list=*", "--no-proxy-server", "--proxy-pac-url", "http://pac.invalid", "--other"].map(str::to_string).to_vec();
         append_electron_proxy_args(&mut args, "socks5://127.0.0.1:1080");
@@ -1803,13 +1812,34 @@ mod account_egress_proxy_tests {
     }
 }
 
+pub fn append_global_electron_proxy_args(args: &mut Vec<String>) {
+    let config = config::get_user_config();
+    append_global_electron_proxy_args_from_config(
+        args, config.global_proxy_enabled, &config.global_proxy_url,
+    );
+}
+
+fn append_global_electron_proxy_args_from_config(args: &mut Vec<String>, enabled: bool, proxy_url: &str) {
+    if !enabled || proxy_url.trim().is_empty() {
+        return;
+    }
+    // Chromium does not support credentials in --proxy-server. Keep the existing
+    // environment-only behavior for those URLs instead of exposing credentials.
+    if let Ok(url) = url::Url::parse(proxy_url.trim()) {
+        if !url.username().is_empty() || url.password().is_some() {
+            return;
+        }
+    }
+    append_electron_proxy_args(args, proxy_url);
+}
+
 pub fn append_electron_proxy_args(args: &mut Vec<String>, proxy_url: &str) {
     let proxy_url = proxy_url.trim();
     if proxy_url.is_empty() {
         return;
     }
-    // Only called for an explicitly bound account. Its selected route takes
-    // precedence over old launch flags; otherwise Chromium can bypass it.
+    // An explicitly selected account or global proxy takes precedence over old
+    // launch flags; otherwise Chromium can bypass it.
     let mut cleaned = Vec::with_capacity(args.len());
     let mut iter = args.drain(..).peekable();
     while let Some(arg) = iter.next() {
