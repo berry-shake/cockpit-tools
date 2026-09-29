@@ -189,6 +189,7 @@ interface ModelConfigSnapshot {
   enabled: boolean;
   models: CodexExperimentalModelDefinition[];
   defaultModelId: string | null;
+  routingRoutes: CodexInstanceApiRoute[];
 }
 
 interface ContextConfigSnapshot {
@@ -1125,9 +1126,10 @@ export function CodexLaunchPreviewModal({
 
   const openModelConfig = useCallback(async () => {
     if (configBusy || unavailable) return;
-    // 混合模型路由需要实例自己的可见模型清单，但不应替用户开启「模型管理」：
-    // 这种情况下只打开编辑器维护路由模型，开关状态保持不变。
-    if (!catalogEnabled && !routingEnabled) {
+    const session = configSession.current;
+    // Per-model edits require the catalog persistence policy. Ask explicitly even
+    // with mixed routing enabled, otherwise the backend discards the draft.
+    if (!catalogEnabled) {
       const confirmed = await confirmDialog(
         t("codex.modelManagement.enableConfirmDescription"),
         {
@@ -1137,7 +1139,7 @@ export function CodexLaunchPreviewModal({
           kind: "warning",
         },
       );
-      if (!confirmed) return;
+      if (!confirmed || session !== configSession.current) return;
     }
     setModelConfigSnapshot({
       enabled: catalogEnabled,
@@ -1148,10 +1150,13 @@ export function CodexLaunchPreviewModal({
           : undefined,
       })),
       defaultModelId,
+      routingRoutes: routingRoutes.map((route) => ({
+        ...route,
+        selectedModels: route.selectedModels?.slice(),
+        extraModels: route.extraModels?.slice(),
+      })),
     });
-    if (!routingEnabled) {
-      setCatalogEnabled(true);
-    }
+    setCatalogEnabled(true);
     setNotice(null);
     setError(null);
     setModelConfigOpen(true);
@@ -1160,8 +1165,9 @@ export function CodexLaunchPreviewModal({
     catalogEnabled,
     defaultModelId,
     models,
-    routingEnabled,
+    routingRoutes,
     setError,
+    t,
     unavailable,
   ]);
 
@@ -1198,20 +1204,18 @@ export function CodexLaunchPreviewModal({
   const closeModelConfig = useCallback(
     (apply: boolean) => {
       if (apply) {
-        // 混合模型路由下这里只应用路由模型改动，不替用户打开「模型管理」。
-        if (!routingEnabled) {
-          setCatalogEnabled(true);
-        }
+        setCatalogEnabled(true);
       } else if (modelConfigSnapshot) {
         setCatalogEnabled(modelConfigSnapshot.enabled);
         setModels(modelConfigSnapshot.models);
         setDefaultModelId(modelConfigSnapshot.defaultModelId);
+        setRoutingRoutes(modelConfigSnapshot.routingRoutes);
       }
       setModelConfigSnapshot(null);
       setModelConfigOpen(false);
       setModelsError(null);
     },
-    [modelConfigSnapshot, routingEnabled],
+    [modelConfigSnapshot],
   );
 
   const openContextConfig = useCallback(() => {

@@ -45,6 +45,7 @@ export interface CodexAppSpeedConfig {
 
 /** Codex 账号数据 */
 export interface CodexAccount {
+  usage_updated_at?: number | null;
   id: string;
   email: string;
   auth_mode?: string;

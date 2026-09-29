@@ -10,7 +10,7 @@
       "accountsRequired": "Vyberte alespoň jeden účet.",
       "invalidAccount": "Neplatný identifikátor účtu.",
       "invalidRequest": "Neplatné parametry testu.",
-      "invalidConcurrency": "Počet souběžných úloh musí být od 1 do 10.",
+      "invalidConcurrency": "Souběžné úlohy · 1–200",
       "invalidRetention": "Doba uchování musí být 1 až 3650 dnů.",
       "alreadyRunning": "Nejprve zavřete aktivní test.",
       "artifactMissing": "Vygenerovaný výsledek nebyl nalezen.",
@@ -73,7 +73,7 @@
     "exportWarning": "Exportované HTML je původní výstup modelu. Při otevření mimo aplikaci není chráněno izolací náhledu.",
     "deliveryHelp": "Všechny účty dostanou stejný pokyn k výstupu: vrátit přímo samostatné HTML bez bloků kódu Markdown a externích závislostí.",
     "errorTimeout": "Časový limit požadavku vypršel. Můžete spustit nový test.",
-    "errorStream": "Odpověď selhala nebo nebyla dokončena",
+    "errorStream": "Odpověď nebyla dokončena. Přijatý obsah je zachován.",
     "errorLimit": "Odpověď překročila limit velikosti; příjem byl zastaven.",
     "errorPreviewLimit": "Nejprve zavřete jedno okno náhledu.",
     "retention": "Automatické čištění",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Operace Windows nebyla dokončena",
       "accessDeniedDescription": "Windows tuto operaci zamítl. Cílový program může běžet s vyšším oprávněním nebo být v chráněném umístění.",
-      "storeLaunchBlockedDescription": "Windows nemohl spustit nakonfigurovaného klienta Codex: složka z Store mohla být nahrazena aktualizací nebo už neumožňuje spuštění. Přímé spuštění bylo zablokováno, aby se neotevřel nesprávný účet. Použijte „Znovu zjistit cestu a zkusit to“; pokud to selže, přepněte tuto instanci na režim CLI.",
+      "storeLaunchBlockedDescription": "Nepodařilo se potvrdit spuštění izolované instance z obchodu. Cockpit nepoužil výchozí účet. Znovu vyhledejte cestu ke klientovi a opakujte pokus. Pokud chyba přetrvá, zkopírujte diagnostické údaje nebo přepněte tuto instanci do režimu CLI.",
       "repairPath": "Znovu zjistit cestu a zkusit to",
       "fileInUseDescription": "Cílový soubor používá jiný program. Zavřete jej a zkuste to znovu.",
       "programNotFoundDescription": "Windows nenašel program potřebný pro tuto operaci. Zkontrolujte instalaci nebo nastavenou cestu.",
@@ -344,7 +344,8 @@
         "unlimited": "Neomezená kvóta",
         "leftPercent": "Zbývá {{value}} %",
         "cachedRefreshFailed": "Aktualizace selhala; zobrazují se poslední úspěšná data",
-        "lastSuccessfulQuery": "Poslední úspěch: {{time}}"
+        "lastSuccessfulQuery": "Poslední úspěch: {{time}}",
+        "cachedNeedsReauth": "⚠️ Pro pokračování je vyžadováno webové ověření (níže jsou data z mezipaměti)"
       },
       "subtitle": "Spravujte své účty GitHub Copilot",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Týden"
     },
-    "optional": " (volitelné)"
+    "optional": " (volitelné)",
+    "hide": "Skrýt",
+    "show": "Zobrazit"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "Smazat instanci",
-      "message": "Smazat instanci {{name}}? Tím se odstraní konfigurace a smaže se složka instance."
+      "message": "Smazat instanci {{name}}? Záznam instance bude odstraněn a spravované složky budou přesunuty do koše. Vlastní a chráněné složky zůstanou zachovány."
     },
     "import": {
       "btnTitle": "Importovat existující adresář",
@@ -1479,7 +1482,9 @@
       "normal": "Normální",
       "forbidden": "403​",
       "forbidden_tooltip": "API vrátilo 403 Forbidden, účet nemá přístup k Gemini Code Assist",
-      "forbidden_msg": "Účet zakázán, automatická aktualizace přeskočena"
+      "forbidden_msg": "Účet zakázán, automatická aktualizace přeskočena",
+      "needsReauth": "Vyžadováno webové ověření",
+      "needsReauthTooltip": "Google vyžaduje webové bezpečnostní ověření pro pokračování"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "Smazat",
       "deleteSelected": "Smazat vybrané",
       "export": "Exportovat",
-      "refreshAll": "Obnovit vše"
+      "refreshAll": "Obnovit vše",
+      "reauth": "Znovu autorizovat",
+      "reauthTooltip": "Google vyžaduje opětovné ověření, klikněte pro opětovnou autorizaci",
+      "openValidationUrl": "Webové ověření",
+      "copyValidationUrl": "Zkopírovat ověřovací odkaz",
+      "copyValidationUrlTooltip": "Zkopírovat adresu webového ověření"
     },
     "tabs": {
       "oauth": "OAuth autorizace",
@@ -1853,7 +1863,8 @@
     "example": "Příklad",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} úspěšné",
-    "actionFailed": "{{action}} selhalo: {{error}}"
+    "actionFailed": "{{action}} selhalo: {{error}}",
+    "refreshFailed": "Obnovení se nezdařilo"
   },
   "wakeup": {
     "title": "Úlohy probuzení",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Později ji lze znovu zapnout v nastavení Codex nebo v rychlém nastavení",
       "riskNotice": {
         "title": "Upozornění na riziko",
-        "message": "Současné funkce služby Codex API jsou v podstatě řešením s reverzní proxy. V tuto chvíli proti tomuto chování oficiální služba výslovně nezasahuje, ale budoucí pravidla, zásady nebo dostupnost se mohou změnit. Pokud budete tuto funkci dál používat, potvrzujete, že tomu rozumíte a přijímáte související rizika na vlastní odpovědnost.",
+        "message": "Používání běžných oficiálních účtů přes reverzní proxy nebo k přeposílání může podléhat přísným omezením oficiální služby. Toto použití může být také rozpoznáno jako přeposílání a ovlivnit kvalitu odpovědí („snížení inteligence“). Používejte opatrně, zejména pokud máte mnoho účtů.",
         "remember": "Rozumím a příště už nezobrazovat",
         "acknowledge": "Rozumím",
         "continueStart": "Pokračovat",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "Tato Base URL už existuje.",
         "providerNotFound": "Poskytovatel nebyl nalezen.",
         "apiKeyRequiredOnCreate": "Při vytváření poskytovatele je vyžadován alespoň jeden API klíč.",
-        "apiKeyRequiredWhenEmpty": "Tento poskytovatel zatím nemá žádný API klíč. Nejprve jej přidejte."
+        "apiKeyRequiredWhenEmpty": "Tento poskytovatel zatím nemá žádný API klíč. Nejprve jej přidejte.",
+        "apiKeyUrlInvalid": "Použijte HTTP(S) adresu správy bez vložených přihlašovacích údajů; klíč API patří do pole klíče."
       },
       "saveSuccess": "Poskytovatel modelu byl uložen.",
       "deleteBlocked": "Tento poskytovatel je propojen s {{count}} účty a nelze jej smazat.",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "Tento poskytovatel ve výchozím stavu podporuje obrázky",
-        "providerDefaultHint": "Když je vypnuto, obrázky přijmou jen níže uvedené modely; ostatní místní brána odmítne.",
+        "providerDefaultHint": "Modely bez výslovného nastavení používají tuto výchozí hodnotu; GPT-5.5 a novější standardně podporují obrázky. Jednotlivé modely lze vypnout v seznamu. Pokud brána nenajde obrazový model, obrázky vynechá a pokračuje s textem.",
         "modelsHint": "Jeden model na řádek. Hodí se, když obrázky podporuje jen část modelů poskytovatele.",
-        "routingModelHint": "Když aktuální model nečte obrázky, požadavek použije tento model; prázdné pole automaticky použije jediný vizuální model.",
+        "routingModelHint": "Pokud aktuální model neumí číst obrázky, brána použije tento model. Prázdné pole vybere jediný obrazový model, je-li dostupný; jinak obrázky vynechá a pokračuje s textem.",
         "allModels": "Obrázky",
         "partialModels": "Část obrázků",
         "textOnly": "Jen text"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "Import ze schránky se nezdařil: {{error}}",
       "importConfigPlaceholder": "Použijte „Kopírovat konfiguraci“ na kartě a vložte obsah sem",
       "importConfigAction": "Importovat konfiguraci",
-      "importConfigFromClipboard": "Číst schránku"
+      "importConfigFromClipboard": "Číst schránku",
+      "settingsRestartHint": "Nastavení poskytovatele byla aktualizována. Použijete je restartováním běžící instance Codex nebo služby API, která tohoto poskytovatele používá."
     },
     "quickSwitch": {
       "action": "Rychle přepnout poskytovatele",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "Úvah. {{effort}}",
         "serviceTier": "Úroveň služby",
         "serviceTierValue": "Úroveň {{tier}}",
-        "upstreamModel": "Skutečný model"
+        "upstreamModel": "Odeslaný model"
       },
       "timeouts": {
         "entryLabel": "Pokročilé",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "Změnit uzel",
       "quickSwitchHint": "Změní pouze tento účet. Nová připojení použijí uložený výstup; uložení neověřuje připojení.",
       "currentNode": "Aktuální uzel",
-      "noCurrentNode": "Aktuální uzel zatím není dostupný"
+      "noCurrentNode": "Aktuální uzel zatím není dostupný",
+      "runtimeBusy": "Místní proxy je zaneprázdněna. Aktualizace je dočasně nedostupná.",
+      "runtimeCapacity": "Běží příliš mnoho proxy. Zastavte nepoužívané a zkuste to znovu.",
+      "runtimeReadFailed": "Stav místní proxy je dočasně nedostupný. Zkuste to znovu."
     },
     "more": {
       "title": "Další",
@@ -5298,6 +5314,12 @@
       "moveUp": "Nahoru",
       "moveDown": "Dolů",
       "done": "Hotovo"
+    },
+    "cliDaemon": {
+      "title": "Obnovit účet CLI",
+      "description": "Přihlašovací údaje byly uloženy, ale služba Codex CLI tohoto profilu stále běží a může používat předchozí účet.",
+      "restartHint": "Dokončete běžící úlohy CLI a poté spusťte tento příkaz v terminálu. Restart přeruší relace připojené k této službě.",
+      "copyFailed": "Kopírování selhalo. Vyberte příkaz výše a zkopírujte jej ručně."
     }
   },
   "githubCopilot": {

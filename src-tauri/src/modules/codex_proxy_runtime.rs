@@ -52,7 +52,12 @@ type Slot = Arc<tokio::sync::Mutex<Runtime>>;
 static RUNTIMES: LazyLock<Mutex<HashMap<String, Slot>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static STARTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
-static READS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(8);
+static READS: LazyLock<Arc<tokio::sync::Semaphore>> =
+    LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(8)));
+const MAX_RUNTIMES: usize = 256;
+const READ_QUEUE_TIMEOUT: Duration = Duration::from_secs(2);
+// Includes queueing and blocking-pool scheduling, rather than restarting after admission.
+const READ_TOTAL_TIMEOUT: Duration = Duration::from_secs(5);
 
 include!("codex_proxy_runtime_request_routes.rs");
 include!("codex_proxy_runtime_latency.rs");
@@ -311,11 +316,89 @@ fn observe(state: &mut Runtime, value: &str, direct: bool, engine_ready: bool) -
 }
 
 fn slot(account_id: &str) -> Result<Slot, String> {
-    let mut store = RUNTIMES.lock().map_err(|_| "PROXY_RUNTIME_FAILED")?;
-    if store.len() >= 256 && !store.contains_key(account_id) {
-        return Err("PROXY_RUNTIME_LIMIT".into());
+    slot_in(&RUNTIMES, account_id, MAX_RUNTIMES)
+}
+
+fn existing_slot(account_id: &str) -> Result<Option<Slot>, String> {
+    Ok(RUNTIMES
+        .lock()
+        .map_err(|_| "PROXY_RUNTIME_FAILED")?
+        .get(account_id)
+        .cloned())
+}
+
+fn tunnel_is_reclaimable<T>(
+    tunnel: Option<&Arc<T>>,
+    is_running: impl FnOnce(&T) -> Option<bool>,
+) -> bool {
+    tunnel.is_none_or(|tunnel| Arc::strong_count(tunnel) == 1 && is_running(tunnel) == Some(false))
+}
+
+/// Only reclaim unleased, inactive slots. Probe child state outside the registry lock;
+/// remove only after rechecking ownership so concurrent starts keep their single-flight slot.
+fn slot_in(
+    registry: &Mutex<HashMap<String, Slot>>,
+    account_id: &str,
+    limit: usize,
+) -> Result<Slot, String> {
+    let candidates = {
+        let mut store = registry.lock().map_err(|_| "PROXY_RUNTIME_FAILED")?;
+        if let Some(shared) = store.get(account_id) {
+            return Ok(shared.clone());
+        }
+        if store.len() < limit {
+            return Ok(store.entry(account_id.to_owned()).or_default().clone());
+        }
+        // Snapshot identities only: holding every Slot would make concurrent reclamation
+        // attempts mistake each other's scan leases for active account transactions.
+        store.keys().cloned().collect::<Vec<_>>()
+    };
+    for id in &candidates {
+        let shared = {
+            let store = registry.lock().map_err(|_| "PROXY_RUNTIME_FAILED")?;
+            if let Some(existing) = store.get(account_id) {
+                return Ok(existing.clone());
+            }
+            // Claim at most one idle candidate under the registry lock. Another scanner
+            // skips this one and can claim a different record without an Arc-count race.
+            let Some(shared) = store
+                .get(id)
+                .filter(|shared| Arc::strong_count(shared) == 1)
+            else {
+                continue;
+            };
+            shared.clone()
+        };
+        let Ok(state) = shared.try_lock() else {
+            continue;
+        };
+        if state.account_starting
+            || !tunnel_is_reclaimable(state.tunnel.as_ref(), |tunnel| tunnel.try_is_running())
+        {
+            continue;
+        }
+        let mut store = registry.lock().map_err(|_| "PROXY_RUNTIME_FAILED")?;
+        if let Some(existing) = store.get(account_id) {
+            return Ok(existing.clone());
+        }
+        if Arc::strong_count(&shared) == 2
+            && store
+                .get(id)
+                .is_some_and(|current| Arc::ptr_eq(current, &shared))
+        {
+            // Our local lease keeps removed resources alive until the registry lock is gone.
+            store.remove(id);
+            return Ok(store.entry(account_id.to_owned()).or_default().clone());
+        }
     }
-    Ok(store.entry(account_id.to_string()).or_default().clone())
+    let mut store = registry.lock().map_err(|_| "PROXY_RUNTIME_FAILED")?;
+    if let Some(shared) = store.get(account_id) {
+        return Ok(shared.clone());
+    }
+    if store.len() < limit {
+        return Ok(store.entry(account_id.to_owned()).or_default().clone());
+    }
+    Err("PROXY_RUNTIME_CAPACITY".into())
 }
 
 pub fn release_deleted_account(account_id: &str) {
@@ -381,21 +464,44 @@ pub(crate) async fn load(account_id: &str) -> Result<CodexAccount, String> {
     Ok(account)
 }
 
-async fn load_stored(account_id: &str) -> Result<CodexAccount, String> {
-    let permit = READS.try_acquire().map_err(|_| "PROXY_RUNTIME_LIMIT")?;
-    let account_id = account_id.to_string();
-    let account = tokio::time::timeout(
-        Duration::from_secs(5),
+async fn read_with_limit<T: Send + 'static>(
+    reads: Arc<tokio::sync::Semaphore>,
+    queue_timeout: Duration,
+    total_timeout: Duration,
+    work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, String> {
+    let started = tokio::time::Instant::now();
+    let deadline = started + total_timeout;
+    let permit = tokio::time::timeout_at(
+        (started + queue_timeout).min(deadline),
+        reads.acquire_owned(),
+    )
+    .await
+    .map_err(|_| "PROXY_RUNTIME_BUSY")?
+    .map_err(|_| "PROXY_RUNTIME_FAILED")?;
+    tokio::time::timeout_at(
+        deadline,
         tauri::async_runtime::spawn_blocking(move || {
+            // Cancellation or a caller timeout cannot release admission while disk I/O runs.
             let _permit = permit;
-            codex_account::load_account(&account_id)
+            work()
         }),
     )
     .await
-    .map_err(|_| "PROXY_ENGINE_TIMEOUT")?
-    .map_err(|_| "PROXY_RUNTIME_FAILED")?
-    .ok_or_else(|| "PROXY_ACCOUNT_UNSUPPORTED".to_string())?;
-    Ok(account)
+    .map_err(|_| "PROXY_RUNTIME_READ_TIMEOUT".to_owned())?
+    .map_err(|_| "PROXY_RUNTIME_FAILED".to_owned())
+}
+
+async fn load_stored(account_id: &str) -> Result<CodexAccount, String> {
+    let account_id = account_id.to_string();
+    read_with_limit(
+        READS.clone(),
+        READ_QUEUE_TIMEOUT,
+        READ_TOTAL_TIMEOUT,
+        move || codex_account::load_account(&account_id),
+    )
+    .await?
+    .ok_or_else(|| "PROXY_ACCOUNT_UNSUPPORTED".to_string())
 }
 
 pub(crate) async fn ensure_account_proxy_state(account: &CodexAccount) -> Result<(), String> {
@@ -604,6 +710,24 @@ pub async fn save_binding_with_mode(
     input: Option<String>,
     disabled: bool,
 ) -> Result<CodexAccount, String> {
+    save_binding_with_policy(account_id, input, disabled, false).await
+}
+
+/// Explicit pool allocation must not overwrite a manual binding made while a
+/// candidate engine was starting. Recheck under the durable account token lock.
+pub(crate) async fn save_binding_if_unbound(
+    account_id: String,
+    input: String,
+) -> Result<CodexAccount, String> {
+    save_binding_with_policy(account_id, Some(input), false, true).await
+}
+
+async fn save_binding_with_policy(
+    account_id: String,
+    input: Option<String>,
+    disabled: bool,
+    require_unbound: bool,
+) -> Result<CodexAccount, String> {
     if disabled && input.is_some() {
         return Err("PROXY_INVALID_URL".into());
     }
@@ -625,6 +749,12 @@ pub async fn save_binding_with_mode(
         )
         .await?;
     }
+    // Reserve capacity before starting a core. Clearing/direct bindings need no new slot.
+    let reserved = if normalized.as_deref().is_some_and(|value| !is_direct(value)) {
+        Some(slot(&account_id)?)
+    } else {
+        None
+    };
     let candidate = if let Some(value) = normalized.as_deref().filter(|value| !is_direct(value)) {
         let _permit = tokio::time::timeout(Duration::from_secs(12), STARTS.acquire())
             .await
@@ -644,12 +774,30 @@ pub async fn save_binding_with_mode(
     // mutation then serializes with refresh/authority writes so old snapshots
     // cannot erase a newer binding.
     let token_lock = crate::modules::codex_account::codex_token_lock_for(&account_id);
-    let shared = slot(&account_id)?;
     let persisted = normalized.clone();
+    let write_reservation = reserved.clone();
     let (account, _token_guard) = persist_binding_mutation(token_lock, move || {
+        // A cancelled caller cannot make an in-progress binding transaction reclaimable.
+        let _write_reservation = write_reservation;
+        if require_unbound {
+            let current =
+                codex_account::load_account(&account_id).ok_or("PROXY_ACCOUNT_NOT_FOUND")?;
+            if current.egress_proxy_url.is_some() || current.egress_proxy_disabled {
+                return Err("codex.proxyQuality.errors.bindingChanged".into());
+            }
+        }
         codex_account::update_account_egress_proxy(&account_id, persisted, disabled)
     })
     .await?;
+    // Publication is still under the token lock. Include starts that appeared during the
+    // write, without allocating a record just to remove a binding at capacity.
+    let shared = match reserved {
+        Some(shared) => Some(shared),
+        None => existing_slot(&account.id)?,
+    };
+    let Some(shared) = shared else {
+        return Ok(account);
+    };
     let mut state = shared.lock().await;
     let controller = candidate.as_ref().map(|tunnel| tunnel.controller());
     let old = std::mem::replace(&mut state.tunnel, candidate);
@@ -671,7 +819,6 @@ pub async fn clear_binding_if_source(
     source_id: String,
 ) -> Result<Option<CodexAccount>, String> {
     let token_lock = codex_account::codex_token_lock_for(&account_id);
-    let shared = slot(&account_id)?;
     let (account, _token_guard) = persist_binding_mutation(token_lock, move || {
         codex_account::clear_account_egress_proxy_for_source(&account_id, &source_id)
     })
@@ -679,13 +826,15 @@ pub async fn clear_binding_if_source(
     let Some(account) = account else {
         return Ok(None);
     };
-    let mut state = shared.lock().await;
-    let old = state.tunnel.take();
-    state.signature.clear();
-    state.account_start_generation = state.account_start_generation.wrapping_add(1);
-    state.account_starting = false;
-    drop(state);
-    drop(old);
+    if let Some(shared) = existing_slot(&account.id)? {
+        let mut state = shared.lock().await;
+        let old = state.tunnel.take();
+        state.signature.clear();
+        state.account_start_generation = state.account_start_generation.wrapping_add(1);
+        state.account_starting = false;
+        drop(state);
+        drop(old);
+    }
     notify_local_access_gateway_after_proxy_change();
     Ok(Some(account))
 }
@@ -904,3 +1053,7 @@ mod tests {
         assert_eq!(prepared_node.desktop, "idle");
     }
 }
+
+#[cfg(test)]
+#[path = "codex_proxy_runtime_pressure_tests.rs"]
+mod pressure_tests;

@@ -10,7 +10,7 @@
       "accountsRequired": "Mindestens ein Konto auswählen.",
       "invalidAccount": "Ungültige Kontokennung.",
       "invalidRequest": "Ungültige Testparameter.",
-      "invalidConcurrency": "Die Anzahl paralleler Aufgaben muss zwischen 1 und 10 liegen.",
+      "invalidConcurrency": "Parallelität · 1–200",
       "invalidRetention": "Die Aufbewahrung muss zwischen 1 und 3650 Tagen liegen.",
       "alreadyRunning": "Bitte zuerst den aktiven Test schließen.",
       "artifactMissing": "Erzeugtes Ergebnis nicht gefunden.",
@@ -73,7 +73,7 @@
     "exportWarning": "Exportiertes HTML ist die unveränderte Modellausgabe. Außerhalb der App gilt der Isolationsschutz der Vorschau nicht.",
     "deliveryHelp": "Alle Konten erhalten dieselbe Ausgabeanweisung: eigenständiges HTML direkt zurückgeben, ohne Markdown-Codeblöcke oder externe Abhängigkeiten.",
     "errorTimeout": "Zeitüberschreitung. Du kannst einen neuen Test starten.",
-    "errorStream": "Die Antwort ist fehlgeschlagen oder unvollständig",
+    "errorStream": "Die Antwort wurde nicht vollständig empfangen. Empfangene Inhalte bleiben erhalten.",
     "errorLimit": "Die Antwort überschritt die Größenbegrenzung. Der Empfang wurde gestoppt.",
     "errorPreviewLimit": "Bitte zuerst ein Vorschaufenster schließen.",
     "retention": "Automatische Bereinigung",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Windows-Vorgang nicht abgeschlossen",
       "accessDeniedDescription": "Windows hat den Vorgang verweigert. Das Ziel läuft möglicherweise mit höheren Rechten oder liegt in einem geschützten Ordner.",
-      "storeLaunchBlockedDescription": "Windows konnte den aktuell konfigurierten Codex-Client nicht ausführen: Der Store-Ordner wurde möglicherweise durch ein Update ersetzt oder lässt keine Ausführung mehr zu. Der direkte Start wurde blockiert, damit kein falsches Konto geöffnet wird. Nutze „Pfad neu erkennen und erneut versuchen“; schlägt das fehl, stelle diese Instanz auf den CLI-Start um.",
+      "storeLaunchBlockedDescription": "Der Start der isolierten Store-Instanz konnte nicht bestätigt werden. Cockpit hat nicht auf das Standardkonto zurückgegriffen. Erkennen Sie den Clientpfad erneut und versuchen Sie es noch einmal. Kopieren Sie bei erneutem Fehler die Diagnosedaten oder wechseln Sie für diese Instanz zum CLI-Modus.",
       "repairPath": "Pfad neu erkennen und erneut versuchen",
       "fileInUseDescription": "Die Zieldatei wird von einem anderen Programm verwendet. Schließen Sie es und versuchen Sie es erneut.",
       "programNotFoundDescription": "Windows konnte das benötigte Programm nicht finden. Prüfen Sie Installation und Pfad.",
@@ -349,7 +349,8 @@
         "unlimited": "Unbegrenztes Kontingent",
         "leftPercent": "{{value}} % übrig",
         "cachedRefreshFailed": "Aktualisierung fehlgeschlagen; letzte erfolgreiche Daten werden angezeigt",
-        "lastSuccessfulQuery": "Letzter Erfolg: {{time}}"
+        "lastSuccessfulQuery": "Letzter Erfolg: {{time}}",
+        "cachedNeedsReauth": "⚠️ Web-Verifizierung erforderlich zum Fortfahren (unten zwischengespeicherte Daten)"
       },
       "subtitle": "Verwalte deine GitHub Copilot-Konten",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Woche"
     },
-    "optional": " (optional)"
+    "optional": " (optional)",
+    "hide": "Ausblenden",
+    "show": "Anzeigen"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "Instanz löschen",
-      "message": "Instanz {{name}} löschen? Dies wird die Konfiguration entfernen und den Instanzordner löschen."
+      "message": "Instanz {{name}} löschen? Der Eintrag wird entfernt und verwaltete Instanzordner werden in den Papierkorb verschoben. Eigene und geschützte Ordner bleiben erhalten."
     },
     "import": {
       "btnTitle": "Vorhandenes Verzeichnis importieren",
@@ -1479,7 +1482,9 @@
       "normal": "Normal​",
       "forbidden": "403​",
       "forbidden_tooltip": "API gab 403 Forbidden zurück, Konto hat keinen Zugriff auf Gemini Code Assist",
-      "forbidden_msg": "Konto verboten, automatische Aktualisierung übersprungen"
+      "forbidden_msg": "Konto verboten, automatische Aktualisierung übersprungen",
+      "needsReauth": "Web-Verifizierung erforderlich",
+      "needsReauthTooltip": "Google erfordert eine Web-Sicherheitsüberprüfung zum Fortfahren"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "Löschen",
       "deleteSelected": "Ausgewählte löschen",
       "export": "Exportieren",
-      "refreshAll": "Alle aktualisieren"
+      "refreshAll": "Alle aktualisieren",
+      "reauth": "Erneut autorisieren",
+      "reauthTooltip": "Google erfordert erneute Verifizierung, klicken Sie zum Autorisieren",
+      "openValidationUrl": "Web-Verifizierung",
+      "copyValidationUrl": "Bestätigungslink kopieren",
+      "copyValidationUrlTooltip": "Web-Bestätigungsadresse kopieren"
     },
     "tabs": {
       "oauth": "OAuth-Autorisierung",
@@ -1853,7 +1863,8 @@
     "example": "Beispiel",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} erfolgreich",
-    "actionFailed": "{{action}} fehlgeschlagen: {{error}}"
+    "actionFailed": "{{action}} fehlgeschlagen: {{error}}",
+    "refreshFailed": "Aktualisierung fehlgeschlagen"
   },
   "wakeup": {
     "title": "Weckaufgaben",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Später in den Codex-Einstellungen oder Schnelleinstellungen wieder einschalten",
       "riskNotice": {
         "title": "Risikohinweis",
-        "message": "Die aktuellen Codex-API-Funktionen basieren im Kern auf einer Proxy-/Weiterleitungsnutzung. Der offizielle Dienst unterbindet dieses Verhalten derzeit nicht ausdrücklich, aber künftige Richtlinien, Regeln oder die Verfügbarkeit können sich ändern. Wenn du diese Funktion weiter nutzt, bestätigst du, dass du dies zur Kenntnis genommen hast und die damit verbundenen Risiken selbst trägst.",
+        "message": "Die Nutzung regulärer offizieller Konten über einen Reverse-Proxy oder zur Weiterleitung kann vom offiziellen Dienst streng eingeschränkt werden. Sie kann zudem als Weiterleitung erkannt werden und die Antwortqualität beeinträchtigen („verringerte Intelligenz“). Bitte mit Vorsicht nutzen, besonders bei vielen Konten.",
         "remember": "Verstanden, nicht erneut anzeigen",
         "acknowledge": "Verstanden",
         "continueStart": "Weiter",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "Diese Base URL existiert bereits.",
         "providerNotFound": "Anbieter nicht gefunden.",
         "apiKeyRequiredOnCreate": "Beim Erstellen eines Anbieters ist mindestens ein API-Key erforderlich.",
-        "apiKeyRequiredWhenEmpty": "Dieser Anbieter hat noch keinen API-Key. Bitte fügen Sie zuerst einen hinzu."
+        "apiKeyRequiredWhenEmpty": "Dieser Anbieter hat noch keinen API-Key. Bitte fügen Sie zuerst einen hinzu.",
+        "apiKeyUrlInvalid": "Eine HTTP(S)-Verwaltungsadresse ohne eingebettete Zugangsdaten verwenden; API-Schlüssel gehören ins Schlüsselfeld."
       },
       "saveSuccess": "Modellanbieter gespeichert.",
       "deleteBlocked": "Dieser Anbieter ist mit {{count}} Konten verknüpft und kann nicht gelöscht werden.",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "Dieser Anbieter unterstützt Bildeingaben standardmäßig",
-        "providerDefaultHint": "Wenn deaktiviert, dürfen nur die unten gelisteten Modelle Bilder erhalten; andere weist das lokale Gateway ab.",
+        "providerDefaultHint": "Modelle ohne eigene Einstellung verwenden diesen Standard; GPT-5.5 und neuer unterstützen Bilder standardmäßig. Einzelne Modelle lassen sich in der Liste deaktivieren. Findet das Gateway kein Bildmodell, lässt es Bilder weg und verarbeitet den Text weiter.",
         "modelsHint": "Ein Modell pro Zeile. Nützlich, wenn nur einige Modelle dieses Anbieters eingefügte Bilder unterstützen.",
-        "routingModelHint": "Wenn das aktuelle Modell keine Bilder liest, nutzt die Anfrage dieses Modell; leer nutzt automatisch das einzige Vision-Modell.",
+        "routingModelHint": "Kann das aktuelle Modell keine Bilder lesen, verwendet das Gateway dieses Modell. Ein leeres Feld wählt das einzige verfügbare Bildmodell; andernfalls werden Bilder ausgelassen und Texte weiterverarbeitet.",
         "allModels": "Bilder",
         "partialModels": "Teilweise Bilder",
         "textOnly": "Nur Text"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "Import aus der Zwischenablage fehlgeschlagen: {{error}}",
       "importConfigPlaceholder": "Nutze „Konfiguration kopieren“ auf der Anbieterkarte und füge den Inhalt hier ein",
       "importConfigAction": "Konfiguration importieren",
-      "importConfigFromClipboard": "Zwischenablage lesen"
+      "importConfigFromClipboard": "Zwischenablage lesen",
+      "settingsRestartHint": "Anbietereinstellungen aktualisiert. Starten Sie laufende Codex-Instanzen oder API-Dienste mit diesem Anbieter neu, um sie anzuwenden."
     },
     "quickSwitch": {
       "action": "Anbieter schnell wechseln",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "Denk {{effort}}",
         "serviceTier": "Service-Stufe",
         "serviceTierValue": "Stufe {{tier}}",
-        "upstreamModel": "Tatsächliches Modell"
+        "upstreamModel": "Gesendetes Modell"
       },
       "timeouts": {
         "entryLabel": "Erweitert",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "Knoten wechseln",
       "quickSwitchHint": "Ändert nur dieses Konto. Neue Verbindungen verwenden den gespeicherten Ausgang; Speichern prüft die Verbindung nicht.",
       "currentNode": "Aktueller Knoten",
-      "noCurrentNode": "Aktueller Knoten noch nicht verfügbar"
+      "noCurrentNode": "Aktueller Knoten noch nicht verfügbar",
+      "runtimeBusy": "Lokaler Proxy ist ausgelastet. Aktualisierung derzeit nicht möglich.",
+      "runtimeCapacity": "Zu viele Proxys laufen. Ungenutzte Proxys stoppen und erneut versuchen.",
+      "runtimeReadFailed": "Lokaler Proxy-Status derzeit nicht verfügbar. Bitte erneut versuchen."
     },
     "more": {
       "title": "Mehr",
@@ -5298,6 +5314,12 @@
       "moveUp": "Nach oben",
       "moveDown": "Nach unten",
       "done": "Fertig"
+    },
+    "cliDaemon": {
+      "title": "CLI-Konto aktualisieren",
+      "description": "Die Zugangsdaten wurden gespeichert, aber der Codex CLI-Daemon dieses Profils läuft noch und verwendet möglicherweise weiterhin das vorherige Konto.",
+      "restartHint": "Beenden Sie laufende CLI-Aufgaben und führen Sie diesen Befehl im Terminal aus. Ein Neustart unterbricht die mit diesem Daemon verbundenen Sitzungen.",
+      "copyFailed": "Kopieren fehlgeschlagen. Markieren und kopieren Sie den Befehl oben manuell."
     }
   },
   "githubCopilot": {

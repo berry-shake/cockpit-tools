@@ -55,3 +55,29 @@ test('all display modes retain the original proxy action and supplementary cards
   assert.equal(button.render(() => button.exports.CodexAccountProxyButton({ account: ineligible })), null);
   assert.equal(card.render(() => card.exports.CodexAccountProxyCard({ account: ineligible, placement: 'detailed' })), null);
 });
+
+test('persistent read failures explain local pressure or capacity and retain the cached proxy details', () => {
+  let kind: 'busy' | 'capacity' | 'failed' = 'busy';
+  let refreshed = 0;
+  const account = { id: 'account', egress_proxy: { protocol: 'resource', name: 'Auto' } } as CodexAccount;
+  const h = loadHookModule(new URL('./CodexAccountProxyCard.tsx', import.meta.url), {
+    'react-i18next': { useTranslation: () => ({ t: (key: string) => key }) },
+    '../../hooks/useCodexProxyDisplay': { useCodexProxyDisplay: () => 'summary' },
+    '../../utils/codexAccountProxy': { canUseCodexAccountProxy, requestCodexAccountProxy() {} },
+    './useCodexProxyCardData': { useCodexProxyCardData: () => ({ ref: { current: null },
+      status: { account: 'running', desktop: 'running', accountNode: 'Cached node', accountPort: 1234, desktopPort: 1234 },
+      statusError: true, statusErrorKind: kind, requestsError: false, loading: false, refresh() { refreshed++; } }) },
+  });
+  for (const [next, key] of [['busy', 'runtimeBusy'], ['capacity', 'runtimeCapacity'], ['failed', 'runtimeReadFailed']] as const) {
+    kind = next;
+    const root = h.render(() => h.exports.CodexAccountProxyCard({ account, placement: 'summary' }));
+    const tree = h.render(() => root.type(root.props));
+    const nodes = elements(tree);
+    assert.ok(nodes.some((node) => node.props?.children === 'Cached node'));
+    const error = nodes.find((node) => node.props?.className?.startsWith('codex-account-proxy-card-error'));
+    assert.equal(error.props.className.includes('is-busy'), kind === 'busy');
+    assert.ok(elements(error).some((node) => node.props?.children === `codex.proxy.${key}`));
+    elements(error).find((node) => node.type === 'button').props.onClick({ stopPropagation() {} });
+  }
+  assert.equal(refreshed, 3);
+});

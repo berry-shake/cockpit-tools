@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import { buildCodexModelRoutingValue, resolveRoutingCatalog } from "../../utils/codexModelRoutingValue.ts";
 import { deferred, settlePromises } from "../../../tests/helpers/reactHookHarness";
 
 // Exercise the production callbacks with controlled IPC completion order. This
@@ -10,7 +11,7 @@ import { deferred, settlePromises } from "../../../tests/helpers/reactHookHarnes
 const source = ts.createSourceFile("CodexLaunchPreviewModal.tsx", readFileSync(
   new URL("./CodexLaunchPreviewModal.tsx", import.meta.url), "utf8",
 ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-const names = ["requestClose", "persistDraft", "handleExecute", "handleInstanceChange", "applyContextConfig"];
+const names = ["requestClose", "persistDraft", "handleExecute", "handleInstanceChange", "applyContextConfig", "openModelConfig", "closeModelConfig"];
 const callbacks: string[] = [];
 const closeButtons: (string | undefined)[] = [];
 function visit(node: ts.Node) {
@@ -50,7 +51,7 @@ function harness(routing = false, overlay = "global-progress-overlay") {
     catalogEnabled: false, modelsError: null, models: [], defaultModelId: null,
     routingEnabled: false, routingEnabledForSave: false, routingDirty: routing,
     nextModelRouting: { enabled: false, routes: [] }, mixedRoutingBindAccountId: undefined,
-    normalizedRoutingRoutes: [], dirty: true, contextWindowInput: "", compactLimitInput: "",
+    normalizedRoutingRoutes: [], routingRoutes: [], dirty: true, contextWindowInput: "", compactLimitInput: "",
     contextOverrideEnabled: false, mode: "account", instanceId: "synthetic", account: null,
     loadedTarget: "synthetic", previewTargetKey: "synthetic",
     document: { querySelectorAll: () => ["codex-launch-preview-overlay", overlay].map((className) => ({ classList: [className] })) },
@@ -137,3 +138,108 @@ for (const action of actions) {
     }
   }
 }
+
+for (const accept of [false, true]) {
+  test(`mixed routing requires explicit catalog opt-in before editing: ${accept}`, async () => {
+    const h = harness();
+    Object.assign(h.c, {
+      unavailable: false, routingEnabled: true, catalogEnabled: false,
+      models: [{ model_id: 'custom/model', display_name: 'Model', context_window: 272000, auto_compact_token_limit: 262000 }],
+      confirmDialog: async () => accept,
+      setModelConfigSnapshot: (value: any) => { h.c.modelConfigSnapshot = value; },
+      setCatalogEnabled: (value: boolean) => { h.c.catalogEnabled = value; },
+      setModelConfigOpen: (value: boolean) => { h.c.modelConfigOpen = value; },
+      setModels: (value: any) => { h.c.models = value; },
+      setDefaultModelId: (value: any) => { h.c.defaultModelId = value; },
+      setModelsError: (value: any) => { h.c.modelsError = value; },
+    });
+    await h.c.handlers.openModelConfig();
+    assert.equal(h.c.catalogEnabled, accept);
+    assert.equal(!!h.c.modelConfigOpen, accept);
+    if (!accept) { assert.equal(h.c.modelConfigSnapshot, undefined); return; }
+    h.c.handlers.closeModelConfig(false);
+    assert.equal(h.c.catalogEnabled, false, 'cancel restores the original opt-out');
+    await h.c.handlers.openModelConfig();
+    h.c.handlers.closeModelConfig(true);
+    assert.equal(h.c.catalogEnabled, true);
+    h.c.resolveRoutingCatalog = resolveRoutingCatalog;
+    let payload: any[] = [];
+    h.c.saveCodexInstanceQuickConfig = async (...args: any[]) => {
+      payload = args;
+      return { experimental_model_catalog_enabled: args[3], experimental_model_catalog_models: args[4] };
+    };
+    const pending = h.c.handlers.persistDraft(); h.read.resolve({});
+    assert.equal(await pending, true);
+    assert.equal(payload[3], true, 'backend must receive an enabled persistence policy');
+    assert.equal(payload[4][0].context_window, 272000);
+    assert.equal(payload[4][0].auto_compact_token_limit, 262000);
+    assert.equal((h.cached[0] as any).experimental_model_catalog_models[0].context_window, 272000);
+  });
+}
+
+test('late model-management confirmation cannot reopen a closed or replaced preview', async () => {
+  for (const close of [false, true]) {
+    const h = harness();
+    const confirmation = deferred<boolean>();
+    const draftUpdates: string[] = [];
+    Object.assign(h.c, {
+      unavailable: false,
+      confirmDialog: () => confirmation.promise,
+      setModelConfigSnapshot: () => draftUpdates.push('snapshot'),
+      setCatalogEnabled: () => draftUpdates.push('enabled'),
+      setModelConfigOpen: () => draftUpdates.push('open'),
+    });
+    const pending = h.c.handlers.openModelConfig();
+    if (close) h.c.handlers.requestClose();
+    else h.c.configSession.current += 1;
+    confirmation.resolve(true);
+    await pending;
+    assert.deepEqual(draftUpdates, []);
+    assert.deepEqual(h.lateUpdates, []);
+  }
+});
+
+test('canceling per-model edits restores the mixed-routing selection as well as the model draft', async () => {
+  const h = harness();
+  const route = { id: 'route', namespace: 'relay', providerAccountId: 'provider', enabled: true,
+    selectedModels: ['model'], extraModels: ['custom-model'] };
+  const initialRouting = buildCodexModelRoutingValue(true, [route]);
+  Object.assign(h.c, {
+    unavailable: false, catalogEnabled: true, routingRoutes: [route],
+    models: [{ model_id: 'relay/model', display_name: 'Model', context_window: 200000 }],
+    setModelConfigSnapshot: (value: any) => { h.c.modelConfigSnapshot = value; },
+    setCatalogEnabled: (value: boolean) => { h.c.catalogEnabled = value; },
+    setModelConfigOpen: () => {}, setModelsError: () => {},
+    setModels: (value: any) => { h.c.models = value; },
+    setDefaultModelId: (value: any) => { h.c.defaultModelId = value; },
+    setRoutingRoutes: (value: any) => { h.c.routingRoutes = value; },
+  });
+  await h.c.handlers.openModelConfig();
+  h.c.routingRoutes[0].selectedModels = [];
+  h.c.models = [];
+  h.c.handlers.closeModelConfig(false);
+  assert.deepEqual(Array.from(h.c.routingRoutes[0].selectedModels), ['model']);
+  assert.deepEqual(Array.from(h.c.routingRoutes[0].extraModels), ['custom-model']);
+  assert.equal(h.c.models[0].context_window, 200000);
+  assert.equal(h.c.catalogEnabled, true);
+  let savedPayload: any;
+  Object.assign(h.c, {
+    routingDirty: true, routingEnabled: true, routingEnabledForSave: true,
+    normalizedRoutingRoutes: h.c.routingRoutes,
+    nextModelRouting: buildCodexModelRoutingValue(true, h.c.routingRoutes),
+    mixedRoutingOAuthAccount: { id: 'oauth' },
+    accounts: [{ id: 'provider', auth_mode: 'apikey' }],
+    eligibleCodexModelRoutingAccounts: (accounts: any[]) => accounts,
+    syncExperimentalModelsWithRouting: (models: any[]) => models,
+    resolveRoutingCatalog,
+    saveCodexInstanceConfiguration: async (input: any) => {
+      savedPayload = input;
+      return { quickConfig: {}, instance: h.savedInstance };
+    },
+  });
+  const pending = h.c.handlers.persistDraft();
+  h.read.resolve({});
+  assert.equal(await pending, true);
+  assert.deepEqual(savedPayload.modelRouting, initialRouting);
+  assert.equal(savedPayload.experimentalModelCatalogModels[0].context_window, 200000);
+});

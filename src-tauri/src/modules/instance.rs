@@ -354,6 +354,14 @@ pub fn delete_instance_directory(dir_path: &Path) -> Result<(), String> {
         return Ok(());
     }
 
+    if !modules::instance_storage_cleanup::can_delete_registered_instance_directory(dir_path)? {
+        modules::logger::log_warn(&format!(
+            "[Instance] Preserving directory outside owned instance storage; removing only its registration: {}",
+            dir_path.display()
+        ));
+        return Ok(());
+    }
+
     trash::delete(dir_path).map_err(|err| format!("移动实例目录到回收站失败: {}", err))
 }
 

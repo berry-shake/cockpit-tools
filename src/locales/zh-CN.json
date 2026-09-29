@@ -10,7 +10,7 @@
       "accountsRequired": "请至少选择一个账号",
       "invalidAccount": "账号标识无效",
       "invalidRequest": "测试参数无效",
-      "invalidConcurrency": "并行数需为 1 至 10",
+      "invalidConcurrency": "并发数 · 1–200",
       "invalidRetention": "保留天数需为 1 至 3650 天",
       "alreadyRunning": "已有活动测试，请先关闭",
       "artifactMissing": "未找到生成结果",
@@ -28,8 +28,8 @@
     "description": "同题并行生成 HTML，由你比较结果，不自动评分。",
     "model": "模型",
     "effort": "思考强度",
-    "concurrency": "并行数",
-    "prompt": "测试消息",
+    "concurrency": "并发数",
+    "prompt": "鹈鹕提示词",
     "accounts": "测试账号",
     "accountHelp": "测试会发送消息并消耗各账号额度；API Key 与仅网页会话账号不参与。",
     "emptyAccounts": "暂无可测试账号",
@@ -73,7 +73,7 @@
     "exportWarning": "导出的是模型原始 HTML；在应用外打开时不受预览隔离保护。",
     "deliveryHelp": "所有账号使用相同交付约定：直接返回独立 HTML，不使用 Markdown 代码块或外部依赖。",
     "errorTimeout": "请求超时，可手动重测",
-    "errorStream": "响应失败或未完整结束",
+    "errorStream": "响应未完整结束，已保留收到的内容",
     "errorLimit": "响应超过大小上限，已停止接收",
     "errorPreviewLimit": "请先关闭一个预览窗口",
     "retention": "自动清理",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Windows 操作未完成",
       "accessDeniedDescription": "Windows 拒绝了本次操作。目标程序可能以更高权限运行，或位于受保护目录中。",
-      "storeLaunchBlockedDescription": "Windows 拒绝了商店版 Codex 客户端的全部启动方式（直接启动、PowerShell 启动、包身份启动），已阻止启动以免打开错误的账号。多数情况下需要修复或重新安装商店版 Codex（可在 Microsoft Store 检查更新并重新安装）；也可「重新检测路径并重试」；仍失败时请把该实例的启动方式改为 CLI。",
+      "storeLaunchBlockedDescription": "未能确认商店版隔离实例已正常启动，Cockpit 未回退打开默认账号。请重新检测客户端路径并重试；仍失败时可复制诊断信息反馈，或将该实例切换为 CLI 模式。",
       "repairPath": "重新检测路径并重试",
       "fileInUseDescription": "目标文件正在被其他程序使用。请关闭占用程序后重试。",
       "programNotFoundDescription": "Windows 找不到完成本次操作所需的程序。请检查安装状态或路径设置。",
@@ -356,6 +356,7 @@
         "unlimited": "无限额度",
         "leftPercent": "剩余 {{value}}%",
         "cachedRefreshFailed": "刷新失败，以下为上次成功数据",
+        "cachedNeedsReauth": "⚠️ 账号需完成网页验证以继续使用（以下为上次成功数据）",
         "lastSuccessfulQuery": "上次成功：{{time}}"
       },
       "subtitle": "实时监控所有账号的配额状态。",
@@ -402,9 +403,11 @@
     "processing": "处理中...",
     "selectAll": "全选",
     "quota": {
-      "weeklyWindow": "周"
+      "weeklyWindow": "Weekly"
     },
-    "optional": "（可选）"
+    "optional": "（可选）",
+    "hide": "隐藏",
+    "show": "显示"
   },
   "floatingCard": {
     "selectPlatform": "切换平台",
@@ -1015,7 +1018,7 @@
     },
     "delete": {
       "title": "删除实例",
-      "message": "确认删除实例 {{name}}？将移除配置并删除实例目录。"
+      "message": "确认删除实例 {{name}}？将移除实例记录，并将受管实例目录移入回收站；自定义目录和受保护目录会保留。"
     }
   },
   "settings": {
@@ -1699,7 +1702,9 @@
       "normal": "正常",
       "forbidden": "403",
       "forbidden_tooltip": "API 返回 403 Forbidden，账号无权使用 Gemini Code Assist",
-      "forbidden_msg": "账号无权限，已跳过自动刷新"
+      "forbidden_msg": "账号无权限，已跳过自动刷新",
+      "needsReauth": "需网页验证",
+      "needsReauthTooltip": "Google 要求进行网页安全验证以继续使用"
     },
     "tier": {
       "pro": "PRO",
@@ -1834,7 +1839,12 @@
       "delete": "删除",
       "deleteSelected": "删除选中",
       "export": "导出",
-      "refreshAll": "刷新全部"
+      "refreshAll": "刷新全部",
+      "reauth": "重新授权",
+      "reauthTooltip": "Google 要求重新验证，点击立即重新授权",
+      "openValidationUrl": "网页验证",
+      "copyValidationUrl": "复制验证链接",
+      "copyValidationUrlTooltip": "复制网页验证地址"
     },
     "switchHistory": {
       "title": "切换记录",
@@ -2073,7 +2083,8 @@
     "example": "示例",
     "actionRunning": "{{action}}中...",
     "actionSuccess": "{{action}}成功",
-    "actionFailed": "{{action}}失败: {{error}}"
+    "actionFailed": "{{action}}失败: {{error}}",
+    "refreshFailed": "刷新失败"
   },
   "wakeup": {
     "title": "唤醒任务",
@@ -2945,7 +2956,7 @@
       "hideEntryEffectRestore": "可在 Codex 设置或快捷设置中重新开启",
       "riskNotice": {
         "title": "使用风险提示",
-        "message": "当前 Codex API 服务相关功能，本质上属于代理转发使用方式。就目前情况看，官方暂未对此类行为进行明确管控，但后续政策、规则或可用性是否发生变化，仍存在不确定性。继续使用该功能，即表示您已知悉相关情况，并愿意自行承担可能产生的风险。",
+        "message": "普通官方账号用于反代/中转可能受到官方严格限制，也可能被识别为中转并影响回答质量（“降智”）。账号较多时请谨慎使用。",
         "remember": "我已知晓，不再提示",
         "acknowledge": "我已知晓",
         "continueStart": "继续启动",
@@ -3388,7 +3399,8 @@
         "baseUrlExists": "该 Base URL 已存在",
         "providerNotFound": "供应商不存在",
         "apiKeyRequiredOnCreate": "新增供应商时必须至少填写一个 API Key",
-        "apiKeyRequiredWhenEmpty": "当前供应商没有可用 API Key，请先添加一个"
+        "apiKeyRequiredWhenEmpty": "当前供应商没有可用 API Key，请先添加一个",
+        "apiKeyUrlInvalid": "请填写不含内嵌凭据的 HTTP(S) 管理页面网址；API Key 请填入密钥栏。"
       },
       "saveSuccess": "模型供应商已保存",
       "deleteBlocked": "该供应商已被 {{count}} 个账号引用，禁止删除。",
@@ -3556,9 +3568,9 @@
       },
       "vision": {
         "providerDefault": "该供应商默认支持图片输入",
-        "providerDefaultHint": "关闭时，只有下方列出的模型会允许图片输入；其他模型会在本地网关直接提示不支持。",
+        "providerDefaultHint": "未单独设置的模型使用此默认值，GPT-5.5 及更新模型默认支持图片。可在模型列表中单独关闭。网关无法匹配视觉模型时会省略图片并继续处理文本。",
         "modelsHint": "每行一个模型名。适合同一供应商里只有部分视觉模型支持粘贴图片的情况。",
-        "routingModelHint": "当前模型不支持图片时，带图片请求会改用该模型；留空且只有一个视觉模型时自动使用。",
+        "routingModelHint": "当前模型不支持图片时，网关会改用该模型；留空时自动使用唯一视觉模型，否则省略图片并继续处理文本。",
         "allModels": "图片输入",
         "partialModels": "部分图片",
         "textOnly": "仅文本"
@@ -3647,7 +3659,8 @@
       "importConfigFailed": "从剪贴板导入失败：{{error}}",
       "importConfigPlaceholder": "在供应商卡片上点「复制配置」后，把内容粘贴到这里",
       "importConfigAction": "导入配置",
-      "importConfigFromClipboard": "一键读取剪贴板"
+      "importConfigFromClipboard": "一键读取剪贴板",
+      "settingsRestartHint": "供应商配置已更新。若关联的 Codex 或 API 服务正在运行，请重启后生效。"
     },
     "quickSwitch": {
       "action": "快速切换供应商",
@@ -4629,7 +4642,7 @@
         "reasoningEffortValue": "思考 {{effort}}",
         "serviceTier": "服务等级",
         "serviceTierValue": "等级 {{tier}}",
-        "upstreamModel": "实际模型"
+        "upstreamModel": "发送模型"
       }
     },
     "apiKey": {
@@ -5498,7 +5511,10 @@
       "quickSwitch": "切换节点",
       "quickSwitchHint": "仅切换此账号；保存后，新连接使用新出口。保存不代表已验证连通。",
       "currentNode": "当前节点",
-      "noCurrentNode": "尚未获取当前节点"
+      "noCurrentNode": "尚未获取当前节点",
+      "runtimeBusy": "本地代理繁忙，暂时无法更新",
+      "runtimeCapacity": "运行中的代理过多，请停止不用的代理后重试",
+      "runtimeReadFailed": "本地代理状态暂时无法读取，请重试"
     },
     "more": {
       "title": "更多",
@@ -5518,6 +5534,12 @@
       "moveUp": "上移",
       "moveDown": "下移",
       "done": "完成"
+    },
+    "cliDaemon": {
+      "title": "CLI 账号需刷新",
+      "description": "凭据已写入，但检测到此配置目录的 Codex CLI 后台服务仍在运行，可能继续使用原账号。",
+      "restartHint": "请先结束正在运行的 CLI 任务，再在终端执行以下命令。重启会中断连接到该服务的会话。",
+      "copyFailed": "复制失败，请选中上方命令手动复制。"
     }
   },
   "codebuddy": {

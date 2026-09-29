@@ -1234,7 +1234,10 @@ fn sidecar_client_api_keys_with_internal(
         .flatten()
     {
         let key = item.key.trim();
+        // Explicit model routes remain usable while the bound OAuth account is
+        // temporarily unavailable. Their credentials were validated when saved.
         let has_resolvable_scope = item.provider_gateway.is_some()
+            || item.model_routing.as_ref().is_some_and(|routing| !routing.routes.is_empty())
             || !sidecar_auth_ids_for_account_ids_with_overrides(
                 effective_api_key_account_ids(collection, item),
                 account_overrides,
@@ -1290,10 +1293,21 @@ fn sidecar_api_key_account_scope_values_with_internal(
         if item.provider_gateway.is_some() {
             continue;
         }
-        let auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
+        let mut auth_ids = sidecar_auth_ids_for_account_ids_with_overrides(
             effective_api_key_account_ids(collection, item),
             account_overrides,
         );
+        if auth_ids.is_empty() && item.model_routing.is_some()
+            && item.inherit_account_pool == Some(false)
+        {
+            // Keep the missing OAuth projection as an explicit restrictive scope.
+            // Omitting the scope must never grant this key the whole global pool.
+            if let Some(bound_id) = collection.bound_oauth_account_id.as_deref() {
+                if item.account_ids.iter().any(|id| id == bound_id) {
+                    auth_ids.push(sidecar_auth_file_name(bound_id));
+                }
+            }
+        }
         if auth_ids.is_empty() {
             continue;
         }

@@ -19,12 +19,8 @@ pub async fn load_codex_account_groups() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn save_codex_account_groups(data: String) -> Result<(), String> {
-    let dir = account::get_data_dir()?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    }
-    let path = dir.join(CODEX_GROUPS_FILE);
-    std::fs::write(&path, data).map_err(|e| format!("Failed to write codex groups: {}", e))
+    // The shared and Codex-specific UI must use the same validated atomic write.
+    crate::commands::account::save_platform_account_groups("codex".to_string(), data).await
 }
 
 #[tauri::command]
@@ -1377,7 +1373,6 @@ fn summarize_new_api_model_provider_usage(
     let raw_quota_limit = json_f64_at(subscription, &["hard_limit_usd"])
         .or_else(|| json_f64_at(subscription, &["soft_limit_usd"]))
         .or_else(|| json_f64_at(subscription, &["system_hard_limit_usd"]));
-    let quota_used = json_f64_at(usage, &["total_usage"]).map(|value| value / 100.0);
     let token_data = token_usage.and_then(|value| value.get("data"));
     let quota_unlimited = token_data
         .and_then(|value| json_bool_at(value, &["unlimited_quota"]))
@@ -1393,34 +1388,60 @@ fn summarize_new_api_model_provider_usage(
                         && (sys - 100_000_000.0).abs() < f64::EPSILON
             )
         });
-    let quota_limit = if quota_unlimited {
-        None
+    // Never convert raw token quotas with a guessed site-specific multiplier.
+    // A display response is one coherent unit; missing fields must not fall back
+    // to billing amounts in a potentially different currency.
+    let display = token_data.and_then(|data| data.get("display"));
+    let display_unit = display
+        .and_then(|value| json_string_at(value, &["unit"]))
+        .map(|unit| unit.trim().to_uppercase())
+        .filter(|unit| !unit.is_empty());
+    let finite = |value: Option<f64>| value.filter(|number| number.is_finite());
+    let (total, quota_used, available) = if display_unit.is_some() {
+        let display = display.unwrap();
+        let total = finite(json_f64_at(display, &["total"]));
+        let used = finite(json_f64_at(display, &["used"]));
+        let remaining = finite(json_f64_at(display, &["remaining"]));
+        let total = total.or_else(|| finite(used.zip(remaining).map(|(u, r)| u + r)));
+        let used = used.or_else(|| finite(total.zip(remaining).map(|(t, r)| (t - r).max(0.0))));
+        let remaining =
+            remaining.or_else(|| finite(total.zip(used).map(|(t, u)| (t - u).max(0.0))));
+        (total, used, remaining)
     } else {
-        raw_quota_limit
+        let total = finite(raw_quota_limit).filter(|_| !quota_unlimited);
+        let used = finite(json_f64_at(usage, &["total_usage"]).map(|value| value / 100.0));
+        let remaining = finite(total.zip(used).map(|(limit, used)| (limit - used).max(0.0)));
+        (total, used, remaining)
     };
-    let quota_remaining = match (quota_limit, quota_used) {
-        (Some(limit), Some(used)) => Some((limit - used).max(0.0)),
-        _ => None,
-    };
+    let quota_limit = total.filter(|_| !quota_unlimited);
+    // An unlimited token can still expose its account's real balance in display.
+    // Only the legacy billing limit sentinel is suppressed above.
+    let quota_remaining = available;
+    // Legacy billing fields keep their historical *_usd names even when a
+    // site returns CNY or tokens. An explicit empty unit means unknown; do not
+    // guess a currency or a conversion factor from those field names.
+    let unit = display_unit.clone().unwrap_or_default();
     let mut details = Vec::new();
-    push_usage_detail(
-        &mut details,
-        "hardLimitUsd",
-        "Hard Limit USD",
-        json_f64_at(subscription, &["hard_limit_usd"]).map(format_usage_number),
-    );
-    push_usage_detail(
-        &mut details,
-        "softLimitUsd",
-        "Soft Limit USD",
-        json_f64_at(subscription, &["soft_limit_usd"]).map(format_usage_number),
-    );
-    push_usage_detail(
-        &mut details,
-        "systemHardLimitUsd",
-        "System Hard Limit USD",
-        json_f64_at(subscription, &["system_hard_limit_usd"]).map(format_usage_number),
-    );
+    if !quota_unlimited && display_unit.is_none() {
+        push_usage_detail(
+            &mut details,
+            "hardLimitUsd",
+            "Hard Limit USD",
+            json_f64_at(subscription, &["hard_limit_usd"]).map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            "softLimitUsd",
+            "Soft Limit USD",
+            json_f64_at(subscription, &["soft_limit_usd"]).map(format_usage_number),
+        );
+        push_usage_detail(
+            &mut details,
+            "systemHardLimitUsd",
+            "System Hard Limit USD",
+            json_f64_at(subscription, &["system_hard_limit_usd"]).map(format_usage_number),
+        );
+    }
     push_usage_detail(
         &mut details,
         "accessUntil",
@@ -1438,13 +1459,13 @@ fn summarize_new_api_model_provider_usage(
             &mut details,
             "totalGranted",
             "Total Granted",
-            json_f64_at(token_data, &["total_granted"]).map(format_usage_number),
+            total.map(format_usage_number),
         );
         push_usage_detail(
             &mut details,
             "totalAvailable",
             "Total Available",
-            json_f64_at(token_data, &["total_available"]).map(format_usage_number),
+            available.map(format_usage_number),
         );
         push_usage_detail(
             &mut details,
@@ -1463,7 +1484,8 @@ fn summarize_new_api_model_provider_usage(
         &mut details,
         "totalUsage",
         "Total Usage",
-        json_f64_at(usage, &["total_usage"]).map(format_usage_number),
+        // The existing detail contract uses hundredths; the UI divides by 100.
+        finite(quota_used.map(|value| value * 100.0)).map(format_usage_number),
     );
 
     CodexModelProviderUsageSummary {
@@ -1473,7 +1495,7 @@ fn summarize_new_api_model_provider_usage(
         plan_name: None,
         remaining: quota_remaining,
         balance: None,
-        unit: Some("USD".to_string()),
+        unit: Some(unit),
         quota_unlimited: Some(quota_unlimited),
         quota_limit,
         quota_used,
@@ -2029,4 +2051,136 @@ async fn query_sub2api_model_provider_usage(
     let parsed = serde_json::from_str::<serde_json::Value>(&text)
         .map_err(|e| format!("PROVIDER_USAGE_PARSE_FAILED: {}", e))?;
     Ok(summarize_model_provider_usage(&parsed, latency_ms))
+}
+
+#[cfg(test)]
+mod new_api_usage_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn detail(summary: &CodexModelProviderUsageSummary, key: &str) -> Option<String> {
+        summary
+            .details
+            .iter()
+            .find(|item| item.key == key)
+            .map(|item| item.value.clone())
+    }
+
+    #[test]
+    fn display_amounts_and_currency_are_used_without_raw_quota_multipliers() {
+        let token = json!({"data":{"total_granted":900000000,"total_available":700000000,
+            "display":{"total":180,"used":40,"remaining":140,"unit":" CNY "}}});
+        let result = summarize_new_api_model_provider_usage(
+            &json!({"hard_limit_usd":99}),
+            &json!({"total_usage":700}),
+            Some(&token),
+            2,
+        );
+        assert_eq!(result.unit.as_deref(), Some("CNY"));
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (Some(180.0), Some(40.0), Some(140.0))
+        );
+        assert_eq!(detail(&result, "totalGranted"), Some("180".into()));
+        assert_eq!(detail(&result, "totalAvailable"), Some("140".into()));
+        assert_eq!(
+            detail(&result, "totalUsage")
+                .unwrap()
+                .parse::<f64>()
+                .unwrap()
+                / 100.0,
+            40.0
+        );
+        assert!(detail(&result, "hardLimitUsd").is_none());
+    }
+
+    #[test]
+    fn legacy_billing_values_do_not_treat_raw_quota_as_currency() {
+        let token = json!({"data":{"total_granted":900000000,"total_available":700000000}});
+        let result = summarize_new_api_model_provider_usage(
+            &json!({"hard_limit_usd":90}),
+            &json!({"total_usage":2000}),
+            Some(&token),
+            0,
+        );
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (Some(90.0), Some(20.0), Some(70.0))
+        );
+        assert_eq!(detail(&result, "totalGranted"), Some("90".into()));
+        assert_eq!(result.unit.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn partial_display_does_not_mix_with_another_unit_and_retains_zero() {
+        let token = json!({"data":{"display":{"remaining":0,"unit":"CNY"}}});
+        let result = summarize_new_api_model_provider_usage(
+            &json!({"hard_limit_usd":99}),
+            &json!({"total_usage":700}),
+            Some(&token),
+            0,
+        );
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (None, None, Some(0.0))
+        );
+        let token = json!({"data":{"display":{"total":10,"remaining":3,"unit":"USD"}}});
+        let result =
+            summarize_new_api_model_provider_usage(&json!({}), &json!({}), Some(&token), 0);
+        assert_eq!(result.quota_used, Some(7.0));
+    }
+
+    #[test]
+    fn unlimited_sentinels_and_nonfinite_values_are_not_displayed_as_money() {
+        let subscription = json!({"hard_limit_usd":100000000,"soft_limit_usd":100000000,"system_hard_limit_usd":100000000});
+        let result = summarize_new_api_model_provider_usage(
+            &subscription,
+            &json!({"total_usage":100}),
+            None,
+            0,
+        );
+        assert_eq!(result.quota_unlimited, Some(true));
+        assert_eq!(result.quota_limit, None);
+        for key in [
+            "hardLimitUsd",
+            "softLimitUsd",
+            "systemHardLimitUsd",
+            "totalGranted",
+        ] {
+            assert!(detail(&result, key).is_none());
+        }
+        let token = json!({"data":{"unlimited_quota":true,
+            "display":{"total":480,"remaining":45,"used":435,"unit":"CNY"}}});
+        let result =
+            summarize_new_api_model_provider_usage(&subscription, &json!({}), Some(&token), 0);
+        assert_eq!(result.quota_limit, None);
+        assert_eq!(result.quota_remaining, Some(45.0));
+        assert_eq!(result.quota_used, Some(435.0));
+        assert_eq!(detail(&result, "totalGranted"), Some("480".into()));
+        assert_eq!(detail(&result, "totalAvailable"), Some("45".into()));
+        let token =
+            json!({"data":{"display":{"total":"NaN","used":"inf","remaining":2,"unit":"USD"}}});
+        let result =
+            summarize_new_api_model_provider_usage(&json!({}), &json!({}), Some(&token), 0);
+        assert_eq!(
+            (
+                result.quota_limit,
+                result.quota_used,
+                result.quota_remaining
+            ),
+            (None, None, Some(2.0))
+        );
+    }
 }

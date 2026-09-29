@@ -10,7 +10,7 @@
       "accountsRequired": "Pilih setidaknya satu akun.",
       "invalidAccount": "Pengenal akun tidak valid.",
       "invalidRequest": "Parameter pengujian tidak valid.",
-      "invalidConcurrency": "Jumlah tugas paralel harus antara 1 dan 10.",
+      "invalidConcurrency": "Tugas paralel · 1–200",
       "invalidRetention": "Masa simpan harus antara 1 hingga 3650 hari.",
       "alreadyRunning": "Tutup pengujian aktif terlebih dahulu.",
       "artifactMissing": "Hasil yang dibuat tidak ditemukan.",
@@ -73,7 +73,7 @@
     "exportWarning": "HTML yang diekspor adalah keluaran asli model. Jika dibuka di luar aplikasi, perlindungan isolasi pratinjau tidak berlaku.",
     "deliveryHelp": "Semua akun menggunakan instruksi keluaran yang sama: kembalikan HTML mandiri secara langsung tanpa blok kode Markdown atau komponen eksternal.",
     "errorTimeout": "Waktu permintaan habis. Anda dapat memulai pengujian baru.",
-    "errorStream": "Respons gagal atau tidak selesai",
+    "errorStream": "Balasan belum selesai. Konten yang diterima tetap disimpan.",
     "errorLimit": "Balasan melebihi batas ukuran; penerimaan dihentikan.",
     "errorPreviewLimit": "Tutup satu jendela pratinjau terlebih dahulu.",
     "retention": "Pembersihan otomatis",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Operasi Windows belum selesai",
       "accessDeniedDescription": "Windows menolak operasi ini. Target mungkin berjalan dengan izin lebih tinggi atau berada di lokasi terlindungi.",
-      "storeLaunchBlockedDescription": "Windows tidak dapat menjalankan klien Codex yang dikonfigurasi: folder Store mungkin sudah diganti oleh pembaruan atau tidak lagi mengizinkan eksekusi. Peluncuran langsung diblokir agar akun yang salah tidak terbuka. Gunakan “Deteksi ulang jalur dan coba lagi”; jika masih gagal, ubah instans ini ke mode CLI.",
+      "storeLaunchBlockedDescription": "Startup instans terisolasi versi Store tidak dapat dikonfirmasi. Cockpit tidak beralih ke akun bawaan. Deteksi ulang lokasi klien lalu coba lagi. Jika masih gagal, salin informasi diagnostik atau ubah instans ini ke mode CLI.",
       "repairPath": "Deteksi ulang jalur dan coba lagi",
       "fileInUseDescription": "File target sedang digunakan program lain. Tutup program tersebut lalu coba lagi.",
       "programNotFoundDescription": "Windows tidak menemukan program yang diperlukan. Periksa instalasi atau jalur yang diatur.",
@@ -356,7 +356,8 @@
         "unlimited": "Kuota tak terbatas",
         "leftPercent": "Tersisa {{value}}%",
         "cachedRefreshFailed": "Pembaruan gagal; menampilkan data terakhir yang berhasil",
-        "lastSuccessfulQuery": "Keberhasilan terakhir: {{time}}"
+        "lastSuccessfulQuery": "Keberhasilan terakhir: {{time}}",
+        "cachedNeedsReauth": "⚠️ Verifikasi web diperlukan untuk melanjutkan (data cache di bawah)"
       },
       "subtitle": "Pantau status kuota seluruh akun secara real-time.",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Mingguan"
     },
-    "optional": " (opsional)"
+    "optional": " (opsional)",
+    "hide": "Sembunyikan",
+    "show": "Tampilkan"
   },
   "floatingCard": {
     "selectPlatform": "Ganti platform",
@@ -835,7 +838,7 @@
     },
     "delete": {
       "title": "Hapus Instansi",
-      "message": "Hapus instansi {{name}}? Tindakan ini akan menghapus konfigurasi dan folder instansi."
+      "message": "Hapus instansi {{name}}? Pendaftarannya akan dihapus dan folder instansi terkelola dipindahkan ke tempat sampah. Folder khusus dan terlindungi akan dipertahankan."
     },
     "launchDialog": {
       "title": "Luncurkan instans",
@@ -1526,7 +1529,9 @@
       "normal": "Normal​",
       "forbidden": "403​",
       "forbidden_tooltip": "API mengembalikan 403 Forbidden, akun tidak memiliki akses ke Gemini Code Assist",
-      "forbidden_msg": "Akun diblokir, penyegaran otomatis dilewati"
+      "forbidden_msg": "Akun diblokir, penyegaran otomatis dilewati",
+      "needsReauth": "Perlu Verifikasi Web",
+      "needsReauthTooltip": "Google memerlukan verifikasi keamanan web untuk melanjutkan"
     },
     "tier": {
       "pro": "PRO​",
@@ -1661,7 +1666,12 @@
       "delete": "Hapus",
       "deleteSelected": "Hapus yang Dipilih",
       "export": "Ekspor",
-      "refreshAll": "Refresh Semua"
+      "refreshAll": "Refresh Semua",
+      "reauth": "Otorisasi ulang",
+      "reauthTooltip": "Google memerlukan verifikasi ulang, klik untuk mengotorisasi ulang",
+      "openValidationUrl": "Verifikasi Web",
+      "copyValidationUrl": "Salin tautan verifikasi",
+      "copyValidationUrlTooltip": "Salin alamat verifikasi web"
     },
     "switchHistory": {
       "title": "Riwayat Penggantian",
@@ -1900,7 +1910,8 @@
     "example": "Contoh",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} berhasil",
-    "actionFailed": "{{action}} gagal: {{error}}"
+    "actionFailed": "{{action}} gagal: {{error}}",
+    "refreshFailed": "Gagal menyegarkan"
   },
   "wakeup": {
     "title": "Tugas Bangun",
@@ -2656,7 +2667,7 @@
       "hideEntryEffectRestore": "Anda bisa menyalakannya lagi di Pengaturan Codex atau Pengaturan Cepat",
       "riskNotice": {
         "title": "Pemberitahuan Risiko",
-        "message": "Fitur terkait layanan Codex API saat ini pada dasarnya menggunakan pola proxy terbalik. Untuk saat ini, pihak resmi belum secara tegas membatasi perilaku ini, tetapi kebijakan, aturan, atau ketersediaannya dapat berubah di masa mendatang. Dengan tetap menggunakan fitur ini, Anda menyatakan telah memahami kondisi tersebut dan bersedia menanggung risikonya sendiri.",
+        "message": "Penggunaan akun resmi biasa melalui proksi balik atau penerusan dapat dikenai pembatasan ketat oleh layanan resmi. Penggunaan ini juga dapat terdeteksi sebagai penerusan dan memengaruhi kualitas jawaban («penurunan kecerdasan»). Gunakan dengan hati-hati, terutama jika Anda memiliki banyak akun.",
         "remember": "Saya paham, jangan tampilkan lagi",
         "acknowledge": "Saya paham",
         "continueStart": "Lanjutkan",
@@ -3745,7 +3756,8 @@
         "baseUrlExists": "Base URL ini sudah ada.",
         "providerNotFound": "Penyedia tidak ditemukan.",
         "apiKeyRequiredOnCreate": "Saat membuat penyedia, Anda harus mengisi setidaknya satu API Key.",
-        "apiKeyRequiredWhenEmpty": "Penyedia ini belum memiliki API Key. Tambahkan satu terlebih dahulu."
+        "apiKeyRequiredWhenEmpty": "Penyedia ini belum memiliki API Key. Tambahkan satu terlebih dahulu.",
+        "apiKeyUrlInvalid": "Gunakan URL pengelolaan HTTP(S) tanpa kredensial tertanam; masukkan kunci API di kolom kunci."
       },
       "saveSuccess": "Penyedia model disimpan.",
       "deleteBlocked": "Penyedia ini tertaut ke {{count}} akun dan tidak bisa dihapus.",
@@ -3913,9 +3925,9 @@
       },
       "vision": {
         "providerDefault": "Provider ini mendukung input gambar secara default",
-        "providerDefaultHint": "Jika mati, hanya model di bawah yang boleh menerima gambar; model lain ditolak oleh gateway lokal.",
+        "providerDefaultHint": "Model tanpa pengaturan khusus menggunakan nilai bawaan ini; GPT-5.5 dan versi lebih baru mendukung gambar secara bawaan. Nonaktifkan model tertentu dalam daftar. Jika gateway tidak menemukan model visual, gambar dilewati dan teks tetap diproses.",
         "modelsHint": "Satu model per baris. Cocok jika hanya sebagian model provider mendukung gambar tempel.",
-        "routingModelHint": "Jika model saat ini tidak membaca gambar, permintaan memakai model ini; kosong berarti otomatis memakai satu-satunya model visual.",
+        "routingModelHint": "Jika model saat ini tidak dapat membaca gambar, gateway menggunakan model ini. Kosongkan untuk memakai satu-satunya model visual yang tersedia; jika tidak ada, gambar dilewati dan teks tetap diproses.",
         "allModels": "Gambar",
         "partialModels": "Sebagian gambar",
         "textOnly": "Teks saja"
@@ -4004,7 +4016,8 @@
       "importConfigFailed": "Gagal mengimpor dari papan klip: {{error}}",
       "importConfigPlaceholder": "Gunakan Salin konfigurasi pada kartu lalu tempel isinya di sini",
       "importConfigAction": "Impor konfigurasi",
-      "importConfigFromClipboard": "Baca papan klip"
+      "importConfigFromClipboard": "Baca papan klip",
+      "settingsRestartHint": "Pengaturan penyedia diperbarui. Mulai ulang instans Codex atau layanan API yang sedang menggunakan penyedia ini untuk menerapkannya."
     },
     "quickSwitch": {
       "action": "Alih cepat penyedia",
@@ -4365,7 +4378,7 @@
         "reasoningEffortValue": "Nalar {{effort}}",
         "serviceTier": "Tingkat layanan",
         "serviceTierValue": "Tingkat {{tier}}",
-        "upstreamModel": "Model sebenarnya"
+        "upstreamModel": "Model terkirim"
       },
       "timeouts": {
         "entryLabel": "Lanjutan",
@@ -5325,7 +5338,10 @@
       "quickSwitch": "Ganti simpul",
       "quickSwitchHint": "Hanya mengubah akun ini. Koneksi baru menggunakan jalur keluar yang disimpan; penyimpanan tidak memverifikasi koneksi.",
       "currentNode": "Node saat ini",
-      "noCurrentNode": "Node saat ini belum tersedia"
+      "noCurrentNode": "Node saat ini belum tersedia",
+      "runtimeBusy": "Proksi lokal sibuk. Pembaruan sementara tidak tersedia.",
+      "runtimeCapacity": "Terlalu banyak proksi aktif. Hentikan yang tidak digunakan dan coba lagi.",
+      "runtimeReadFailed": "Status proksi lokal sementara tidak tersedia. Coba lagi."
     },
     "more": {
       "title": "Lainnya",
@@ -5345,6 +5361,12 @@
       "moveUp": "Naik",
       "moveDown": "Turun",
       "done": "Selesai"
+    },
+    "cliDaemon": {
+      "title": "Perbarui akun CLI",
+      "description": "Kredensial telah disimpan, tetapi layanan latar belakang Codex CLI untuk profil ini masih berjalan dan mungkin tetap memakai akun sebelumnya.",
+      "restartHint": "Selesaikan tugas CLI yang aktif, lalu jalankan perintah ini di terminal. Memulai ulang akan memutus sesi yang terhubung ke layanan ini.",
+      "copyFailed": "Gagal menyalin. Pilih perintah di atas dan salin secara manual."
     }
   },
   "codebuddy": {

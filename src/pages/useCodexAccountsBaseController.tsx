@@ -1,3 +1,4 @@
+import { useMfaCountdown } from '../hooks/useMfaCountdown';
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Download, Copy, Check, Eye, EyeOff, FileText, FolderOpen } from "lucide-react";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
@@ -20,6 +21,7 @@ import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import type { CodexTab } from "../components/CodexOverviewTabsHeader";
 import { type CodexWakeupTestOpenRequest } from "../components/codex/CodexWakeupContent";
 import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
+import { getActiveGroupTab, setActiveGroupTab } from "../services/platformGroupService";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { useEscClose } from "../hooks/useEscClose";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
@@ -34,7 +36,7 @@ import { useSponsorStore } from "../stores/useSponsorStore";
 import { buildCodexExportContent, buildCodexExportFileNameBase, hasCodexExportAgentIdentity, hasCodexExportSensitiveNotes, type CodexExportFormat } from "../utils/codexExportFormats";
 import { readAccountsOverviewFilterField, readAccountsOverviewFilterPersistenceEnabled, readAccountsOverviewFilterStringArray, removeAccountsOverviewFilterField, writeAccountsOverviewFilterField } from "../utils/accountsOverviewFilterPersistence";
 import { isCodexLocalAccessRiskNoticeDismissed, setCodexLocalAccessRiskNoticeDismissed, type CodexLocalAccessRiskNoticeAction } from "../utils/codexLocalAccessRiskNotice";
-import { getMfaOtpToken, getMfaTimeRemaining, loadSavedMfaRecords, parseMfaCredentialInput, upsertSavedMfaRecord, type MfaRecord } from "../utils/mfaVault";
+import { getMfaOtpToken, loadSavedMfaRecords, parseMfaCredentialInput, upsertSavedMfaRecord, type MfaRecord } from "../utils/mfaVault";
 import { findFirstMailVerificationCode } from "../utils/mailVerificationCode";
 import { ACTIVE_GROUP_ID_FIELD, buildCodexAccountNoteForm, buildExportFileName, CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY, CODEX_FILTER_PERSISTENCE_SCOPE, CODEX_HIDE_RELAY_QUOTA_LEGACY_KEY, CODEX_LOCAL_ACCESS_EXPANDED_KEY, CODEX_OVERVIEW_LAYOUT_MODE_KEY, EMPTY_CODEX_ACCOUNT_NOTE_FORM, EXPIRY_FILTER_FIELD, FILTER_TYPES_FIELD, getCodexAccountNoteTitle, getDirectoryPath, GROUP_FILTER_FIELD, hasCodexAccountNoteDetails, hasCodexAccountNoteFormDetails, isHttpLikeUrl, joinFilePath, normalizeCodexOverviewLayoutMode, normalizeHttpBaseUrl, readStoredLocalAccessAddressKind, SEARCH_QUERY_FIELD, shouldAutoHideBatchDeleteJob, type CodexAccountNoteFieldErrors, type CodexAccountNoteFormState, type CodexAccountNoteMailPreviewSnapshot, type CodexAccountNoteMailPreviewState, type CodexBatchImportFilter, type CodexCliLaunchModalState, type CodexOverviewGeneralConfig, type CodexOverviewLayoutMode } from "./codexAccountsControllerModel";
 
@@ -106,21 +108,13 @@ export function useCodexAccountsBaseController() {
           )
         : [],
     );
-    const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
-      if (
-        !readAccountsOverviewFilterPersistenceEnabled(
-          CODEX_FILTER_PERSISTENCE_SCOPE,
-        )
-      ) {
-        return null;
-      }
-      const saved = readAccountsOverviewFilterField<string | null>(
-        CODEX_FILTER_PERSISTENCE_SCOPE,
-        ACTIVE_GROUP_ID_FIELD,
-        null,
-      );
-      return typeof saved === "string" && saved.trim() ? saved : null;
+    const [activeGroupId, setActiveGroupIdState] = useState<string | null>(() => {
+      return getActiveGroupTab("codex");
     });
+    const setActiveGroupId = useCallback((groupId: string | null) => {
+      setActiveGroupIdState(groupId);
+      setActiveGroupTab("codex", groupId);
+    }, []);
     const [showCodexGroupModal, setShowCodexGroupModal] = useState(false);
     const [showAddToCodexGroupModal, setShowAddToCodexGroupModal] =
       useState(false);
@@ -382,7 +376,10 @@ export function useCodexAccountsBaseController() {
         const next = prev.filter((id) => validIds.has(id));
         return next.length === prev.length ? prev : next;
       });
-    }, [codexGroups, codexGroupsReady]);
+      if (activeGroupId && !validIds.has(activeGroupId)) {
+        setActiveGroupId(null);
+      }
+    }, [activeGroupId, codexGroups, codexGroupsReady, setActiveGroupId]);
   
     const [overviewLayoutMode, setOverviewLayoutMode] =
       useState<CodexOverviewLayoutMode>(() => {
@@ -466,7 +463,6 @@ export function useCodexAccountsBaseController() {
     const accountNoteMailPreviewSeqRef = useRef(0);
     const accountNoteMailPreviewSnapshotRef =
       useRef<CodexAccountNoteMailPreviewSnapshot | null>(null);
-    const [mfaTimeRemaining, setMfaTimeRemaining] = useState(getMfaTimeRemaining);
     const [savingAccountNote, setSavingAccountNote] = useState(false);
     const [reauthTargetAccount, setReauthTargetAccount] =
       useState<CodexAccount | null>(null);
@@ -487,12 +483,6 @@ export function useCodexAccountsBaseController() {
       set: setAccountNoteError,
     } = useModalErrorState();
   
-    useEffect(() => {
-      const timer = window.setInterval(() => {
-        setMfaTimeRemaining(getMfaTimeRemaining());
-      }, 1000);
-      return () => window.clearInterval(timer);
-    }, []);
   
     // Use the common hook WITHOUT oauthService since Codex uses Tauri event-based OAuth
     // Codex batch-delete confirm is wired after confirmCodexDelete is defined.
@@ -2273,6 +2263,9 @@ export function useCodexAccountsBaseController() {
       activeAccountNoteMode === "pendingOAuth"
         ? pendingOAuthNoteForm
         : editingAccountNoteForm;
+    const mfaTimeRemaining = useMfaCountdown(
+      Boolean(activeAccountNoteMode) && activeAccountNoteForm.twoFactorSecret.trim().length > 0,
+    );
     const activeAccountNoteSaving =
       savingAccountNote ||
       (activeAccountNoteMode === "pendingOAuth" && savingPendingOAuthAccount);

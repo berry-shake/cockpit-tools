@@ -140,7 +140,10 @@ func normalizeCodexInputItemID(item gjson.Result, id string) string {
 			return id
 		}
 		prefix = codexReasoningItemIDPrefix
-	case "function_call":
+	case "function_call", "function_call_output":
+		// Custom image results are promoted to function_call_output before the
+		// final wire normalization. Their persisted ctco IDs must also satisfy
+		// the upstream's fc prefix check; already-valid fco IDs stay unchanged.
 		prefix = codexFunctionCallItemIDPrefix
 	case "custom_tool_call":
 		prefix = codexCustomToolCallItemIDPrefix

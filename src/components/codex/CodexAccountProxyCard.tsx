@@ -24,6 +24,8 @@ function ProxyCard({ account, detailed }: { account: CodexAccount; detailed: boo
   const Icon = account.egress_proxy_disabled ? ShieldOff : saved ? ShieldCheck : Shield;
   const configured = saved ? saved.selectedName || saved.name || proxySummary(saved) : '';
   const latest = data.request;
+  const statusErrorKey = data.statusErrorKind === 'busy' ? 'codex.proxy.runtimeBusy'
+    : data.statusErrorKind === 'capacity' ? 'codex.proxy.runtimeCapacity' : 'codex.proxy.runtimeReadFailed';
   const latency = (delay?: number | null, checked?: number | null) => delay != null && checked != null
     ? `${delay} ms` : t(checked != null ? 'common.failed' : 'codex.proxy.latencyPending');
   return <div ref={data.ref} className={`codex-account-proxy-card is-${detailed ? 'detailed' : 'summary'}`}>
@@ -88,8 +90,8 @@ function ProxyCard({ account, detailed }: { account: CodexAccount; detailed: boo
         </span>
       </>}
     </button>
-    {(data.statusError || data.requestsError) && <div className="codex-account-proxy-card-error" role="status">
-      <span>{t(data.statusError ? 'codex.proxy.runtimeUnavailable' : 'codex.proxy.recentFailed')}</span>
+    {(data.statusError || data.requestsError) && <div className={`codex-account-proxy-card-error${data.statusErrorKind === 'busy' ? ' is-busy' : ''}`} role="status">
+      <span>{t(data.statusError ? statusErrorKey : 'codex.proxy.recentFailed')}</span>
       <button type="button" className="btn btn-secondary" disabled={data.loading} aria-label={t('codex.proxy.display.refresh')}
         onClick={(event) => { event.stopPropagation(); data.refresh(); }}><RefreshCw size={12} />{t('common.retry')}</button>
     </div>}

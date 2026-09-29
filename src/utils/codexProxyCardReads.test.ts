@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { setImmediate } from 'node:timers/promises';
+import { setImmediate, setTimeout as delay } from 'node:timers/promises';
 import { createProxyCardReadCache, createProxyCardReadPool } from './codexProxyCardReads';
 
 const key = (id: string, binding = 'a') => JSON.stringify([id, false, { name: binding }]);
@@ -103,4 +103,66 @@ test('account invalidation bypasses stale binding caches and rejects pre-invalid
   old.resolve('stale');
   assert.equal((await stale).value, 'value-3');
   assert.equal(cache.peek(key('account')).value, 'value-3');
+});
+
+test('short-lived native pressure retries once per shared flight without exposing an error or losing the snapshot', async () => {
+  const retry = deferred<string>();
+  let calls = 0;
+  const cache = createProxyCardReadCache(async () => {
+    calls++;
+    if (calls === 1) return 'last-good';
+    if (calls === 2) throw new Error('PROXY_RUNTIME_BUSY');
+    return retry.promise;
+  }, createProxyCardReadPool(), 1000, 0);
+  await cache.read(key('A'), active);
+  const first = cache.read(key('A'), active, true);
+  const second = cache.read(key('A'), active, true);
+  await delay(10);
+  assert.equal(calls, 3);
+  assert.equal(cache.peek(key('A')).value, 'last-good');
+  assert.equal(cache.peek(key('A')).error, false);
+  retry.resolve('fresh');
+  for (const result of await Promise.all([first, second])) {
+    assert.equal(result.value, 'fresh');
+    assert.equal(result.error, false);
+    assert.equal(result.errorKind, undefined);
+  }
+});
+
+test('persistent native pressure retains data and reports a local busy error after bounded retry', async () => {
+  let busy = false;
+  let calls = 0;
+  const cache = createProxyCardReadCache(async () => {
+    calls++;
+    if (busy) throw 'PROXY_RUNTIME_LIMIT';
+    return 'cached';
+  }, createProxyCardReadPool(), 1000, 0);
+  await cache.read(key('A'), active);
+  busy = true;
+  const result = await cache.read(key('A'), active, true);
+  assert.equal(calls, 3);
+  assert.equal(result.value, 'cached');
+  assert.equal(result.error, true);
+  assert.equal(result.errorKind, 'busy');
+});
+
+test('capacity exhaustion is actionable immediately and is not retried in a loop', async () => {
+  let calls = 0;
+  const cache = createProxyCardReadCache(async () => { calls++; throw 'PROXY_RUNTIME_CAPACITY'; }, createProxyCardReadPool(), 1000, 0);
+  const result = await cache.read(key('A'), active);
+  assert.equal(calls, 1);
+  assert.equal(result.errorKind, 'capacity');
+});
+
+test('a hidden consumer stops automatic pressure retries and does not publish an error', async () => {
+  let visible = true;
+  let calls = 0;
+  const cache = createProxyCardReadCache(async () => { calls++; throw 'PROXY_RUNTIME_BUSY'; }, createProxyCardReadPool(), 1000, 20);
+  const pending = cache.read(key('A'), () => visible);
+  await setImmediate();
+  visible = false;
+  const result = await pending;
+  assert.equal(calls, 1);
+  assert.equal(result.error, false);
+  assert.equal(cache.has(key('A')), false);
 });

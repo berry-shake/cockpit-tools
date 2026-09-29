@@ -10,7 +10,7 @@
       "accountsRequired": "アカウントを1つ以上選択してください。",
       "invalidAccount": "アカウント ID が無効です。",
       "invalidRequest": "テストの設定が無効です。",
-      "invalidConcurrency": "並列数は1〜10で指定してください。",
+      "invalidConcurrency": "並列数 · 1–200",
       "invalidRetention": "保持期間は1〜3650日で指定してください。",
       "alreadyRunning": "先にアクティブなテストを閉じてください。",
       "artifactMissing": "生成結果が見つかりません。",
@@ -73,7 +73,7 @@
     "exportWarning": "出力される HTML はモデルの元の生成結果です。アプリ外で開く場合、プレビューの隔離保護は適用されません。",
     "deliveryHelp": "すべてのアカウントに同じ出力指示を使います：Markdown のコードブロックや外部依存を使わず、単独で動作する HTML を直接返します。",
     "errorTimeout": "リクエストがタイムアウトしました。新しいテストを開始できます。",
-    "errorStream": "応答に失敗したか、応答が完了しませんでした",
+    "errorStream": "応答が完了しませんでした。受信済みの内容は保持されています。",
     "errorLimit": "応答がサイズ上限を超えたため、受信を停止しました。",
     "errorPreviewLimit": "先にプレビューウィンドウを1つ閉じてください。",
     "retention": "自動クリーンアップ",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Windows 操作が完了していません",
       "accessDeniedDescription": "Windows により操作が拒否されました。対象が高い権限で実行中か、保護された場所にある可能性があります。",
-      "storeLaunchBlockedDescription": "Windows は現在設定されている Codex クライアントを実行できませんでした。ストア版のフォルダーが更新で置き換わったか、実行が許可されていない可能性があります。誤ったアカウントで開かないよう、直接起動をブロックしました。「パスの再検出と再試行」を実行し、それでも失敗する場合はこのインスタンスの起動方式を CLI に変更してください。",
+      "storeLaunchBlockedDescription": "ストア版の独立したインスタンスが正常に起動したことを確認できませんでした。Cockpit は既定のアカウントを代わりに開いていません。クライアントのパスを再検出して再試行してください。解決しない場合は診断情報をコピーして報告するか、このインスタンスを CLI モードに切り替えてください。",
       "repairPath": "パスを再検出して再試行",
       "fileInUseDescription": "対象ファイルは別のプログラムで使用中です。そのプログラムを閉じて再試行してください。",
       "programNotFoundDescription": "操作に必要なプログラムが見つかりません。インストール状態または設定パスを確認してください。",
@@ -349,7 +349,8 @@
         "unlimited": "無制限",
         "leftPercent": "残り {{value}}%",
         "cachedRefreshFailed": "更新に失敗したため、最後に成功したデータを表示しています",
-        "lastSuccessfulQuery": "最終成功: {{time}}"
+        "lastSuccessfulQuery": "最終成功: {{time}}",
+        "cachedNeedsReauth": "⚠️ 続行するにはウェブ検証が必要です（以下は前回の成功データです）"
       },
       "subtitle": "GitHub Copilot アカウントを管理します",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "週間"
     },
-    "optional": "（任意）"
+    "optional": "（任意）",
+    "hide": "非表示",
+    "show": "表示"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "インスタンスを削除",
-      "message": "インスタンス {{name}} を削除しますか？設定が削除され、インスタンスフォルダーも削除されます。"
+      "message": "インスタンス {{name}} を削除しますか？登録を解除し、管理対象のインスタンスフォルダーをごみ箱に移動します。カスタムフォルダーと保護されたフォルダーは保持されます。"
     },
     "import": {
       "btnTitle": "既存ディレクトリをインポート",
@@ -1479,7 +1482,9 @@
       "normal": "通常",
       "forbidden": "403​",
       "forbidden_tooltip": "APIが403 Forbiddenを返しました。アカウントはGemini Code Assistにアクセスできません",
-      "forbidden_msg": "アカウント禁止、自動更新をスキップしました"
+      "forbidden_msg": "アカウント禁止、自動更新をスキップしました",
+      "needsReauth": "ウェブ検証が必要",
+      "needsReauthTooltip": "続行するにはGoogleによるウェブセキュリティ検証が必要です"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "削除",
       "deleteSelected": "選択項目を削除",
       "export": "エクスポート",
-      "refreshAll": "すべて更新"
+      "refreshAll": "すべて更新",
+      "reauth": "再認証",
+      "reauthTooltip": "Googleが再検証を要求しています。クリックして再認証してください",
+      "openValidationUrl": "ウェブ検証",
+      "copyValidationUrl": "検証リンクをコピー",
+      "copyValidationUrlTooltip": "ウェブ検証アドレスをコピー"
     },
     "tabs": {
       "oauth": "OAuth 認証",
@@ -1853,7 +1863,8 @@
     "example": "例",
     "actionRunning": "{{action}}中...",
     "actionSuccess": "{{action}}成功",
-    "actionFailed": "{{action}}失敗: {{error}}"
+    "actionFailed": "{{action}}失敗: {{error}}",
+    "refreshFailed": "更新に失敗しました"
   },
   "wakeup": {
     "title": "ウェイクアップタスク",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Codex 設定またはクイック設定から再度有効化できます",
       "riskNotice": {
         "title": "リスクに関する注意",
-        "message": "現在の Codex API サービス関連機能は、本質的にはリバースプロキシ型の利用です。現時点では公式がこの挙動を明確に制限していませんが、今後の方針、ルール、提供状況が変わる可能性があります。この機能を引き続き利用する場合は、その点を理解し、関連するリスクを自己責任で負うことに同意したものとみなされます。",
+        "message": "通常の公式アカウントをリバースプロキシや中継に使用すると、公式サービスから厳しい制限を受ける可能性があります。また、中継として検知され、回答品質に影響（「知能低下」）が出る可能性もあります。特に多数のアカウントをお持ちの場合は、慎重にご利用ください。",
         "remember": "理解しました。今後は表示しない",
         "acknowledge": "理解しました",
         "continueStart": "続行",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "この Base URL はすでに存在します。",
         "providerNotFound": "プロバイダーが見つかりません。",
         "apiKeyRequiredOnCreate": "プロバイダーを作成するには、少なくとも 1 つの API キーが必要です。",
-        "apiKeyRequiredWhenEmpty": "このプロバイダーにはまだ API キーがありません。先に追加してください。"
+        "apiKeyRequiredWhenEmpty": "このプロバイダーにはまだ API キーがありません。先に追加してください。",
+        "apiKeyUrlInvalid": "認証情報を含まない HTTP(S) 管理ページ URL を入力してください。API Key はキー欄に入力します。"
       },
       "saveSuccess": "モデルプロバイダーを保存しました。",
       "deleteBlocked": "このプロバイダーは {{count}} 件のアカウントに関連付けられているため、削除できません。",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "このプロバイダーは既定で画像入力に対応します",
-        "providerDefaultHint": "オフの場合、下に記載したモデルだけが画像入力を受け付け、それ以外はローカルゲートウェイで拒否されます。",
+        "providerDefaultHint": "個別設定のないモデルにはこの既定値を使います。GPT-5.5 以降は既定で画像に対応します。モデル一覧で個別に無効化できます。ゲートウェイが画像対応モデルを見つけられない場合、画像を省略してテキスト処理を続行します。",
         "modelsHint": "1 行に 1 モデル。プロバイダー内の一部モデルだけが貼り付け画像に対応する場合に使います。",
-        "routingModelHint": "現在のモデルが画像を読めない場合、このモデルを使います。空欄なら唯一の画像対応モデルを自動使用します。",
+        "routingModelHint": "現在のモデルが画像を読めない場合、ゲートウェイはこのモデルを使います。空欄なら唯一の画像対応モデルを自動使用し、見つからない場合は画像を省略してテキスト処理を続行します。",
         "allModels": "画像対応",
         "partialModels": "一部画像",
         "textOnly": "テキストのみ"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "クリップボードからの読み込みに失敗しました：{{error}}",
       "importConfigPlaceholder": "カードの「設定をコピー」を使い、内容をここに貼り付けます",
       "importConfigAction": "設定を読み込む",
-      "importConfigFromClipboard": "クリップボードを読み取る"
+      "importConfigFromClipboard": "クリップボードを読み取る",
+      "settingsRestartHint": "プロバイダー設定を更新しました。適用するには、このプロバイダーを使用中の Codex または API サービスを再起動してください。"
     },
     "quickSwitch": {
       "action": "プロバイダーをクイック切り替え",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "思考 {{effort}}",
         "serviceTier": "サービス階層",
         "serviceTierValue": "階層 {{tier}}",
-        "upstreamModel": "実際のモデル"
+        "upstreamModel": "送信モデル"
       },
       "timeouts": {
         "entryLabel": "詳細",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "ノード切替",
       "quickSwitchHint": "このアカウントのみ変更します。新しい接続には保存した接続先を使用します。保存時に接続確認は行いません。",
       "currentNode": "現在のノード",
-      "noCurrentNode": "現在のノードはまだ取得できていません"
+      "noCurrentNode": "現在のノードはまだ取得できていません",
+      "runtimeBusy": "ローカルプロキシが混雑しているため、一時的に更新できません。",
+      "runtimeCapacity": "実行中のプロキシが多すぎます。不要なプロキシを停止して再試行してください。",
+      "runtimeReadFailed": "ローカルプロキシの状態を一時的に取得できません。再試行してください。"
     },
     "more": {
       "title": "その他",
@@ -5298,6 +5314,12 @@
       "moveUp": "上へ",
       "moveDown": "下へ",
       "done": "完了"
+    },
+    "cliDaemon": {
+      "title": "CLI アカウントの更新",
+      "description": "認証情報は保存されましたが、このプロファイルの Codex CLI バックグラウンドサービスが稼働中のため、以前のアカウントを引き続き使用する可能性があります。",
+      "restartHint": "実行中の CLI タスクを終了してから、ターミナルで次のコマンドを実行してください。再起動すると、このサービスに接続しているセッションが中断されます。",
+      "copyFailed": "コピーに失敗しました。上のコマンドを選択して手動でコピーしてください。"
     }
   },
   "githubCopilot": {

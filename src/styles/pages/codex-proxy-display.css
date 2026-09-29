@@ -111,6 +111,7 @@
 .codex-account-proxy-card-request-meta > time { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .codex-account-proxy-card-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: 5px; color: var(--danger); font-size: 11px; }
 .codex-account-proxy-card-error > .btn { padding: 3px 7px; font-size: 11px; }
+.codex-account-proxy-card-error.is-busy { color: var(--text-secondary); }
 @media (prefers-reduced-motion: reduce) {
   .btn.codex-account-proxy-card-open { transition: none; }
 }

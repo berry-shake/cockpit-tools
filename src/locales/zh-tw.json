@@ -10,7 +10,7 @@
       "accountsRequired": "請至少選取一個帳號",
       "invalidAccount": "帳號識別碼無效",
       "invalidRequest": "測試參數無效",
-      "invalidConcurrency": "並行數須為 1 至 10",
+      "invalidConcurrency": "並行數 · 1–200",
       "invalidRetention": "保留天數須為 1 至 3650 天",
       "alreadyRunning": "已有進行中的測試，請先關閉",
       "artifactMissing": "找不到產生的結果",
@@ -73,7 +73,7 @@
     "exportWarning": "匯出的是模型原始 HTML；在應用程式外開啟時，不受預覽隔離保護。",
     "deliveryHelp": "所有帳號使用相同的交付約定：直接傳回獨立 HTML，不使用 Markdown 程式碼區塊或外部相依項目。",
     "errorTimeout": "請求逾時，可手動重新測試",
-    "errorStream": "回應失敗或未完整結束",
+    "errorStream": "回應未完整結束，已保留收到的內容",
     "errorLimit": "回應超過大小上限，已停止接收",
     "errorPreviewLimit": "請先關閉一個預覽視窗",
     "retention": "自動清理",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Windows 操作尚未完成",
       "accessDeniedDescription": "Windows 拒絕了這次操作。目標程式可能以較高權限執行，或位於受保護的位置。",
-      "storeLaunchBlockedDescription": "Windows 無法執行目前設定的 Codex 用戶端：商店版應用程式目錄可能已被更新替換，或該目錄已不允許執行。為免開啟錯誤的帳號，已阻止直接啟動。可「重新偵測路徑並重試」；仍失敗時請將此執行個體的啟動方式改為 CLI。",
+      "storeLaunchBlockedDescription": "無法確認商店版隔離執行個體已正常啟動，Cockpit 未改為開啟預設帳號。請重新偵測用戶端路徑並重試；若仍失敗，可複製診斷資訊回報，或將此執行個體切換為 CLI 模式。",
       "repairPath": "重新偵測路徑並重試",
       "fileInUseDescription": "目標檔案正由其他程式使用。請關閉占用程式後再試一次。",
       "programNotFoundDescription": "Windows 找不到完成操作所需的程式。請檢查安裝狀態或設定路徑。",
@@ -349,7 +349,8 @@
         "unlimited": "無限額度",
         "leftPercent": "剩餘 {{value}}%",
         "cachedRefreshFailed": "刷新失敗，以下為上次成功資料",
-        "lastSuccessfulQuery": "上次成功：{{time}}"
+        "lastSuccessfulQuery": "上次成功：{{time}}",
+        "cachedNeedsReauth": "⚠️ 帳號需完成網頁驗證以繼續使用（以下為上次成功數據）"
       },
       "subtitle": "管理您的 GitHub Copilot 帳號",
       "time": {
@@ -402,9 +403,11 @@
     "processing": "處理中...",
     "selectAll": "全選",
     "quota": {
-      "weeklyWindow": "週"
+      "weeklyWindow": "Weekly"
     },
-    "optional": "（可選）"
+    "optional": "（可選）",
+    "hide": "隱藏",
+    "show": "顯示"
   },
   "nav": {
     "overview": "Antigravity IDE",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "刪除實例",
-      "message": "是否刪除實例 {{name}}？這將移除配置並刪除實例目錄。"
+      "message": "確定刪除實例 {{name}}？將移除實例記錄，並將受管實例目錄移至資源回收筒；自訂目錄和受保護目錄會保留。"
     },
     "import": {
       "btnTitle": "匯入已存在目錄",
@@ -1479,7 +1482,9 @@
       "normal": "正常",
       "forbidden": "403",
       "forbidden_tooltip": "API 返回 403 Forbidden，帳號無權使用 Gemini Code Assist",
-      "forbidden_msg": "帳號無權限，已跳過自動刷新"
+      "forbidden_msg": "帳號無權限，已跳過自動刷新",
+      "needsReauth": "需網頁驗證",
+      "needsReauthTooltip": "Google 要求進行網頁安全驗證以繼續使用"
     },
     "tier": {
       "pro": "PRO",
@@ -1614,7 +1619,12 @@
       "delete": "刪除",
       "deleteSelected": "刪除所選",
       "export": "匯出",
-      "refreshAll": "全部重新整理"
+      "refreshAll": "全部重新整理",
+      "reauth": "重新授權",
+      "reauthTooltip": "Google 要求重新驗證，點擊立即重新授權",
+      "openValidationUrl": "網頁驗證",
+      "copyValidationUrl": "複製驗證連結",
+      "copyValidationUrlTooltip": "複製網頁驗證網址"
     },
     "tabs": {
       "oauth": "OAuth 授權",
@@ -1853,7 +1863,8 @@
     "example": "範例",
     "actionRunning": "{{action}}中...",
     "actionSuccess": "{{action}}成功",
-    "actionFailed": "{{action}}失敗: {{error}}"
+    "actionFailed": "{{action}}失敗: {{error}}",
+    "refreshFailed": "重新整理失敗"
   },
   "wakeup": {
     "title": "喚醒任務",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "可在 Codex 設定或快速設定中重新開啟",
       "riskNotice": {
         "title": "使用風險提示",
-        "message": "目前 Codex API 服務相關功能，本質上屬於代理轉發使用方式。就目前情況看，官方暫未對此類行為進行明確管控，但後續政策、規則或可用性是否發生變化，仍存在不確定性。繼續使用該功能，即表示您已知悉相關情況，並願意自行承擔可能產生的風險。",
+        "message": "一般官方帳號用於反向代理／轉發時，可能受到官方嚴格限制，也可能被識別為轉發並影響回答品質（「降智」）。帳號較多時請謹慎使用。",
         "remember": "我已知悉，不再提示",
         "acknowledge": "我已知悉",
         "continueStart": "繼續啟動",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "此 Base URL 已存在",
         "providerNotFound": "找不到供應商",
         "apiKeyRequiredOnCreate": "建立供應商時至少需要一個 API Key",
-        "apiKeyRequiredWhenEmpty": "目前供應商尚無 API Key，請先新增一個"
+        "apiKeyRequiredWhenEmpty": "目前供應商尚無 API Key，請先新增一個",
+        "apiKeyUrlInvalid": "請填寫不含內嵌憑證的 HTTP(S) 管理頁網址；API Key 請填入金鑰欄。"
       },
       "saveSuccess": "模型供應商已儲存",
       "deleteBlocked": "此供應商已連結 {{count}} 個帳號，無法刪除。",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "此供應商預設支援圖片輸入",
-        "providerDefaultHint": "關閉時，只有下方列出的模型會允許圖片輸入；其他模型會由本機閘道直接提示不支援。",
+        "providerDefaultHint": "未單獨設定的模型使用此預設值，GPT-5.5 及更新模型預設支援圖片。可在模型清單中單獨關閉。閘道無法找到視覺模型時會省略圖片並繼續處理文字。",
         "modelsHint": "每行一個模型名。適合同一供應商只有部分視覺模型支援貼上圖片的情況。",
-        "routingModelHint": "目前模型不支援讀取圖片時，含圖片請求會改用此模型；留空且只有一個視覺模型時自動使用。",
+        "routingModelHint": "目前模型不支援圖片時，閘道會改用此模型；留空時自動使用唯一的視覺模型，否則省略圖片並繼續處理文字。",
         "allModels": "圖片輸入",
         "partialModels": "部分圖片",
         "textOnly": "僅文字"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "從剪貼簿匯入失敗：{{error}}",
       "importConfigPlaceholder": "在供應商卡片上點「複製設定」後，把內容貼到這裡",
       "importConfigAction": "匯入設定",
-      "importConfigFromClipboard": "一鍵讀取剪貼簿"
+      "importConfigFromClipboard": "一鍵讀取剪貼簿",
+      "settingsRestartHint": "供應商設定已更新。若使用此供應商的 Codex 或 API 服務正在執行，請重新啟動以套用。"
     },
     "quickSwitch": {
       "action": "快速切換供應商",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "思考 {{effort}}",
         "serviceTier": "服務等級",
         "serviceTierValue": "等級 {{tier}}",
-        "upstreamModel": "實際模型"
+        "upstreamModel": "傳送模型"
       },
       "timeouts": {
         "entryLabel": "進階參數",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "切換節點",
       "quickSwitchHint": "僅切換此帳號；儲存後，新連線使用新出口。儲存不代表已驗證連通。",
       "currentNode": "目前節點",
-      "noCurrentNode": "尚未取得目前節點"
+      "noCurrentNode": "尚未取得目前節點",
+      "runtimeBusy": "本機代理忙碌，暫時無法更新",
+      "runtimeCapacity": "執行中的代理過多，請停止不使用的代理後重試",
+      "runtimeReadFailed": "暫時無法讀取本機代理狀態，請重試"
     },
     "more": {
       "title": "更多",
@@ -5298,6 +5314,12 @@
       "moveUp": "上移",
       "moveDown": "下移",
       "done": "完成"
+    },
+    "cliDaemon": {
+      "title": "CLI 帳號需重新整理",
+      "description": "憑證已儲存，但偵測到此設定目錄的 Codex CLI 背景服務仍在執行，可能繼續使用原帳號。",
+      "restartHint": "請先結束正在執行的 CLI 工作，再於終端機執行下列指令。重新啟動會中斷連線至此服務的工作階段。",
+      "copyFailed": "複製失敗，請選取上方指令手動複製。"
     }
   },
   "githubCopilot": {

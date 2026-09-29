@@ -257,7 +257,8 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 		sdkauth.NewKimiAuthenticator(),
 		sdkauth.NewXAIAuthenticator(),
 	)
-	readyCh := make(chan struct{})
+	runtimeCtx, cancel := context.WithCancel(ctx)
+	readyCh := make(chan error, 1)
 	var readyOnce sync.Once
 	service, err := cliproxy.NewBuilder().
 		WithConfig(cfg).
@@ -265,18 +266,18 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 		WithAuthManager(authManager).
 		WithCoreAuthManager(manager).
 		WithHooks(cliproxy.Hooks{
-			OnAfterStart: func(*cliproxy.Service) {
-				readyOnce.Do(func() { close(readyCh) })
+			OnAfterStart: func(service *cliproxy.Service) {
+				readyOnce.Do(func() { readyCh <- initializeSidecarRuntimeAuths(runtimeCtx, service, cfg, m, manager) })
 			},
 		}).
 		Build()
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	manager.SetRoundTripperProvider(newSidecarRoundTripperProvider())
 
-	runtimeCtx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() {
 		runErr := service.StartRuntime(runtimeCtx)
@@ -288,34 +289,24 @@ func newSidecarRuntime(ctx context.Context, configPath string, cfg *config.Confi
 	}()
 
 	select {
-	case <-readyCh:
+	case initErr := <-readyCh:
+		if initErr != nil {
+			cancel()
+			return nil, initErr
+		}
 	case runErr := <-done:
 		cancel()
 		if runErr == nil {
 			return nil, fmt.Errorf("runtime stopped before becoming ready")
 		}
 		return nil, runErr
+	case <-ctx.Done():
+		cancel()
+		return nil, ctx.Err()
 	case <-time.After(10 * time.Second):
 		cancel()
 		return nil, fmt.Errorf("runtime startup timeout")
 	}
-
-	if err := registerConfigCodexAPIKeyAuths(runtimeCtx, service, cfg, m); err != nil {
-		cancel()
-		return nil, err
-	}
-	if err := registerManifestCodexTokenAuths(runtimeCtx, service, cfg, m, manager); err != nil {
-		cancel()
-		return nil, err
-	}
-	for _, auth := range manager.List() {
-		if auth == nil || !sidecarOAuthProviderSupported(auth.Provider) {
-			continue
-		}
-		linkManifestAccountForAuth(m, auth)
-		registerManifestModelsForAuth(manager, m, auth)
-	}
-	service.RebindRuntimeExecutors()
 
 	return &sidecarRuntime{manager: manager, service: service, cancel: cancel, done: done}, nil
 }
@@ -384,7 +375,12 @@ func registerManifestCodexTokenAuths(
 }
 
 func readManifestCodexTokenAuth(account *accountSpec, authDir, path string) (*coreauth.Auth, error) {
-	data, err := os.ReadFile(path)
+	// The parent app rewrites auth files whenever an account is prepared/refreshed. Those
+	// writes are atomic renames, but a read can still land between create+rename on some
+	// filesystems, yielding a truncated body ("unexpected end of JSON input"). A retry
+	// keeps a transient mid-write read from failing the whole startup (which would force
+	// another sidecar restart). Bounded and short so a genuinely broken file still errors.
+	data, err := readAuthFileWithRetry(path)
 	if err != nil {
 		return nil, fmt.Errorf("read manifest token auth file %s: %w", path, err)
 	}
@@ -581,10 +577,15 @@ func (r *sidecarRuntime) ExecuteStream(ctx context.Context, providers []string, 
 }
 
 func (r *sidecarRuntime) Stop() {
-	if r == nil || r.cancel == nil {
+	if r == nil {
 		return
 	}
-	r.cancel()
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if r.service != nil {
+		_ = r.service.Shutdown(context.Background())
+	}
 	if r.done == nil {
 		return
 	}
@@ -1031,4 +1032,59 @@ type executorRuntime interface {
 // same OAuth account pool as /v1/responses.
 type codexAlphaSearcher interface {
 	CodexAlphaSearch(ctx context.Context, model string, body []byte, headers http.Header) (status int, respHeaders http.Header, payload []byte, err error)
+}
+
+func initializeSidecarRuntimeAuths(ctx context.Context, service *cliproxy.Service, cfg *config.Config, m *manifest, manager *coreauth.Manager) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := registerConfigCodexAPIKeyAuths(ctx, service, cfg, m); err != nil {
+		return err
+	}
+	if err := registerManifestCodexTokenAuths(ctx, service, cfg, m, manager); err != nil {
+		return err
+	}
+	for _, auth := range manager.List() {
+		if auth == nil || !sidecarOAuthProviderSupported(auth.Provider) {
+			continue
+		}
+		linkManifestAccountForAuth(m, auth)
+		registerManifestModelsForAuth(manager, m, auth)
+	}
+	service.RebindRuntimeExecutors()
+	return ctx.Err()
+}
+
+// StartRuntime deliberately does not run the SDK's full HTTP service/watcher.
+// Observe only the manifest's existing credential projections here, so Cockpit
+// token-authority refreshes and reauthorization become visible without a restart.
+// Managed installation IDs resolve through the live account identity store,
+// never through a stale manifest value after an acknowledged reset.
+// This does not hot-reload the manifest or enroll arbitrary new auth files.
+
+func readAuthFileWithRetry(path string) ([]byte, error) {
+	const attempts = 5
+	const interval = 40 * time.Millisecond
+	var last []byte
+	var lastErr error
+	for attempt := 0; attempt < attempts; attempt++ {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			lastErr = err
+		} else {
+			last = data
+			lastErr = nil
+			var probe map[string]any
+			if json.Unmarshal(data, &probe) == nil {
+				return data, nil
+			}
+		}
+		if attempt < attempts-1 {
+			time.Sleep(interval)
+		}
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return last, nil
 }

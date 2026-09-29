@@ -10,7 +10,7 @@
       "accountsRequired": "Sélectionnez au moins un compte.",
       "invalidAccount": "Identifiant de compte invalide.",
       "invalidRequest": "Paramètres de test invalides.",
-      "invalidConcurrency": "Le nombre de tâches parallèles doit être compris entre 1 et 10.",
+      "invalidConcurrency": "Tâches parallèles · 1–200",
       "invalidRetention": "La conservation doit être comprise entre 1 et 3650 jours.",
       "alreadyRunning": "Fermez d’abord le test actif.",
       "artifactMissing": "Résultat généré introuvable.",
@@ -73,7 +73,7 @@
     "exportWarning": "Le HTML exporté est la sortie originale du modèle. S’il est ouvert hors de l’application, l’isolation de l’aperçu ne le protège pas.",
     "deliveryHelp": "Tous les comptes reçoivent la même consigne de livraison : renvoyer directement du HTML autonome, sans blocs de code Markdown ni dépendances externes.",
     "errorTimeout": "La requête a expiré. Vous pouvez lancer un nouveau test.",
-    "errorStream": "La réponse a échoué ou est incomplète",
+    "errorStream": "La réponse n’a pas été reçue en entier. Le contenu reçu est conservé.",
     "errorLimit": "La réponse a dépassé la taille limite ; la réception a été arrêtée.",
     "errorPreviewLimit": "Fermez d’abord une fenêtre d’aperçu.",
     "retention": "Nettoyage automatique",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Opération Windows inachevée",
       "accessDeniedDescription": "Windows a refusé cette opération. La cible peut s’exécuter avec des droits supérieurs ou se trouver dans un emplacement protégé.",
-      "storeLaunchBlockedDescription": "Windows n’a pas pu exécuter le client Codex configuré : le dossier du Store a peut-être été remplacé par une mise à jour ou n’autorise plus l’exécution. Le lancement direct a été bloqué pour ne pas ouvrir le mauvais compte. Utilisez « Redétecter le chemin et réessayer » ; si l’échec persiste, passez cette instance en mode CLI.",
+      "storeLaunchBlockedDescription": "Le démarrage de l’instance isolée du Store n’a pas pu être confirmé. Cockpit n’a pas ouvert le compte par défaut. Détectez à nouveau le chemin du client et réessayez. Si le problème persiste, copiez les diagnostics ou passez cette instance en mode CLI.",
       "repairPath": "Redétecter le chemin et réessayer",
       "fileInUseDescription": "Le fichier cible est utilisé par un autre programme. Fermez-le puis réessayez.",
       "programNotFoundDescription": "Windows n’a pas trouvé le programme requis. Vérifiez l’installation ou le chemin configuré.",
@@ -349,7 +349,8 @@
         "unlimited": "Quota illimité",
         "leftPercent": "{{value}} % restants",
         "cachedRefreshFailed": "Échec de l’actualisation ; affichage des dernières données réussies",
-        "lastSuccessfulQuery": "Dernière réussite : {{time}}"
+        "lastSuccessfulQuery": "Dernière réussite : {{time}}",
+        "cachedNeedsReauth": "⚠️ Vérification Web requise pour continuer (données en cache ci-dessous)"
       },
       "subtitle": "Gérez vos comptes GitHub Copilot",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Semaine"
     },
-    "optional": " (facultatif)"
+    "optional": " (facultatif)",
+    "hide": "Masquer",
+    "show": "Afficher"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "Supprimer l'instance",
-      "message": "Supprimer l'instance {{name}} ? Cela supprimera la configuration et le dossier de l'instance."
+      "message": "Supprimer l’instance {{name}} ? Son enregistrement sera supprimé et les dossiers gérés seront placés dans la corbeille. Les dossiers personnalisés et protégés seront conservés."
     },
     "import": {
       "btnTitle": "Importer un répertoire existant",
@@ -1479,7 +1482,9 @@
       "normal": "Normale",
       "forbidden": "403​",
       "forbidden_tooltip": "API a retourné 403 Forbidden, le compte n'a pas accès à Gemini Code Assist",
-      "forbidden_msg": "Compte interdit, actualisation automatique ignorée"
+      "forbidden_msg": "Compte interdit, actualisation automatique ignorée",
+      "needsReauth": "Vérification Web requise",
+      "needsReauthTooltip": "Google exige une vérification de sécurité Web pour continuer"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "Supprimer",
       "deleteSelected": "Supprimer la sélection",
       "export": "Exporter",
-      "refreshAll": "Tout actualiser"
+      "refreshAll": "Tout actualiser",
+      "reauth": "Réautoriser",
+      "reauthTooltip": "Google requiert une revérification, cliquez pour réautoriser",
+      "openValidationUrl": "Vérification Web",
+      "copyValidationUrl": "Copier le lien de vérification",
+      "copyValidationUrlTooltip": "Copier l'adresse de vérification Web"
     },
     "tabs": {
       "oauth": "Autorisation OAuth",
@@ -1853,7 +1863,8 @@
     "example": "Exemple",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} réussi",
-    "actionFailed": "{{action}} a échoué : {{error}}"
+    "actionFailed": "{{action}} a échoué : {{error}}",
+    "refreshFailed": "Échec de l’actualisation"
   },
   "wakeup": {
     "title": "Tâches de réveil",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Vous pourrez le réactiver dans les réglages Codex ou les réglages rapides",
       "riskNotice": {
         "title": "Avis de risque",
-        "message": "Les fonctions actuelles liées au service Codex API reposent essentiellement sur un usage via proxy inverse. À ce jour, le service officiel ne restreint pas explicitement ce comportement, mais les politiques, les règles ou la disponibilité peuvent changer par la suite. En continuant à utiliser cette fonction, vous reconnaissez cette situation et acceptez d'assumer vous-même les risques associés.",
+        "message": "L’utilisation de comptes officiels ordinaires via un proxy inverse ou un relais peut faire l’objet de restrictions strictes du service officiel. Elle peut aussi être détectée comme un relais et affecter la qualité des réponses (« intelligence réduite »). À utiliser avec prudence, surtout si vous avez de nombreux comptes.",
         "remember": "J'ai compris, ne plus afficher",
         "acknowledge": "J'ai compris",
         "continueStart": "Continuer",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "Cette Base URL existe déjà.",
         "providerNotFound": "Fournisseur introuvable.",
         "apiKeyRequiredOnCreate": "Au moins une clé API est requise lors de la création d'un fournisseur.",
-        "apiKeyRequiredWhenEmpty": "Ce fournisseur n'a pas encore de clé API. Ajoutez-en d'abord une."
+        "apiKeyRequiredWhenEmpty": "Ce fournisseur n'a pas encore de clé API. Ajoutez-en d'abord une.",
+        "apiKeyUrlInvalid": "Utilisez une URL de gestion HTTP(S) sans identifiants intégrés ; saisissez la clé API dans le champ de clé."
       },
       "saveSuccess": "Fournisseur de modèles enregistré.",
       "deleteBlocked": "Ce fournisseur est lié à {{count}} compte(s) et ne peut pas être supprimé.",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "Ce fournisseur prend en charge les images par défaut",
-        "providerDefaultHint": "Si désactivé, seuls les modèles listés ci-dessous acceptent les images ; les autres sont rejetés par la passerelle locale.",
+        "providerDefaultHint": "Les modèles sans réglage explicite utilisent cette valeur ; GPT-5.5 et les versions suivantes acceptent les images par défaut. Désactivez chaque modèle dans la liste. Si la passerelle ne trouve aucun modèle visuel, elle omet les images et poursuit avec le texte.",
         "modelsHint": "Un modèle par ligne. Utile quand seuls certains modèles du fournisseur acceptent les images collées.",
-        "routingModelHint": "Quand le modèle actuel ne lit pas les images, la requête utilise ce modèle ; vide utilise automatiquement l'unique modèle vision.",
+        "routingModelHint": "Si le modèle actuel ne lit pas les images, la passerelle utilise ce modèle. Laissez vide pour utiliser le seul modèle visuel disponible ; sinon, les images sont omises et le texte est traité.",
         "allModels": "Images​",
         "partialModels": "Images partielles",
         "textOnly": "Texte seul"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "Échec de l'import depuis le presse-papiers : {{error}}",
       "importConfigPlaceholder": "Utilisez « Copier la configuration » sur la carte, puis collez le contenu ici",
       "importConfigAction": "Importer la configuration",
-      "importConfigFromClipboard": "Lire le presse-papiers"
+      "importConfigFromClipboard": "Lire le presse-papiers",
+      "settingsRestartHint": "Paramètres du fournisseur mis à jour. Redémarrez les instances Codex ou le service API utilisant ce fournisseur pour les appliquer."
     },
     "quickSwitch": {
       "action": "Changer rapidement de fournisseur",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "Rais. {{effort}}",
         "serviceTier": "Niveau de service",
         "serviceTierValue": "Niveau {{tier}}",
-        "upstreamModel": "Modèle réel"
+        "upstreamModel": "Modèle envoyé"
       },
       "timeouts": {
         "entryLabel": "Avancé",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "Changer de nœud",
       "quickSwitchHint": "Modifie uniquement ce compte. Les nouvelles connexions utilisent la sortie enregistrée ; l’enregistrement ne vérifie pas la connexion.",
       "currentNode": "Nœud actuel",
-      "noCurrentNode": "Le nœud actuel n’est pas encore disponible"
+      "noCurrentNode": "Le nœud actuel n’est pas encore disponible",
+      "runtimeBusy": "Le proxy local est occupé. Mise à jour temporairement indisponible.",
+      "runtimeCapacity": "Trop de proxys sont actifs. Arrêtez ceux inutilisés et réessayez.",
+      "runtimeReadFailed": "État du proxy local temporairement indisponible. Réessayez."
     },
     "more": {
       "title": "Plus",
@@ -5298,6 +5314,12 @@
       "moveUp": "Monter",
       "moveDown": "Descendre",
       "done": "Terminé"
+    },
+    "cliDaemon": {
+      "title": "Actualiser le compte CLI",
+      "description": "Les identifiants ont été enregistrés, mais le service Codex CLI de ce profil est toujours actif et peut conserver le compte précédent.",
+      "restartHint": "Terminez les tâches CLI en cours, puis exécutez cette commande dans le terminal. Le redémarrage interrompt les sessions connectées à ce service.",
+      "copyFailed": "Échec de la copie. Sélectionnez la commande ci-dessus et copiez-la manuellement."
     }
   },
   "githubCopilot": {

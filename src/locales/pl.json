@@ -10,7 +10,7 @@
       "accountsRequired": "Wybierz co najmniej jedno konto.",
       "invalidAccount": "Nieprawidłowy identyfikator konta.",
       "invalidRequest": "Nieprawidłowe parametry testu.",
-      "invalidConcurrency": "Liczba równoległych zadań musi wynosić od 1 do 10.",
+      "invalidConcurrency": "Zadania równoległe · 1–200",
       "invalidRetention": "Okres przechowywania musi wynosić od 1 do 3650 dni.",
       "alreadyRunning": "Najpierw zamknij aktywny test.",
       "artifactMissing": "Nie znaleziono wygenerowanego wyniku.",
@@ -73,7 +73,7 @@
     "exportWarning": "Eksportowany HTML to oryginalny wynik modelu. Otwarcie go poza aplikacją nie jest chronione izolacją podglądu.",
     "deliveryHelp": "Wszystkie konta otrzymują tę samą instrukcję: zwróć bezpośrednio samodzielny HTML bez bloków kodu Markdown i zewnętrznych zależności.",
     "errorTimeout": "Upłynął limit czasu żądania. Możesz rozpocząć nowy test.",
-    "errorStream": "Odpowiedź nie powiodła się lub nie została ukończona",
+    "errorStream": "Odpowiedź nie została ukończona. Odebrana treść została zachowana.",
     "errorLimit": "Odpowiedź przekroczyła limit rozmiaru; odbiór zatrzymano.",
     "errorPreviewLimit": "Najpierw zamknij jedno okno podglądu.",
     "retention": "Automatyczne czyszczenie",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Operacja Windows nie została ukończona",
       "accessDeniedDescription": "Windows odmówił wykonania operacji. Program może działać z wyższymi uprawnieniami lub znajdować się w chronionej lokalizacji.",
-      "storeLaunchBlockedDescription": "Windows nie mógł uruchomić skonfigurowanego klienta Codex: folder ze Sklepu mógł zostać zastąpiony przez aktualizację lub nie pozwala już na uruchamianie. Bezpośrednie uruchomienie zablokowano, aby nie otworzyć niewłaściwego konta. Użyj „Wykryj ścieżkę ponownie i spróbuj ponownie”; jeśli to nie pomoże, przełącz tę instancję na tryb CLI.",
+      "storeLaunchBlockedDescription": "Nie udało się potwierdzić uruchomienia izolowanej instancji ze sklepu. Cockpit nie użył konta domyślnego. Ponownie wykryj ścieżkę klienta i spróbuj jeszcze raz. Jeśli błąd się powtórzy, skopiuj dane diagnostyczne lub przełącz tę instancję w tryb CLI.",
       "repairPath": "Wykryj ścieżkę ponownie i spróbuj ponownie",
       "fileInUseDescription": "Plik jest używany przez inny program. Zamknij go i spróbuj ponownie.",
       "programNotFoundDescription": "Windows nie znalazł wymaganego programu. Sprawdź instalację lub skonfigurowaną ścieżkę.",
@@ -344,7 +344,8 @@
         "unlimited": "Bez limitu",
         "leftPercent": "Pozostało {{value}}%",
         "cachedRefreshFailed": "Odświeżanie nie powiodło się; wyświetlam ostatnie poprawne dane",
-        "lastSuccessfulQuery": "Ostatni sukces: {{time}}"
+        "lastSuccessfulQuery": "Ostatni sukces: {{time}}",
+        "cachedNeedsReauth": "⚠️ Wymagana weryfikacja internetowa, aby kontynuować (dane z pamięci podręcznej poniżej)"
       },
       "subtitle": "Zarządzaj kontami GitHub Copilot",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Tydzień"
     },
-    "optional": " (opcjonalne)"
+    "optional": " (opcjonalne)",
+    "hide": "Ukryj",
+    "show": "Pokaż"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "Usuń instancję",
-      "message": "Czy usunąć instancję {{name}}? Spowoduje to usunięcie konfiguracji i folderu instancji."
+      "message": "Usunąć instancję {{name}}? Jej wpis zostanie usunięty, a zarządzane foldery trafią do kosza. Foldery niestandardowe i chronione zostaną zachowane."
     },
     "import": {
       "btnTitle": "Importuj istniejący katalog",
@@ -1479,7 +1482,9 @@
       "normal": "Normalne",
       "forbidden": "403​",
       "forbidden_tooltip": "API zwróciło 403 Forbidden, konto nie ma dostępu do Gemini Code Assist",
-      "forbidden_msg": "Konto zabronione, pominięto automatyczne odświeżanie"
+      "forbidden_msg": "Konto zabronione, pominięto automatyczne odświeżanie",
+      "needsReauth": "Wymagana weryfikacja internetowa",
+      "needsReauthTooltip": "Google wymaga weryfikacji bezpieczeństwa w sieci, aby kontynuować"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "Usuń",
       "deleteSelected": "Usuń zaznaczone",
       "export": "Eksportuj",
-      "refreshAll": "Odśwież wszystko"
+      "refreshAll": "Odśwież wszystko",
+      "reauth": "Autoryzuj ponownie",
+      "reauthTooltip": "Google wymaga ponownej weryfikacji, kliknij aby autoryzować ponownie",
+      "openValidationUrl": "Weryfikacja internetowa",
+      "copyValidationUrl": "Kopiuj link do weryfikacji",
+      "copyValidationUrlTooltip": "Kopiuj adres weryfikacji internetowej"
     },
     "tabs": {
       "oauth": "Autoryzacja OAuth",
@@ -1853,7 +1863,8 @@
     "example": "Przykład",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} zakończone",
-    "actionFailed": "{{action}} niepowodzenie: {{error}}"
+    "actionFailed": "{{action}} niepowodzenie: {{error}}",
+    "refreshFailed": "Odświeżanie nie powiodło się"
   },
   "wakeup": {
     "title": "Zadania wybudzania",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Możesz go ponownie włączyć w ustawieniach Codex lub w szybkich ustawieniach",
       "riskNotice": {
         "title": "Informacja o ryzyku",
-        "message": "Obecne funkcje związane z usługą Codex API opierają się w praktyce na użyciu reverse proxy. Na tę chwilę oficjalna usługa nie ogranicza tego zachowania wprost, ale przyszłe zasady, reguły lub dostępność mogą się zmienić. Kontynuując korzystanie z tej funkcji, potwierdzasz, że rozumiesz tę sytuację i samodzielnie bierzesz na siebie związane z nią ryzyko.",
+        "message": "Korzystanie ze zwykłych oficjalnych kont przez odwrotne proxy lub do przekazywania żądań może podlegać surowym ograniczeniom ze strony oficjalnej usługi. Takie użycie może też zostać rozpoznane jako pośredniczenie i wpłynąć na jakość odpowiedzi („obniżenie inteligencji”). Korzystaj ostrożnie, zwłaszcza jeśli masz wiele kont.",
         "remember": "Rozumiem, nie pokazuj ponownie",
         "acknowledge": "Rozumiem",
         "continueStart": "Dalej",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "Ten bazowy adres URL już istnieje.",
         "providerNotFound": "Nie znaleziono dostawcy.",
         "apiKeyRequiredOnCreate": "Przy tworzeniu dostawcy wymagany jest co najmniej jeden klucz API.",
-        "apiKeyRequiredWhenEmpty": "Ten dostawca nie ma jeszcze klucza API. Najpierw dodaj jeden."
+        "apiKeyRequiredWhenEmpty": "Ten dostawca nie ma jeszcze klucza API. Najpierw dodaj jeden.",
+        "apiKeyUrlInvalid": "Użyj adresu HTTP(S) strony zarządzania bez danych logowania; klucz API wpisz w polu klucza."
       },
       "saveSuccess": "Dostawca modelu został zapisany.",
       "deleteBlocked": "Ten dostawca jest powiązany z {{count}} kontami i nie można go usunąć.",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "Ten dostawca domyślnie obsługuje obrazy",
-        "providerDefaultHint": "Po wyłączeniu tylko modele z listy poniżej przyjmą obrazy; pozostałe odrzuci lokalna brama.",
+        "providerDefaultHint": "Modele bez osobnego ustawienia używają tej wartości; GPT-5.5 i nowsze domyślnie obsługują obrazy. Poszczególne modele można wyłączyć na liście. Jeśli brama nie znajdzie modelu wizyjnego, pomija obrazy i przetwarza dalej tekst.",
         "modelsHint": "Jeden model w wierszu. Użyj, gdy tylko część modeli dostawcy obsługuje wklejone obrazy.",
-        "routingModelHint": "Gdy bieżący model nie czyta obrazów, żądanie użyje tego modelu; puste pole automatycznie użyje jedynego modelu wizyjnego.",
+        "routingModelHint": "Gdy bieżący model nie czyta obrazów, brama używa tego modelu. Puste pole wybiera jedyny dostępny model wizyjny; w przeciwnym razie obrazy są pomijane, a tekst nadal przetwarzany.",
         "allModels": "Obrazy",
         "partialModels": "Część obrazów",
         "textOnly": "Tylko tekst"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "Nie udało się zaimportować ze schowka: {{error}}",
       "importConfigPlaceholder": "Użyj „Kopiuj konfigurację” na karcie i wklej treść tutaj",
       "importConfigAction": "Importuj konfigurację",
-      "importConfigFromClipboard": "Czytaj schowek"
+      "importConfigFromClipboard": "Czytaj schowek",
+      "settingsRestartHint": "Zaktualizowano ustawienia dostawcy. Aby je zastosować, uruchom ponownie działające instancje Codex lub usługę API korzystającą z tego dostawcy."
     },
     "quickSwitch": {
       "action": "Szybka zmiana dostawcy",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "Roz. {{effort}}",
         "serviceTier": "Poziom usługi",
         "serviceTierValue": "Poziom {{tier}}",
-        "upstreamModel": "Model rzeczywisty"
+        "upstreamModel": "Wysłany model"
       },
       "timeouts": {
         "entryLabel": "Zaawansowane",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "Zmień węzeł",
       "quickSwitchHint": "Zmienia tylko to konto. Nowe połączenia używają zapisanego wyjścia; zapis nie sprawdza połączenia.",
       "currentNode": "Bieżący węzeł",
-      "noCurrentNode": "Bieżący węzeł nie jest jeszcze dostępny"
+      "noCurrentNode": "Bieżący węzeł nie jest jeszcze dostępny",
+      "runtimeBusy": "Lokalny serwer proxy jest zajęty. Aktualizacja jest chwilowo niedostępna.",
+      "runtimeCapacity": "Działa zbyt wiele serwerów proxy. Zatrzymaj nieużywane i spróbuj ponownie.",
+      "runtimeReadFailed": "Stan lokalnego serwera proxy jest chwilowo niedostępny. Spróbuj ponownie."
     },
     "more": {
       "title": "Więcej",
@@ -5298,6 +5314,12 @@
       "moveUp": "W górę",
       "moveDown": "W dół",
       "done": "Gotowe"
+    },
+    "cliDaemon": {
+      "title": "Odśwież konto CLI",
+      "description": "Dane logowania zapisano, ale usługa Codex CLI tego profilu nadal działa i może używać poprzedniego konta.",
+      "restartHint": "Zakończ aktywne zadania CLI, a następnie uruchom to polecenie w terminalu. Restart przerwie sesje połączone z tą usługą.",
+      "copyFailed": "Kopiowanie nie powiodło się. Zaznacz powyższe polecenie i skopiuj je ręcznie."
     }
   },
   "githubCopilot": {

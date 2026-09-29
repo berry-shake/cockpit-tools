@@ -27,6 +27,7 @@ pub mod codex_account_proxy;
 pub mod codex_agent_identity;
 pub mod codex_app_injection;
 pub mod codex_auth_diagnostic;
+pub(crate) mod codex_cli_daemon;
 pub mod codex_config_format;
 pub mod codex_instance;
 pub mod codex_local_access;

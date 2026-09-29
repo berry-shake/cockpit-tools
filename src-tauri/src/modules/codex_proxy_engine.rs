@@ -377,6 +377,16 @@ impl NodeTunnel {
             .lock()
             .is_ok_and(|mut child| matches!(child.try_wait(), Ok(None)))
     }
+    /// Reclamation must preserve a child whose state cannot be read immediately.
+    pub(crate) fn try_is_running(&self) -> Option<bool> {
+        self.child
+            .try_lock()
+            .ok()?
+            .try_wait()
+            .ok()
+            .map(|status| status.is_none())
+    }
+
     pub fn proxy_url(&self) -> &str {
         &self.proxy_url
     }

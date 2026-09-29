@@ -825,8 +825,19 @@ fn normalize_responses_input(obj: &mut Map<String, Value>) -> bool {
 /// the item type when replaying a conversation, so this must happen before
 /// both direct official requests and gateway requests.
 fn normalize_responses_item_ids(items: &mut [Value]) -> bool {
+    // Reasoning IDs can be bound to encrypted_content by the upstream. Keep
+    // them opaque, including when the encrypted payload is absent. Reserve
+    // them before repairing other items so neither collision handling nor the
+    // replacement pass can change a reasoning ID or a reference to it.
+    let reasoning_ids: HashSet<String> = items
+        .iter()
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("reasoning"))
+        .filter_map(|item| item.get("id").and_then(Value::as_str))
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .collect();
     let mut replacements = HashMap::new();
-    let mut used = HashSet::new();
+    let mut used = reasoning_ids.clone();
     for item in items.iter() {
         let Some(obj) = item.as_object() else {
             continue;
@@ -834,7 +845,9 @@ fn normalize_responses_item_ids(items: &mut [Value]) -> bool {
         let Some(id) = obj.get("id").and_then(Value::as_str) else {
             continue;
         };
-        if id.is_empty() {
+        // If another item shares a reasoning ID, a global replacement would
+        // also corrupt that reasoning item. Leave ambiguous IDs untouched.
+        if id.is_empty() || reasoning_ids.contains(id) {
             continue;
         }
         let Some(item_type) = obj.get("type").and_then(Value::as_str) else {
@@ -845,7 +858,6 @@ fn normalize_responses_item_ids(items: &mut [Value]) -> bool {
             "custom_tool_call" => "ctc",
             "custom_tool_call_output" => "ctco",
             "message" => "msg",
-            "reasoning" => "rs",
             _ => continue,
         };
         let mut candidate = if id.starts_with(&format!("{prefix}_")) {
@@ -1680,6 +1692,80 @@ mod tests {
         assert_eq!(body["input"][0]["id"], "ctc_fc_legacy_0");
         assert_eq!(body["input"][1]["id"], "ctco_fc_legacy_output_0");
         assert_eq!(body["input"][1]["item_id"], "ctc_fc_legacy_0");
+    }
+
+    #[test]
+    fn preserves_reasoning_identity_when_replaying_responses() {
+        for id in [
+            format!("rs_{}", "x".repeat(80)),
+            "opaque-upstream-id".into(),
+        ] {
+            for encrypted in [true, false] {
+                let mut reasoning = json!({
+                    "type": "reasoning",
+                    "id": id,
+                    "summary": []
+                });
+                if encrypted {
+                    reasoning["encrypted_content"] = json!("opaque-encrypted-payload");
+                }
+                for input in [
+                    reasoning.clone(),
+                    json!([reasoning.clone(), reasoning.clone()]),
+                ] {
+                    let mut body = json!({"model": "gpt-5.4", "input": input});
+                    normalize_responses_body_for_codex(&mut body);
+                    for item in body["input"].as_array().unwrap() {
+                        assert_eq!(item, &reasoning);
+                    }
+                    let normalized = body.clone();
+                    normalize_responses_body_for_codex(&mut body);
+                    assert_eq!(body, normalized);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn protects_reasoning_ids_from_tool_replacements() {
+        // A tool ID repair must not rewrite a reasoning ID or a reference to it,
+        // even when an upstream has reused the same raw ID for both item types.
+        for reasoning_first in [true, false] {
+            let reasoning = json!({
+                "type": "reasoning",
+                "id": "fc_legacy",
+                "encrypted_content": "opaque-encrypted-payload",
+                "summary": []
+            });
+            let tool = json!({"type": "custom_tool_call", "id": "fc_legacy"});
+            let mut items = if reasoning_first {
+                vec![reasoning.clone(), tool]
+            } else {
+                vec![tool, reasoning.clone()]
+            };
+            items
+                .push(json!({"type": "item_reference", "id": "fc_legacy", "item_id": "fc_legacy"}));
+            items.push(json!({"type": "custom_tool_call", "id": "fc_other"}));
+
+            assert!(normalize_responses_item_ids(&mut items));
+            assert_eq!(items[if reasoning_first { 0 } else { 1 }], reasoning);
+            assert_eq!(items[2]["id"], "fc_legacy");
+            assert_eq!(items[2]["item_id"], "fc_legacy");
+            assert_eq!(items[3]["id"], "ctc_fc_other");
+        }
+    }
+
+    #[test]
+    fn reserves_reasoning_ids_before_repairing_tool_ids() {
+        let mut items = vec![
+            json!({"type": "custom_tool_call", "id": "fc_legacy"}),
+            json!({"type": "reasoning", "id": "ctc_fc_legacy", "encrypted_content": "opaque"}),
+            json!({"type": "custom_tool_call_output", "item_id": "fc_legacy"}),
+        ];
+        assert!(normalize_responses_item_ids(&mut items));
+        assert_eq!(items[1]["id"], "ctc_fc_legacy");
+        assert_ne!(items[0]["id"], items[1]["id"]);
+        assert_eq!(items[2]["item_id"], items[0]["id"]);
     }
 
     #[test]

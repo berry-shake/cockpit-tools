@@ -2,6 +2,18 @@ import { singleFlightRead } from './codexProxyPreview';
 
 export const PROXY_CARD_REFRESH_MS = 20_000;
 const READ_TIMEOUT_MS = 10_000;
+const BUSY_RETRY_MS = 250;
+const TRANSIENT_READ_CODES = new Set(['PROXY_RUNTIME_LIMIT', 'PROXY_RUNTIME_BUSY',
+  'PROXY_RUNTIME_STARTING', 'PROXY_RUNTIME_READ_TIMEOUT', 'PROXY_CARD_QUEUE_TIMEOUT']);
+
+export type ProxyCardReadErrorKind = 'busy' | 'capacity' | 'failed';
+const errorCode = (error: unknown) => String(error).replace(/^Error:\s*/, '').trim();
+function readErrorKind(error: unknown): ProxyCardReadErrorKind {
+  const code = errorCode(error);
+  if (code === 'PROXY_RUNTIME_CAPACITY') return 'capacity';
+  if (TRANSIENT_READ_CODES.has(code) && code !== 'PROXY_RUNTIME_READ_TIMEOUT') return 'busy';
+  return 'failed';
+}
 
 /** Keep permits until the native operation settles, including after a UI timeout. */
 export function createProxyCardReadPool(limit = 4, timeoutMs = READ_TIMEOUT_MS) {
@@ -27,20 +39,32 @@ export function createProxyCardReadPool(limit = 4, timeoutMs = READ_TIMEOUT_MS) 
   });
 }
 
-export interface ProxyCardReadResult<T> { value: T | null; error: boolean }
+export interface ProxyCardReadResult<T> { value: T | null; error: boolean; errorKind?: ProxyCardReadErrorKind }
 
 /** Shared snapshot cache; failures preserve the last successful value. */
 export function createProxyCardReadCache<T>(
   read: (accountId: string) => Promise<T>,
   pool: ReturnType<typeof createProxyCardReadPool>,
   timeoutMs = READ_TIMEOUT_MS,
+  retryDelayMs = BUSY_RETRY_MS,
 ) {
   const snapshots = new Map<string, ProxyCardReadResult<T> & { checkedAt: number }>();
   const revisions = new Map<string, number>();
   const consumers = new Map<string, Set<() => boolean>>();
-  const nativeReads = singleFlightRead((key) => {
+  const nativeReads = singleFlightRead(async (key) => {
     const accountId = JSON.parse(JSON.parse(key)[0])[0] as string;
-    return pool(() => read(accountId), () => [...(consumers.get(key) ?? [])].some((check) => check()));
+    const active = () => [...(consumers.get(key) ?? [])].some((check) => check());
+    const deadline = Date.now() + timeoutMs;
+    try {
+      return await pool(() => read(accountId), active);
+    } catch (error) {
+      // One shared retry hides short-lived pressure without creating a retry storm.
+      // Never release native permits early or retry after every consumer has left.
+      if (!TRANSIENT_READ_CODES.has(errorCode(error)) || !active() || Date.now() + retryDelayMs >= deadline) throw error;
+      await new Promise<void>((resolve) => setTimeout(resolve, retryDelayMs));
+      if (!active() || Date.now() >= deadline) throw error;
+      return pool(() => read(accountId), active);
+    }
   }, timeoutMs);
   return {
     invalidateAccount(accountId: string) {
@@ -73,9 +97,9 @@ export function createProxyCardReadCache<T>(
         // Do not retain every account/binding ever visited for the entire session.
         if (snapshots.size > 256) snapshots.delete(snapshots.keys().next().value!);
         return next;
-      } catch {
+      } catch (error) {
         if (!current()) return this.peek(key);
-        const next = { value: snapshots.get(key)?.value ?? null, error: true, checkedAt };
+        const next = { value: snapshots.get(key)?.value ?? null, error: true, errorKind: readErrorKind(error), checkedAt };
         snapshots.delete(key);
         snapshots.set(key, next);
         if (snapshots.size > 256) snapshots.delete(snapshots.keys().next().value!);

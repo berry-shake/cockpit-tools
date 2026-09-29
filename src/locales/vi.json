@@ -10,7 +10,7 @@
       "accountsRequired": "Chọn ít nhất một tài khoản.",
       "invalidAccount": "Mã tài khoản không hợp lệ.",
       "invalidRequest": "Tham số thử không hợp lệ.",
-      "invalidConcurrency": "Số tác vụ song song phải từ 1 đến 10.",
+      "invalidConcurrency": "Tác vụ song song · 1–200",
       "invalidRetention": "Thời gian lưu giữ phải từ 1 đến 3650 ngày.",
       "alreadyRunning": "Hãy đóng lần thử đang hoạt động trước.",
       "artifactMissing": "Không tìm thấy kết quả đã tạo.",
@@ -73,7 +73,7 @@
     "exportWarning": "HTML xuất ra là đầu ra gốc của mô hình. Khi mở bên ngoài ứng dụng, tệp không được bảo vệ bằng cơ chế cô lập của bản xem trước.",
     "deliveryHelp": "Mọi tài khoản dùng cùng chỉ dẫn đầu ra: trả về trực tiếp HTML độc lập, không dùng khối mã Markdown hoặc thành phần phụ thuộc bên ngoài.",
     "errorTimeout": "Yêu cầu hết thời gian chờ. Bạn có thể bắt đầu lần thử mới.",
-    "errorStream": "Phản hồi thất bại hoặc chưa hoàn tất",
+    "errorStream": "Phản hồi chưa hoàn tất. Nội dung đã nhận được giữ lại.",
     "errorLimit": "Phản hồi vượt giới hạn dung lượng; đã dừng nhận.",
     "errorPreviewLimit": "Hãy đóng một cửa sổ xem trước trước.",
     "retention": "Tự động dọn dẹp",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Thao tác Windows chưa hoàn tất",
       "accessDeniedDescription": "Windows đã từ chối thao tác. Chương trình đích có thể chạy với quyền cao hơn hoặc nằm trong vị trí được bảo vệ.",
-      "storeLaunchBlockedDescription": "Windows không thể chạy ứng dụng Codex đã cấu hình: thư mục Store có thể đã bị bản cập nhật thay thế hoặc không còn cho phép thực thi. Đã chặn khởi chạy trực tiếp để tránh mở sai tài khoản. Hãy dùng “Dò lại đường dẫn và thử lại”; nếu vẫn lỗi, chuyển phiên bản này sang chế độ CLI.",
+      "storeLaunchBlockedDescription": "Không thể xác nhận phiên bản cô lập từ cửa hàng đã khởi động thành công. Cockpit không chuyển sang mở tài khoản mặc định. Hãy dò lại đường dẫn ứng dụng rồi thử lại. Nếu vẫn thất bại, hãy sao chép thông tin chẩn đoán hoặc chuyển phiên bản này sang chế độ CLI.",
       "repairPath": "Dò lại đường dẫn và thử lại",
       "fileInUseDescription": "Tệp đích đang được chương trình khác sử dụng. Hãy đóng chương trình rồi thử lại.",
       "programNotFoundDescription": "Windows không tìm thấy chương trình cần thiết. Hãy kiểm tra cài đặt hoặc đường dẫn đã cấu hình.",
@@ -344,7 +344,8 @@
         "unlimited": "Hạn mức không giới hạn",
         "leftPercent": "Còn {{value}}%",
         "cachedRefreshFailed": "Làm mới thất bại; đang hiển thị dữ liệu thành công gần nhất",
-        "lastSuccessfulQuery": "Lần thành công gần nhất: {{time}}"
+        "lastSuccessfulQuery": "Lần thành công gần nhất: {{time}}",
+        "cachedNeedsReauth": "⚠️ Cần xác minh web để tiếp tục (dữ liệu lưu trong bộ nhớ đệm bên dưới)"
       },
       "subtitle": "Quản lý các tài khoản GitHub Copilot",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Tuần"
     },
-    "optional": " (tùy chọn)"
+    "optional": " (tùy chọn)",
+    "hide": "Ẩn",
+    "show": "Hiện"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "Xóa phiên bản",
-      "message": "Xóa phiên bản {{name}}? Hành động này sẽ gỡ bỏ cấu hình và xóa thư mục phiên bản."
+      "message": "Xóa phiên bản {{name}}? Mục đăng ký sẽ bị xóa và các thư mục phiên bản được quản lý sẽ chuyển vào thùng rác. Các thư mục tùy chỉnh và được bảo vệ sẽ được giữ lại."
     },
     "import": {
       "btnTitle": "Nhập thư mục hiện có",
@@ -1479,7 +1482,9 @@
       "normal": "Bình thường",
       "forbidden": "403​",
       "forbidden_tooltip": "API trả về 403 Forbidden, tài khoản không có quyền sử dụng Gemini Code Assist",
-      "forbidden_msg": "Tài khoản không có quyền, đã bỏ qua tự động làm mới"
+      "forbidden_msg": "Tài khoản không có quyền, đã bỏ qua tự động làm mới",
+      "needsReauth": "Cần xác minh web",
+      "needsReauthTooltip": "Google yêu cầu xác minh bảo mật web để tiếp tục"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "Xóa",
       "deleteSelected": "Xóa mục đã chọn",
       "export": "Xuất",
-      "refreshAll": "Làm mới tất cả"
+      "refreshAll": "Làm mới tất cả",
+      "reauth": "Cấp quyền lại",
+      "reauthTooltip": "Google yêu cầu xác minh lại, nhấn để cấp quyền lại",
+      "openValidationUrl": "Xác minh web",
+      "copyValidationUrl": "Sao chép liên kết xác minh",
+      "copyValidationUrlTooltip": "Sao chép địa chỉ xác minh web"
     },
     "tabs": {
       "oauth": "Ủy quyền OAuth",
@@ -1853,7 +1863,8 @@
     "example": "Ví dụ",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} thành công",
-    "actionFailed": "{{action}} thất bại: {{error}}"
+    "actionFailed": "{{action}} thất bại: {{error}}",
+    "refreshFailed": "Làm mới thất bại"
   },
   "wakeup": {
     "title": "Nhiệm vụ đánh thức",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Bạn có thể bật lại trong Cài đặt Codex hoặc Cài đặt nhanh",
       "riskNotice": {
         "title": "Lưu ý rủi ro",
-        "message": "Các tính năng liên quan đến dịch vụ Codex API hiện tại về bản chất là cách dùng thông qua reverse proxy. Ở thời điểm hiện tại, phía chính thức chưa hạn chế rõ ràng hành vi này, nhưng chính sách, quy định hoặc khả năng sử dụng có thể thay đổi trong tương lai. Khi tiếp tục sử dụng tính năng này, bạn xác nhận đã hiểu tình huống này và tự chịu các rủi ro liên quan.",
+        "message": "Việc sử dụng tài khoản chính thức thông thường qua proxy ngược hoặc chuyển tiếp có thể chịu các hạn chế nghiêm ngặt từ dịch vụ chính thức. Cách sử dụng này cũng có thể bị nhận diện là chuyển tiếp và ảnh hưởng đến chất lượng câu trả lời (“giảm trí thông minh”). Hãy sử dụng thận trọng, nhất là khi có nhiều tài khoản.",
         "remember": "Tôi đã hiểu, đừng nhắc lại",
         "acknowledge": "Tôi đã hiểu",
         "continueStart": "Tiếp tục",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "Base URL này đã tồn tại.",
         "providerNotFound": "Không tìm thấy nhà cung cấp.",
         "apiKeyRequiredOnCreate": "Khi tạo nhà cung cấp, cần ít nhất một API Key.",
-        "apiKeyRequiredWhenEmpty": "Nhà cung cấp này chưa có API Key. Hãy thêm một key trước."
+        "apiKeyRequiredWhenEmpty": "Nhà cung cấp này chưa có API Key. Hãy thêm một key trước.",
+        "apiKeyUrlInvalid": "Dùng URL quản lý HTTP(S) không chứa thông tin xác thực; nhập khóa API vào trường khóa."
       },
       "saveSuccess": "Đã lưu nhà cung cấp mô hình.",
       "deleteBlocked": "Nhà cung cấp này đang được liên kết với {{count}} tài khoản nên không thể xóa.",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "Nhà cung cấp này mặc định hỗ trợ nhập ảnh",
-        "providerDefaultHint": "Khi tắt, chỉ các mẫu bên dưới được nhận ảnh; các mẫu khác sẽ bị gateway cục bộ từ chối.",
+        "providerDefaultHint": "Mô hình chưa có cài đặt riêng dùng giá trị mặc định này; GPT-5.5 trở lên mặc định hỗ trợ ảnh. Có thể tắt từng mô hình trong danh sách. Nếu cổng không tìm thấy mô hình hỗ trợ ảnh, ảnh sẽ bị bỏ qua và văn bản tiếp tục được xử lý.",
         "modelsHint": "Mỗi dòng một mẫu. Dùng khi chỉ một số mẫu của nhà cung cấp hỗ trợ ảnh dán vào.",
-        "routingModelHint": "Khi mẫu hiện tại không đọc được ảnh, yêu cầu dùng mẫu này; để trống sẽ tự dùng mẫu ảnh duy nhất.",
+        "routingModelHint": "Khi mô hình hiện tại không đọc được ảnh, cổng dùng mô hình này. Để trống để dùng mô hình hỗ trợ ảnh duy nhất nếu có; nếu không, ảnh bị bỏ qua và văn bản tiếp tục được xử lý.",
         "allModels": "Ảnh",
         "partialModels": "Một số ảnh",
         "textOnly": "Chỉ văn bản"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "Không nhập được từ clipboard: {{error}}",
       "importConfigPlaceholder": "Dùng Sao chép cấu hình trên thẻ rồi dán nội dung vào đây",
       "importConfigAction": "Nhập cấu hình",
-      "importConfigFromClipboard": "Đọc clipboard"
+      "importConfigFromClipboard": "Đọc clipboard",
+      "settingsRestartHint": "Đã cập nhật cài đặt nhà cung cấp. Hãy khởi động lại phiên Codex hoặc dịch vụ API đang dùng nhà cung cấp này để áp dụng."
     },
     "quickSwitch": {
       "action": "Chuyển nhanh nhà cung cấp",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "Suy {{effort}}",
         "serviceTier": "Hạng dịch vụ",
         "serviceTierValue": "Hạng {{tier}}",
-        "upstreamModel": "Mô hình thực tế"
+        "upstreamModel": "Mô hình gửi đi"
       },
       "timeouts": {
         "entryLabel": "Nâng cao",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "Đổi nút",
       "quickSwitchHint": "Chỉ thay đổi tài khoản này. Kết nối mới dùng đường ra đã lưu; thao tác lưu không xác minh kết nối.",
       "currentNode": "Nút hiện tại",
-      "noCurrentNode": "Chưa có thông tin về nút hiện tại"
+      "noCurrentNode": "Chưa có thông tin về nút hiện tại",
+      "runtimeBusy": "Proxy cục bộ đang bận. Tạm thời không thể cập nhật.",
+      "runtimeCapacity": "Có quá nhiều proxy đang chạy. Hãy dừng các proxy không dùng rồi thử lại.",
+      "runtimeReadFailed": "Tạm thời không thể đọc trạng thái proxy cục bộ. Vui lòng thử lại."
     },
     "more": {
       "title": "Thêm",
@@ -5298,6 +5314,12 @@
       "moveUp": "Di chuyển lên",
       "moveDown": "Di chuyển xuống",
       "done": "Xong"
+    },
+    "cliDaemon": {
+      "title": "Làm mới tài khoản CLI",
+      "description": "Thông tin xác thực đã được lưu nhưng dịch vụ nền Codex CLI của hồ sơ này vẫn chạy và có thể tiếp tục dùng tài khoản cũ.",
+      "restartHint": "Hoàn tất các tác vụ CLI đang chạy rồi thực thi lệnh này trong cửa sổ dòng lệnh. Khởi động lại sẽ ngắt các phiên đang kết nối với dịch vụ này.",
+      "copyFailed": "Sao chép thất bại. Hãy chọn lệnh ở trên và sao chép thủ công."
     }
   },
   "githubCopilot": {

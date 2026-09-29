@@ -10,7 +10,7 @@
       "accountsRequired": "En az bir hesap seçin.",
       "invalidAccount": "Geçersiz hesap kimliği.",
       "invalidRequest": "Geçersiz test parametreleri.",
-      "invalidConcurrency": "Paralel iş sayısı 1 ile 10 arasında olmalıdır.",
+      "invalidConcurrency": "Paralel işler · 1–200",
       "invalidRetention": "Saklama süresi 1 ile 3650 gün arasında olmalıdır.",
       "alreadyRunning": "Önce etkin testi kapatın.",
       "artifactMissing": "Üretilen sonuç bulunamadı.",
@@ -73,7 +73,7 @@
     "exportWarning": "Dışa aktarılan HTML, modelin özgün çıktısıdır. Uygulama dışında açıldığında önizleme yalıtımıyla korunmaz.",
     "deliveryHelp": "Tüm hesaplar aynı çıktı talimatını kullanır: Markdown kod blokları veya dış bağımlılıklar olmadan doğrudan bağımsız HTML döndürün.",
     "errorTimeout": "İstek zaman aşımına uğradı. Yeni bir test başlatabilirsiniz.",
-    "errorStream": "Yanıt başarısız oldu veya tamamlanmadı",
+    "errorStream": "Yanıt tamamlanmadı. Alınan içerik korundu.",
     "errorLimit": "Yanıt boyut sınırını aştı; alım durduruldu.",
     "errorPreviewLimit": "Önce bir önizleme penceresini kapatın.",
     "retention": "Otomatik temizleme",
@@ -159,7 +159,7 @@
     "windowsOperation": {
       "title": "Windows işlemi tamamlanmadı",
       "accessDeniedDescription": "Windows bu işlemi reddetti. Hedef daha yüksek yetkiyle çalışıyor veya korumalı bir konumda olabilir.",
-      "storeLaunchBlockedDescription": "Windows yapılandırılmış Codex istemcisini çalıştıramadı: Store klasörü bir güncellemeyle değiştirilmiş veya artık çalıştırmaya izin vermiyor olabilir. Yanlış hesabın açılmaması için doğrudan başlatma engellendi. “Yolu yeniden algıla ve yeniden dene” seçeneğini kullanın; yine başarısız olursa bu örneği CLI moduna geçirin.",
+      "storeLaunchBlockedDescription": "Mağazadan yüklenen yalıtılmış örneğin başlatıldığı doğrulanamadı. Cockpit varsayılan hesabı yedek olarak açmadı. İstemci yolunu yeniden algılayıp tekrar deneyin. Hata sürerse tanılama bilgilerini kopyalayın veya bu örneği CLI moduna geçirin.",
       "repairPath": "Yolu yeniden algıla ve yeniden dene",
       "fileInUseDescription": "Hedef dosya başka bir program tarafından kullanılıyor. Programı kapatıp yeniden deneyin.",
       "programNotFoundDescription": "Windows gerekli programı bulamadı. Kurulumu veya ayarlanan yolu kontrol edin.",
@@ -344,7 +344,8 @@
         "unlimited": "Sınırsız kota",
         "leftPercent": "%{{value}} kaldı",
         "cachedRefreshFailed": "Yenileme başarısız; son başarılı veriler gösteriliyor",
-        "lastSuccessfulQuery": "Son başarılı: {{time}}"
+        "lastSuccessfulQuery": "Son başarılı: {{time}}",
+        "cachedNeedsReauth": "⚠️ Devam etmek için web doğrulaması gerekiyor (aşağıdaki veriler önbellekten)"
       },
       "subtitle": "GitHub Copilot hesaplarınızı yönetin",
       "time": {
@@ -404,7 +405,9 @@
     "quota": {
       "weeklyWindow": "Hafta"
     },
-    "optional": " (isteğe bağlı)"
+    "optional": " (isteğe bağlı)",
+    "hide": "Gizle",
+    "show": "Göster"
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -776,7 +779,7 @@
     },
     "delete": {
       "title": "Oturumu sil",
-      "message": "{{name}} oturumu silinsin mi? Bu işlem yapılandırmayı kaldıracak ve oturum klasörünü silecektir."
+      "message": "{{name}} örneği silinsin mi? Kaydı kaldırılacak ve yönetilen örnek klasörleri çöp kutusuna taşınacak. Özel ve korunan klasörler saklanacak."
     },
     "import": {
       "btnTitle": "Mevcut dizini içe aktar",
@@ -1479,7 +1482,9 @@
       "normal": "Normal​",
       "forbidden": "403​",
       "forbidden_tooltip": "API 403 Forbidden döndürdü, hesabın Gemini Code Assist'e erişimi yok",
-      "forbidden_msg": "Hesap yasaklı, otomatik yenileme atlandı"
+      "forbidden_msg": "Hesap yasaklı, otomatik yenileme atlandı",
+      "needsReauth": "Web Doğrulaması Gerekiyor",
+      "needsReauthTooltip": "Google devam etmek için web güvenlik doğrulaması istiyor"
     },
     "tier": {
       "pro": "PRO​",
@@ -1614,7 +1619,12 @@
       "delete": "Sil",
       "deleteSelected": "Seçilenleri Sil",
       "export": "Dışa Aktar",
-      "refreshAll": "Tümünü Yenile"
+      "refreshAll": "Tümünü Yenile",
+      "reauth": "Yeniden yetkilendir",
+      "reauthTooltip": "Google yeniden doğrulama istiyor, yetkilendirmek için tıklayın",
+      "openValidationUrl": "Web Doğrulaması",
+      "copyValidationUrl": "Doğrulama bağlantısını kopyala",
+      "copyValidationUrlTooltip": "Web doğrulama adresini kopyala"
     },
     "tabs": {
       "oauth": "OAuth Yetkilendirme",
@@ -1853,7 +1863,8 @@
     "example": "Örnek",
     "actionRunning": "{{action}}...​",
     "actionSuccess": "{{action}} başarılı",
-    "actionFailed": "{{action}} başarısız: {{error}}"
+    "actionFailed": "{{action}} başarısız: {{error}}",
+    "refreshFailed": "Yenileme başarısız"
   },
   "wakeup": {
     "title": "Uyandırma Görevleri",
@@ -2606,7 +2617,7 @@
       "hideEntryEffectRestore": "Codex Ayarları veya Hızlı Ayarlar'dan yeniden açabilirsiniz",
       "riskNotice": {
         "title": "Risk Uyarısı",
-        "message": "Mevcut Codex API hizmetiyle ilgili özellikler, özünde ters proxy kullanımına dayanır. Şu anda resmi taraf bu davranışı açıkça kısıtlamıyor, ancak ileride politika, kurallar veya kullanılabilirlik değişebilir. Bu özelliği kullanmaya devam ederek durumu anladığınızı ve ilgili riskleri kendiniz üstlendiğinizi kabul etmiş olursunuz.",
+        "message": "Normal resmî hesapların ters proxy veya aktarma için kullanılması, resmî hizmetin katı kısıtlamalarına tabi olabilir. Bu kullanım ayrıca aktarma olarak algılanabilir ve yanıt kalitesini etkileyebilir (“zekâ düşüşü”). Özellikle çok sayıda hesabınız varsa dikkatli kullanın.",
         "remember": "Anladım, bir daha gösterme",
         "acknowledge": "Anladım",
         "continueStart": "Devam",
@@ -3698,7 +3709,8 @@
         "baseUrlExists": "Bu temel URL zaten mevcut.",
         "providerNotFound": "Sağlayıcı bulunamadı.",
         "apiKeyRequiredOnCreate": "Sağlayıcı oluştururken en az bir API anahtarı gereklidir.",
-        "apiKeyRequiredWhenEmpty": "Bu sağlayıcının henüz API anahtarı yok. Lütfen önce bir tane ekleyin."
+        "apiKeyRequiredWhenEmpty": "Bu sağlayıcının henüz API anahtarı yok. Lütfen önce bir tane ekleyin.",
+        "apiKeyUrlInvalid": "Gömülü kimlik bilgisi içermeyen HTTP(S) yönetim adresi kullanın; API anahtarını anahtar alanına girin."
       },
       "saveSuccess": "Model sağlayıcı kaydedildi.",
       "deleteBlocked": "Bu sağlayıcı {{count}} hesapla bağlantılı olduğu için silinemez.",
@@ -3866,9 +3878,9 @@
       },
       "vision": {
         "providerDefault": "Bu sağlayıcı varsayılan olarak görsel girişini destekler",
-        "providerDefaultHint": "Kapalıyken yalnızca aşağıdaki modeller görsel alır; diğerleri yerel ağ geçidi tarafından reddedilir.",
+        "providerDefaultHint": "Özel ayarı olmayan modeller bu varsayılanı kullanır; GPT-5.5 ve sonrası varsayılan olarak görselleri destekler. Modelleri listeden ayrı ayrı kapatabilirsiniz. Ağ geçidi görsel destekleyen bir model bulamazsa görselleri atlar ve metni işlemeye devam eder.",
         "modelsHint": "Her satıra bir model yazın. Sağlayıcıdaki yalnızca bazı modeller yapıştırılan görselleri destekliyorsa kullanın.",
-        "routingModelHint": "Geçerli model görsel okuyamıyorsa istek bu modeli kullanır; boşsa tek görsel model otomatik kullanılır.",
+        "routingModelHint": "Geçerli model görselleri okuyamıyorsa ağ geçidi bu modeli kullanır. Boş bırakırsanız mevcut tek görsel model kullanılır; aksi halde görseller atlanır ve metin işlenmeye devam eder.",
         "allModels": "Görsel",
         "partialModels": "Bazı görseller",
         "textOnly": "Yalnızca metin"
@@ -3957,7 +3969,8 @@
       "importConfigFailed": "Panodan içe aktarma başarısız: {{error}}",
       "importConfigPlaceholder": "Karttaki \"Yapılandırmayı kopyala\"yı kullanıp içeriği buraya yapıştırın",
       "importConfigAction": "Yapılandırmayı içe aktar",
-      "importConfigFromClipboard": "Panoyu oku"
+      "importConfigFromClipboard": "Panoyu oku",
+      "settingsRestartHint": "Sağlayıcı ayarları güncellendi. Uygulamak için bu sağlayıcıyı kullanan çalışan Codex örneklerini veya API hizmetini yeniden başlatın."
     },
     "quickSwitch": {
       "action": "Sağlayıcıyı hızlı değiştir",
@@ -4318,7 +4331,7 @@
         "reasoningEffortValue": "Akıl {{effort}}",
         "serviceTier": "Hizmet katmanı",
         "serviceTierValue": "Katman {{tier}}",
-        "upstreamModel": "Gerçek model"
+        "upstreamModel": "Gönderilen model"
       },
       "timeouts": {
         "entryLabel": "Gelişmiş",
@@ -5278,7 +5291,10 @@
       "quickSwitch": "Düğüm değiştir",
       "quickSwitchHint": "Yalnızca bu hesabı değiştirir. Yeni bağlantılar kaydedilen çıkışı kullanır; kaydetme işlemi bağlantıyı doğrulamaz.",
       "currentNode": "Geçerli düğüm",
-      "noCurrentNode": "Geçerli düğüm henüz kullanılamıyor"
+      "noCurrentNode": "Geçerli düğüm henüz kullanılamıyor",
+      "runtimeBusy": "Yerel vekil meşgul. Güncelleme geçici olarak kullanılamıyor.",
+      "runtimeCapacity": "Çok fazla vekil çalışıyor. Kullanmadıklarınızı durdurup yeniden deneyin.",
+      "runtimeReadFailed": "Yerel vekil durumu geçici olarak okunamıyor. Yeniden deneyin."
     },
     "more": {
       "title": "Daha fazla",
@@ -5298,6 +5314,12 @@
       "moveUp": "Yukarı taşı",
       "moveDown": "Aşağı taşı",
       "done": "Bitti"
+    },
+    "cliDaemon": {
+      "title": "CLI hesabını yenile",
+      "description": "Kimlik bilgileri kaydedildi ancak bu profilin Codex CLI arka plan hizmeti hâlâ çalışıyor ve önceki hesabı kullanmayı sürdürebilir.",
+      "restartHint": "Etkin CLI görevlerini bitirin, ardından terminalde bu komutu çalıştırın. Yeniden başlatma, bu hizmete bağlı oturumları keser.",
+      "copyFailed": "Kopyalanamadı. Yukarıdaki komutu seçip elle kopyalayın."
     }
   },
   "githubCopilot": {

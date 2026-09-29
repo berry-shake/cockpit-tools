@@ -56,6 +56,7 @@ mod tests {
     include!("codex_local_access_tests_pricing_profile.rs");
     include!("codex_local_access_tests_request_routing.rs");
     include!("codex_local_access_tests_provider_gateway_vision.rs");
+    include!("codex_local_access_tests_mixed_gateway_scope.rs");
     include!("codex_local_access_tests_takeover.rs");
     include!("codex_local_access_tests_takeover_maintenance.rs");
     include!("codex_local_access_tests_internal_service.rs");

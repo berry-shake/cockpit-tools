@@ -1,10 +1,11 @@
+import { getCodexAccountQuotaError } from "../utils/codexProxyRuntimeError";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { RefreshCw, X, CircleAlert, Info, Link2 } from "lucide-react";
 import * as codexService from "../services/codexService";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import { presentWindowsOperationError } from "../utils/windowsOperationDialog";
-import { assignAccountsToCodexGroup, deleteCodexGroup, removeAccountsFromCodexGroup } from "../services/codexAccountGroupService";
+import { setCodexGroupAccounts, deleteCodexGroup, removeAccountsFromCodexGroup } from "../services/codexAccountGroupService";
 import { formatCodexLoginProvider, getCodexAuthMetadata, getCodexPlanFilterKey, getCodexSubscriptionPresentationForAccount, isCodexApiKeyAccount, isCodexNewApiAccount, isCodexTeamLikePlan, type CodexQuotaErrorInfo } from "../types/codex";
 import { canAddCodexAccountToLocalAccess, filterCodexLocalAccessAccountIds } from "../utils/codexLocalAccessAccounts";
 import { extractCodexQuotaErrorCode, extractCodexQuotaErrorStatusCode, isBlockingCodexAccountQuotaError, isVerboseCodexQuotaErrorMessage, summarizeCodexQuotaErrorMessage } from "../utils/codexQuotaError";
@@ -199,6 +200,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   const [instanceGatewaysError, setInstanceGatewaysError] = useState("");
   const resolveQuotaErrorMeta = useCallback(
       (quotaError?: CodexQuotaErrorInfo) => {
+        quotaError = getCodexAccountQuotaError(quotaError);
         if (!quotaError?.message) {
           return {
             statusCode: "",
@@ -1574,8 +1576,7 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
   
     const handleQuickAddAccountsToGroup = useCallback(
       async (groupId: string, accountIds: string[]) => {
-        if (accountIds.length === 0) return;
-        await assignAccountsToCodexGroup(groupId, accountIds);
+        await setCodexGroupAccounts(groupId, accountIds);
         await reloadCodexGroups();
       },
       [reloadCodexGroups],

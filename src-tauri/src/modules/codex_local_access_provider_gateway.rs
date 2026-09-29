@@ -1811,7 +1811,12 @@ fn build_mixed_model_gateway_collection_for_profile(
         last_used_at: None,
     });
     collection.updated_at = now;
-    let (changed, _) = sanitize_collection(&mut collection)?;
+    // This profile's OAuth account and each route have already been validated above.
+    // API Service membership rules (including its Free-account restriction) must not
+    // erase the mixed gateway's client key scope. A second account-index snapshot
+    // can also omit an account while it is being reauthorized. Keep the explicit
+    // OAuth scope; sidecar preparation still excludes unusable upstream credentials.
+    let changed = sanitize_collection_structure(&mut collection)?;
     if changed {
         collection.updated_at = now_ms();
     }

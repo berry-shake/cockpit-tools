@@ -59,6 +59,10 @@ const LEGACY_CODEX_MODEL_PRESET_MODELS: &[&str] = &[
     "gpt-5.1-codex-mini",
 ];
 
+#[path = "codex_wakeup_task_state.rs"]
+mod task_state;
+pub use task_state::{claim_task_run, mark_task_run_failed, try_task_run_lease};
+
 static TASKS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 static HISTORY_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 static TEST_CANCEL_SCOPES: std::sync::LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> =
@@ -405,7 +409,9 @@ fn is_scope_cancelled(cancel_flag: Option<&Arc<AtomicBool>>) -> bool {
         .unwrap_or(false)
 }
 
-fn resolve_cancel_flag(cancel_scope_id: Option<&str>) -> Result<Option<Arc<AtomicBool>>, String> {
+pub(super) fn resolve_cancel_flag(
+    cancel_scope_id: Option<&str>,
+) -> Result<Option<Arc<AtomicBool>>, String> {
     let Some(scope_id) = cancel_scope_id
         .map(str::trim)
         .filter(|item| !item.is_empty())
@@ -433,12 +439,15 @@ pub fn cancel_wakeup_scope(cancel_scope_id: &str) -> Result<(), String> {
         let mut guard = TEST_CANCEL_SCOPES
             .lock()
             .map_err(|_| "Codex 唤醒取消作用域锁已损坏".to_string())?;
-        guard.remove(scope_id)
+        guard
+            .entry(scope_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .clone()
     };
 
-    if let Some(flag) = flag {
-        flag.store(true, Ordering::SeqCst);
-    }
+    // Keep the flag until release: cancelling before run_batch resolves its
+    // scope must not silently create a new, uncancelled run.
+    flag.store(true, Ordering::SeqCst);
     Ok(())
 }
 
@@ -1969,6 +1978,7 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
     }
 
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
     let path = tasks_path()?;
     if !path.exists() {
         return Ok(());
@@ -2014,6 +2024,7 @@ pub fn remove_deleted_accounts_from_tasks(account_ids: &[String]) -> Result<(), 
     let _ = prune_missing_accounts_from_state(&mut state, &existing);
     refresh_next_run_at(&mut state);
     save_json_atomic(&path, &state)?;
+    crate::modules::codex_wakeup_scheduler::cancel_disabled_tasks(&state);
     logger::log_info(&format!(
         "[CodexWakeup] 已从唤醒任务中移除已删除账号引用: removed={}, remaining_tasks={}",
         remove_ids.len(),
@@ -2141,7 +2152,8 @@ pub fn save_runtime_config(
     Ok(normalized)
 }
 
-fn load_state_inner() -> Result<CodexWakeupState, String> {
+// Caller owns TASKS_LOCK and the cross-process state lock.
+fn read_state_file() -> Result<CodexWakeupState, String> {
     let path = tasks_path()?;
     if !path.exists() {
         return Ok(CodexWakeupState::default());
@@ -2178,11 +2190,17 @@ fn load_state_inner() -> Result<CodexWakeupState, String> {
     let existing_accounts = existing_codex_account_id_set();
     let account_prune_changed = prune_missing_accounts_from_state(&mut state, &existing_accounts);
     refresh_next_run_at(&mut state);
-    if migration_changed || account_prune_changed {
-        let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let interrupted_changed = task_state::recover_interrupted_runs(&mut state)?;
+    if migration_changed || account_prune_changed || interrupted_changed {
         save_json_atomic(&path, &state)?;
     }
     Ok(state)
+}
+
+fn load_state_inner() -> Result<CodexWakeupState, String> {
+    let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
+    read_state_file()
 }
 
 pub fn load_state() -> Result<CodexWakeupState, String> {
@@ -2206,6 +2224,8 @@ pub fn load_overview() -> Result<CodexWakeupOverview, String> {
 
 pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, String> {
     let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
+    let current_state = read_state_file()?;
     let mut seen = HashSet::new();
     let mut preset_seen = HashSet::new();
     let mut state = CodexWakeupState {
@@ -2237,9 +2257,12 @@ pub fn save_state(next_state: &CodexWakeupState) -> Result<CodexWakeupState, Str
     let existing_accounts = existing_codex_account_id_set();
     let _ = prune_missing_accounts_from_state(&mut state, &existing_accounts);
 
+    // UI snapshots own configuration, never the scheduler's newer run results.
+    task_state::preserve_run_metadata(&mut state, &current_state);
     refresh_next_run_at(&mut state);
 
     save_json_atomic(&tasks_path()?, &state)?;
+    crate::modules::codex_wakeup_scheduler::cancel_disabled_tasks(&state);
     Ok(state)
 }
 
@@ -2758,11 +2781,14 @@ async fn run_api_single_account(
     }
 
     let started_at = std::time::Instant::now();
-    match codex_local_access::run_official_wakeup_chat(
-        account_id,
-        execution_config.model.as_deref(),
-        execution_config.model_reasoning_effort.as_deref(),
-        prompt,
+    match task_state::await_with_cancel(
+        cancel_flag,
+        codex_local_access::run_official_wakeup_chat(
+            account_id,
+            execution_config.model.as_deref(),
+            execution_config.model_reasoning_effort.as_deref(),
+            prompt,
+        ),
     )
     .await
     {
@@ -3167,7 +3193,9 @@ pub fn update_task_after_run(
     task_id: &str,
     records: &[CodexWakeupHistoryItem],
 ) -> Result<(), String> {
-    let mut state = load_state()?;
+    let _lock = TASKS_LOCK.lock().map_err(|_| "获取 Codex 唤醒任务锁失败")?;
+    let _file_lock = task_state::lock_task_state()?;
+    let mut state = read_state_file()?;
     let Some(task) = state.tasks.iter_mut().find(|item| item.id == task_id) else {
         return Ok(());
     };
@@ -3191,8 +3219,8 @@ pub fn update_task_after_run(
     };
     task.last_duration_ms = total_duration;
     task.updated_at = now_ts();
-    task.next_run_at = crate::modules::codex_wakeup_scheduler::calculate_next_run_at(task);
-    save_state(&state)?;
+    refresh_next_run_at(&mut state);
+    save_json_atomic(&tasks_path()?, &state)?;
     Ok(())
 }
 
