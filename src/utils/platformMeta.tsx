@@ -5,6 +5,7 @@ import { PlatformId } from '../types/platform';
 import { AntigravityIcon } from '../components/icons/AntigravityIcon';
 import { AntigravityIdeIcon } from '../components/icons/AntigravityIdeIcon';
 import { CodexIcon } from '../components/icons/CodexIcon';
+import { OmpIcon } from '../components/icons/OmpIcon';
 import { ClaudeIcon } from '../components/icons/ClaudeIcon';
 import { WindsurfIcon } from '../components/icons/WindsurfIcon';
 import { KiroIcon } from '../components/icons/KiroIcon';
@@ -18,6 +19,8 @@ import { ZedIcon } from '../components/icons/ZedIcon';
 import { ZcodeIcon } from '../components/icons/ZcodeIcon';
 export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string {
   switch (platformId) {
+    case 'omp':
+      return 'OMP';
     case 'antigravity':
       return 'Antigravity';
     case 'antigravity_ide':
@@ -65,6 +68,8 @@ export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string 
 
 export function renderPlatformIcon(platformId: PlatformId, size = 20): ReactNode {
   switch (platformId) {
+    case 'omp':
+      return <OmpIcon size={size} />;
     case 'antigravity':
       return <AntigravityIcon style={{ width: size, height: size }} />;
     case 'antigravity_ide':

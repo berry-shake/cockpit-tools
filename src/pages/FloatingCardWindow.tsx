@@ -197,6 +197,7 @@ function resolveInstanceStoreApi(platformId: PlatformId): FloatingCardInstanceSt
     case 'codex':
       return useCodexInstanceStore.getState();
     case 'codex_api_service':
+    case 'omp':
       return null;
     case 'claude_manager':
       return useClaudeInstanceStore.getState();

@@ -162,6 +162,9 @@ const ZedAccountsPage = lazy(() =>
 const WakeupTasksPage = lazy(() =>
   import('./pages/WakeupTasksPage').then((module) => ({ default: module.WakeupTasksPage })),
 );
+const OmpPage = lazy(() =>
+  import('./pages/OmpPage').then((module) => ({ default: module.OmpPage })),
+);
 const WakeupVerificationPage = lazy(() =>
   import('./pages/WakeupVerificationPage').then((module) => ({
     default: module.WakeupVerificationPage,
@@ -227,6 +230,7 @@ const RENDERABLE_PAGE_VALUES: readonly Page[] = [
   'trae-solo-cn',
   'workbuddy',
   'zed',
+  'omp',
   'instances',
   'wakeup',
   'verification',
@@ -4058,6 +4062,9 @@ function MainApp() {
           )}
           <VisibleBootPage when={page === 'claude'}>
             <ClaudeAccountsPage subPlatform="desktop" />
+          </VisibleBootPage>
+          <VisibleBootPage when={page === 'omp'}>
+            <OmpPage />
           </VisibleBootPage>
           <VisibleBootPage when={page === 'claude-cli'}>
             <ClaudeAccountsPage subPlatform="cli" />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import "./SingleSelectDropdown.css";
@@ -46,6 +46,8 @@ export function SingleSelectDropdown({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const entryFocus = useRef<"selected" | "last">("selected");
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -129,6 +131,36 @@ export function SingleSelectDropdown({
     setOpen(false);
   }, [disabled]);
 
+  const menuReady = menuStyle !== null;
+  useEffect(() => {
+    if (!open || !menuReady) return;
+    const items = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
+    if (!items?.length) return;
+    const selected = menuRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    (selected ?? items[entryFocus.current === "last" ? items.length - 1 : 0])?.focus();
+  }, [open, menuReady]);
+
+  function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape" || event.key === "Tab") {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      setOpen(false);
+      // Tab continues from the trigger instead of jumping to the portal's position.
+      triggerRef.current?.focus();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    if (!items.length) return;
+    const index = items.findIndex((item) => item === document.activeElement);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+      : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items[next]?.focus();
+  }
+
   const currentLabel = selectedOption?.label ?? placeholder ?? "";
 
   return (
@@ -149,8 +181,16 @@ export function SingleSelectDropdown({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onKeyDown={(event) => {
+          if (disabled || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
+          event.preventDefault();
+          entryFocus.current = event.key === "ArrowUp" ? "last" : "selected";
+          setOpen(true);
+        }}
         onClick={() => {
           if (disabled) return;
+          entryFocus.current = "selected";
           setOpen((prev) => !prev);
         }}
         disabled={disabled}
@@ -167,6 +207,7 @@ export function SingleSelectDropdown({
         ? createPortal(
             <div
               ref={menuRef}
+              id={menuId}
               className={[
                 "single-select-dropdown-menu",
                 menuClassName ?? "",
@@ -184,6 +225,7 @@ export function SingleSelectDropdown({
               }}
               role="listbox"
               aria-label={ariaLabel}
+              onKeyDown={handleMenuKeyDown}
             >
               {options.map((option) => {
                 const active = option.value === value;
@@ -195,8 +237,10 @@ export function SingleSelectDropdown({
                     onClick={() => {
                       onChange(option.value);
                       setOpen(false);
+                      triggerRef.current?.focus();
                     }}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={active}
                   >
                     <span

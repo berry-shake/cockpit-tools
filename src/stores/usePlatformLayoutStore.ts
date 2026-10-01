@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
-import { ALL_PLATFORM_IDS, PlatformId } from '../types/platform';
+import { ALL_PLATFORM_IDS, PlatformId, supportsPlatformTray } from '../types/platform';
 import { persistPlatformLayout } from '../utils/uiPreferences';
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT } from './useSideNavLayoutStore';
 
@@ -378,7 +378,7 @@ function normalizeTray(
   rawOrder: PlatformId[] = [],
   allowLegacyMigration = false,
 ): PlatformId[] {
-  const normalized = sanitizePlatformIds(tray);
+  const normalized = sanitizePlatformIds(tray).filter(supportsPlatformTray);
   const rawOrderSet = new Set(sanitizePlatformIds(rawOrder));
   const hasLegacyDefault = LEGACY_TRAY_CORE_IDS.every((id) => normalized.includes(id))
     && normalized.length <= ALL_PLATFORM_IDS.length - 1;
@@ -440,6 +440,9 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   }
   if (fallbackPlatform === 'zed') {
     return 'Zed';
+  }
+  if (fallbackPlatform === 'omp') {
+    return 'OMP';
   }
   if (fallbackPlatform === 'claude_manager') {
     return 'Claude';

@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import apiKeyFunIcon from '../assets/icons/apikey-fun.png';
-import { isMenuVisiblePlatform, MENU_VISIBLE_PLATFORM_IDS, PlatformId } from '../types/platform';
+import { isMenuVisiblePlatform, MENU_VISIBLE_PLATFORM_IDS, PlatformId, supportsPlatformTray } from '../types/platform';
 import { useSponsorStore } from '../stores/useSponsorStore';
 import {
   API_RELAY_LAYOUT_ENTRY_ID,
@@ -850,7 +850,7 @@ export function PlatformLayoutModal({
   };
 
   const handleBulkTray = (enabled: boolean) => {
-    MENU_VISIBLE_PLATFORM_IDS.forEach((platformId) => setTrayPlatform(platformId, enabled));
+    MENU_VISIBLE_PLATFORM_IDS.filter(supportsPlatformTray).forEach((platformId) => setTrayPlatform(platformId, enabled));
   };
 
   const sidebarVisibleEntries = useMemo(
@@ -863,7 +863,7 @@ export function PlatformLayoutModal({
     && sidebarVisibleEntries.slice(0, sidebarBulkTargetCount).every(isSidebarEntrySelected);
   const dashboardBulkEnabled = entries.length > 0
     && entries.every(isDashboardEntryVisible);
-  const trayBulkEnabled = MENU_VISIBLE_PLATFORM_IDS.every((platformId) => traySet.has(platformId));
+  const trayBulkEnabled = MENU_VISIBLE_PLATFORM_IDS.filter(supportsPlatformTray).every((platformId) => traySet.has(platformId));
 
   const openCreateGroupEditor = () => {
     const firstPlatform = MENU_VISIBLE_PLATFORM_IDS[0] ?? 'codebuddy';
@@ -1239,16 +1239,18 @@ export function PlatformLayoutModal({
           >
             {entries.map((entry) => {
               const isApiRelayEntry = entry.type === 'api-relay';
+              const trayPlatforms = entry.platformIds.filter(supportsPlatformTray);
+              const trayDisabled = isApiRelayEntry || trayPlatforms.length === 0;
               const selected = isSidebarEntrySelected(entry);
               const sidebarFull = sidebarSelectedCount >= sidebarSelectionLimit;
               const sidebarDisabled = !selected && sidebarFull;
               const isGroup = entry.type === 'group' && !!entry.group;
               const groupId = entry.id;
               const groupExpanded = isGroup && expandedGroupIds.includes(groupId);
-              const groupTrayEnabled = isApiRelayEntry
+              const groupTrayEnabled = trayDisabled
                 ? false
                 : isGroup
-                  ? entry.platformIds.every((platformId) => traySet.has(platformId))
+                  ? trayPlatforms.every((platformId) => traySet.has(platformId))
                   : entry.defaultPlatformId
                     ? traySet.has(entry.defaultPlatformId)
                     : false;
@@ -1377,24 +1379,24 @@ export function PlatformLayoutModal({
                       </label>
 
                       <label
-                        className={`platform-layout-toggle ${isApiRelayEntry ? 'is-disabled' : ''}`}
+                        className={`platform-layout-toggle ${trayDisabled ? 'is-disabled' : ''}`}
                         title={
                           isApiRelayEntry
                             ? t('platformLayout.apiRelayTrayDisabled', '中转站暂不支持菜单栏显示')
-                            : undefined
+                            : trayDisabled ? t('omp.noTray', 'OMP 的账号由 OMP 自己管理，暂不提供菜单栏账号列表') : undefined
                         }
                       >
                         <input
                           type="checkbox"
                           checked={groupTrayEnabled}
-                          disabled={isApiRelayEntry}
-                          readOnly={isApiRelayEntry}
+                          disabled={trayDisabled}
+                          readOnly={trayDisabled}
                           onChange={() => {
-                            if (isApiRelayEntry) {
+                            if (trayDisabled) {
                               return;
                             }
                             const target = !groupTrayEnabled;
-                            entry.platformIds.forEach((platformId) => setTrayPlatform(platformId, target));
+                            trayPlatforms.forEach((platformId) => setTrayPlatform(platformId, target));
                           }}
                         />
                         <span>{t('platformLayout.trayToggle', '菜单栏显示')}</span>
@@ -1559,6 +1561,7 @@ export function PlatformLayoutModal({
                                 <input
                                   type="checkbox"
                                   checked={traySet.has(platformId)}
+                                  disabled={!supportsPlatformTray(platformId)}
                                   onChange={(event) => setTrayPlatform(platformId, event.target.checked)}
                                 />
                                 <span>{t('platformLayout.trayToggle', '菜单栏显示')}</span>

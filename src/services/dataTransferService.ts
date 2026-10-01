@@ -289,6 +289,7 @@ const ACCOUNT_LOADERS: Record<PlatformId, AccountLoader> = {
     (await accountService.listAccounts()) as unknown as TransferAccountRecord[],
   codex: async () => (await codexService.listCodexAccounts()) as unknown as TransferAccountRecord[],
   codex_api_service: async () => [],
+  omp: async () => [],
   claude_manager: listClaudeManagerTransferAccounts,
   zed: async () => (await zedService.listZedAccounts()) as unknown as TransferAccountRecord[],
   'github-copilot': async () =>
@@ -314,6 +315,7 @@ const LEGACY_IMPORTERS: Record<PlatformId, ((jsonContent: string) => Promise<unk
   antigravity_ide: accountService.importFromJson,
   codex: codexService.importCodexFromJson,
   codex_api_service: undefined,
+  omp: undefined,
   claude_manager: claudeService.importClaudeFromJson,
   zed: zedService.importZedFromJson,
   'github-copilot': githubCopilotService.importGitHubCopilotFromJson,

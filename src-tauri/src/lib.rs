@@ -876,6 +876,9 @@ pub fn run() {
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
+            commands::omp::omp_get_state,
+            commands::omp::omp_account_action,
+            commands::omp::omp_login,
             commands::codex_pelican::codex_pelican_start,
             commands::codex_pelican::codex_pelican_retry,
             commands::codex_pelican::codex_pelican_active,

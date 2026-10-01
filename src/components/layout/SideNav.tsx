@@ -64,6 +64,7 @@ const PAGE_PLATFORM_MAP: Partial<Record<Page, PlatformId>> = {
   claude: 'claude_manager',
   'claude-cli': 'claude_manager',
   zed: 'zed',
+  omp: 'omp',
   'github-copilot': 'github-copilot',
   windsurf: 'windsurf',
   kiro: 'kiro',

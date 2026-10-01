@@ -1,0 +1,78 @@
+.omp-page { padding: 28px; width: 100%; box-sizing: border-box; }
+.omp-header, .omp-header-actions, .omp-panel-heading, .omp-toolbar, .omp-tabs, .omp-account-meta, .omp-account-actions { display: flex; align-items: center; gap: 12px; }
+.omp-header { justify-content: space-between; margin-bottom: 20px; }
+.omp-page h1 { display: flex; align-items: center; gap: 10px; font-size: 24px; margin: 0 0 6px; }
+.omp-page h1 span { font-size: 16px; font-weight: 500; color: var(--text-secondary); }
+.omp-header p, .omp-muted, .omp-footnote, .omp-panel p { color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+.omp-header p { margin: 0; }
+.omp-info, .omp-error, .omp-notice { padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 13px; line-height: 1.7; background: var(--bg-secondary); border: 1px solid var(--border); }
+.omp-error { color: var(--danger, #d45353); }
+.omp-notice { color: var(--success, #258657); }
+.omp-panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.omp-panel-heading { justify-content: space-between; }
+.omp-panel h2 { font-size: 16px; margin: 0; }
+.omp-panel label { display: block; font-size: 13px; margin-bottom: 7px; }
+.omp-path-row { display: flex; gap: 8px; }
+.omp-page input { min-width: 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 13px; }
+.omp-page input:focus-visible, .omp-page button:focus-visible, .omp-provider-menu button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.omp-path-row input { flex: 1; }
+.omp-page .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 7px 12px; border-radius: 8px; font-size: 13px; white-space: nowrap; transition: background 150ms ease, border-color 150ms ease, transform 120ms ease-out; }
+.omp-page button:active:not(:disabled), .omp-provider-menu button:active:not(:disabled) { transform: scale(0.97); }
+.omp-toolbar { flex-wrap: wrap; margin: 22px 0 16px; }
+.omp-search { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 220px; height: 36px; box-sizing: border-box; padding-left: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); color: var(--text-secondary); }
+.omp-search input { flex: 1; height: 100%; box-sizing: border-box; border: 0; background: transparent; }
+.omp-provider-filter { width: 232px; max-width: 100%; }
+.omp-page .omp-provider-filter .single-select-dropdown-trigger { min-height: 36px; height: 36px; border-radius: 8px; padding: 0 10px 0 12px; background: var(--bg-primary); border-color: var(--border); box-shadow: none; }
+.omp-page .omp-provider-filter .single-select-dropdown-trigger.open { border-color: var(--primary); }
+.omp-provider-filter .single-select-dropdown-value { font-size: 13px; font-weight: 500; letter-spacing: normal; }
+.omp-page .omp-provider-filter .single-select-dropdown-arrow { width: 18px; height: 18px; background: transparent; color: var(--text-secondary); transition: none; }
+.single-select-dropdown-menu.omp-provider-menu { box-sizing: border-box; padding: 5px; border-radius: 10px; }
+.omp-provider-menu .single-select-dropdown-item { min-height: 34px; border-radius: 6px; padding: 0 9px; }
+.omp-provider-menu .single-select-dropdown-item-label { font-weight: 500; }
+.omp-tabs { border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.omp-tabs button { display: flex; align-items: center; gap: 7px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--text-secondary); padding: 12px 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.omp-tabs button.selected { border-bottom-color: var(--primary); color: var(--primary); }
+.omp-tabs span { background: var(--bg-secondary); border-radius: 10px; padding: 1px 7px; }
+.omp-account-groups { display: flex; flex-direction: column; gap: 24px; }
+.omp-group-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.omp-group-heading h2 { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.omp-group-heading > span { padding: 1px 6px; border-radius: 5px; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-secondary); background: var(--bg-secondary); }
+.omp-account-grid { display: flex; flex-direction: column; }
+.omp-account-card { min-width: 0; padding: 12px 16px; display: flex; align-items: center; gap: 16px; background: var(--bg-secondary); }
+.list .omp-account-grid { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.list .omp-account-card + .omp-account-card { border-top: 1px solid var(--border); }
+.omp-account-main { min-width: 0; flex: 1; }
+.omp-account-main h3 { font-size: 14px; font-weight: 600; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.omp-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 5px; padding: 4px 7px; background: var(--bg-primary); color: var(--text-secondary); font-size: 11px; line-height: 1.5; white-space: nowrap; }
+.omp-badge.current { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.omp-badge.invalid { color: var(--danger, #d45353); }
+.omp-account-meta { gap: 8px; margin-top: 3px; flex-wrap: wrap; color: var(--text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.omp-account-meta > span + span::before { content: '·'; margin-right: 8px; opacity: 0.6; }
+.omp-account-actions { justify-content: flex-end; flex-shrink: 0; gap: 8px; }
+.omp-page .omp-account-actions .btn { min-height: 32px; height: 32px; padding: 5px 10px; box-shadow: none; font-size: 12px; }
+.omp-page .omp-trash-button { width: 32px; background: transparent; border-color: transparent; color: var(--text-secondary); }
+.omp-page .omp-trash-button:hover:not(:disabled) { color: var(--danger, #d45353); background: color-mix(in srgb, var(--danger, #d45353) 8%, transparent); }
+.omp-page .omp-switch-button:disabled { opacity: 0.45; }
+.omp-account-main .omp-muted { margin: 4px 0 0; font-size: 12px; }
+.cards .omp-account-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.cards .omp-account-card { align-items: stretch; flex-direction: column; padding: 14px 16px; gap: 14px; border: 1px solid var(--border); border-radius: 10px; }
+.cards .omp-account-actions .omp-badge { margin-right: auto; }
+.omp-empty { padding: 70px 16px; text-align: center; color: var(--text-secondary); font-size: 14px; }
+.omp-footnote { margin-top: 24px; }
+.omp-footnote p { margin: 0 0 5px; }
+.omp-footnote code { font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .omp-page { padding: 18px; }
+  .omp-header { align-items: flex-start; flex-direction: column; }
+  .omp-toolbar { gap: 8px; }
+  .omp-search { flex-basis: 100%; }
+  .omp-provider-filter { flex: 1; min-width: 160px; }
+  .omp-path-row { flex-wrap: wrap; }
+  .omp-path-row input { flex-basis: 75%; }
+  .list .omp-account-card { align-items: stretch; flex-direction: column; gap: 10px; }
+  .list .omp-account-actions .omp-badge { margin-right: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .omp-page .btn, .omp-provider-filter .single-select-dropdown-trigger, .omp-provider-menu button { transition: none; }
+  .omp-page button:active:not(:disabled), .omp-provider-menu button:active:not(:disabled) { transform: none; }
+}

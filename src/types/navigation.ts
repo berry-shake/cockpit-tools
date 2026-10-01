@@ -8,6 +8,7 @@ export type Page =
   | 'claude-cli'
   | 'codex-api-service'
   | 'zed'
+  | 'omp'
   | 'github-copilot'
   | 'windsurf'
   | 'kiro'
@@ -41,6 +42,7 @@ export const MAIN_WINDOW_NAVIGABLE_PAGES: readonly Page[] = [
   'claude-cli',
   'codex-api-service',
   'zed',
+  'omp',
   'github-copilot',
   'windsurf',
   'kiro',

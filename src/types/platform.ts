@@ -7,6 +7,7 @@ export type PlatformId =
   | 'codex_api_service'
   | 'claude_manager'
   | 'zed'
+  | 'omp'
   | 'github-copilot'
   | 'windsurf'
   | 'kiro'
@@ -29,6 +30,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
   'antigravity',
   'antigravity_ide',
   'zed',
+  'omp',
   'github-copilot',
   'windsurf',
   'kiro',
@@ -46,7 +48,7 @@ export const ALL_PLATFORM_IDS: PlatformId[] = [
 ];
 
 /** Platforms that do not own account lists (service / feature pages). */
-export const ACCOUNTLESS_PLATFORM_IDS: readonly PlatformId[] = ['codex_api_service'];
+export const ACCOUNTLESS_PLATFORM_IDS: readonly PlatformId[] = ['codex_api_service', 'omp'];
 
 export function isAccountPlatform(platformId: PlatformId): boolean {
   return !ACCOUNTLESS_PLATFORM_IDS.includes(platformId);
@@ -62,6 +64,11 @@ export function isMenuVisiblePlatform(platformId: PlatformId): boolean {
   return !MENU_HIDDEN_PLATFORM_IDS.includes(platformId);
 }
 
+/** Native OMP accounts do not yet participate in the generic tray switcher. */
+export function supportsPlatformTray(platformId: PlatformId): boolean {
+  return platformId !== 'omp';
+}
+
 export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   antigravity: 'overview',
   antigravity_ide: 'overview',
@@ -69,6 +76,7 @@ export const PLATFORM_PAGE_MAP: Record<PlatformId, Page> = {
   codex_api_service: 'codex-api-service',
   claude_manager: 'claude',
   zed: 'zed',
+  omp: 'omp',
   'github-copilot': 'github-copilot',
   windsurf: 'windsurf',
   kiro: 'kiro',

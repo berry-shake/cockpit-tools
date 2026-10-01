@@ -2663,6 +2663,7 @@ export function DashboardPage({
     antigravity_ide: stats.antigravity,
     codex: stats.codex,
     codex_api_service: 0,
+    omp: 0,
     claude_manager: stats.claude,
     zed: stats.zed,
     'github-copilot': stats.githubCopilot,
@@ -3662,7 +3663,7 @@ export function DashboardPage({
               </div>
               <div className="stat-info">
                 <span className="stat-label">{label}</span>
-                <span className="stat-value">{entryCounts.get(entryId) ?? 0}</span>
+                <span className="stat-value">{platformId === 'omp' && !group ? t('omp.account.management', '账号管理') : entryCounts.get(entryId) ?? 0}</span>
               </div>
             </button>
           );
