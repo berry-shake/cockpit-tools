@@ -289,11 +289,13 @@ These are the most common security questions answered directly:
 
 - **This is a local desktop tool**: it does not require a separate cloud account for this project, and it does not rely on a project-hosted cloud account storage.
 - **Data is mainly stored on your machine**:
-  - `~/.antigravity_cockpit`: Antigravity IDE accounts, configs, WebSocket status, etc.
+  - `~/.cockpit_tools`: accounts across platforms, shared settings, logs, backups, and instance settings; development uses `~/.cockpit_tools_dev`, and `COCKPIT_TOOLS_DATA_DIR` can select a custom directory
+  - Existing installations automatically gain the new directory entry in the background through a Unix symbolic link or Windows directory junction to `~/.antigravity_cockpit` / `~/.antigravity_cockpit_dev`. No manual migration is required. The physical legacy directory and existing instance paths remain intact, and both entries access the same data. The current session keeps its original path; subsequent launches use the new entry. If link creation fails, the legacy directory remains in use. If both names identify separate directories, the legacy directory remains in use without automatic merging or overwriting
+  - Managed instances default to `instances/<platform>` in the shared directory. On Windows, some platforms use `%APPDATA%\.cockpit_tools\instances\<platform>`, with the same automatic compatibility for legacy directories. Custom directories stay unchanged
   - `~/.codex`: official Codex current login `auth.json`
   - `~/.grok`: the official Grok CLI default instance and current sign-in `auth.json`
   - `~/.zcode/v2`: ZCode encrypted credentials for the current official sign-in and quota cache
-  - local app data folder under `com.antigravity.cockpit-tools`: Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Grok CLI / CodeBuddy / CodeBuddy CN / Qoder / Trae suite / Zed / ZCode multi-account data, etc.; Grok CLI account details, managed profiles, and instance configuration are also stored here
+  - system application data under `com.jlcodes.cockpit-tools`: host WebView state and related data; historical `com.antigravity.cockpit-tools` directories are used only for legacy data imports
 - **Grok CLI credentials are not encrypted**: access and refresh tokens are stored locally as plaintext JSON and rely primarily on operating-system account isolation and local file permissions. On Unix systems, credential directories are set to `0700` and credential files to `0600`. Redacted exports contain no tokens and cannot serve as sign-in backups.
 - **WebSocket is local-only by default**: binds to `127.0.0.1`, default port `19528`; you can disable it or change the port in Settings.
 - **When network access happens**: OAuth login, token refresh, quota fetching, update checks, and other official API requests.
@@ -361,7 +363,9 @@ Notes:
 Go to [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) to download the package for your system:
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
-*   **Windows**: `.msi` (Recommended) or `.exe`
+*   **Windows**: `.msi` (Recommended), `.exe`, or `x64-portable.zip` (extract and run)
+
+Extract the Windows portable archive and run the included `Cockpit Tools.exe` (or the bundled main executable). Windows 10/11 with the Microsoft Edge WebView2 Runtime is required. Accounts and settings remain in the current Windows user's data directory and are not moved with the ZIP folder.
 *   **Linux**: `.deb` (Debian/Ubuntu), `.rpm`, or `.AppImage` (Universal)
 
 ### Option B: Install with Homebrew (macOS)

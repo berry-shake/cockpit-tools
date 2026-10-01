@@ -692,8 +692,13 @@ func (s *relayServer) writeProviderGatewayResponsesStream(c *gin.Context, body i
 			if _, writeErr := c.Writer.Write(line); writeErr != nil {
 				return
 			}
+			// Deliver each complete SSE event while the upstream stream is still open.
+			if len(bytes.TrimRight(line, "\r\n")) == 0 {
+				c.Writer.Flush()
+			}
 		}
 		if err != nil {
+			c.Writer.Flush()
 			return
 		}
 	}

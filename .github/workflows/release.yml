@@ -203,6 +203,15 @@ jobs:
           set -euo pipefail
           npx tauri build --ci
 
+      - name: 📦 Build Windows portable archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/release/build_windows_portable.cjs \
+            --version "${VERSION}" \
+            --release-dir "target/release" \
+            --output-dir "portable-assets"
+
       - name: 📥 Download release metadata
         uses: actions/download-artifact@v4
         with:
@@ -217,6 +226,7 @@ jobs:
             --platform windows \
             --assets-dir "target/release/bundle" \
             --output-dir "release-assets"
+          cp portable-assets/* release-assets/
 
       - name: 📤 Upload Windows release assets
         env:

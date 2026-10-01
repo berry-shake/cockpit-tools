@@ -22,7 +22,9 @@
       "storage": "Cannot read or save test history.",
       "unsafePath": "Unsafe result path.",
       "historyMissing": "Test record not found.",
-      "invalidId": "Invalid record identifier."
+      "invalidId": "Invalid record identifier.",
+      "providerUnavailable": "The provider or saved API key is unavailable.",
+      "providerChanged": "The provider endpoint or protocol has changed. Start a new test."
     },
     "title": "Pelican test",
     "description": "Generate HTML in parallel with the same prompt. Compare results yourself; no automatic scoring.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Clear all Pelican tests?",
     "clearAllHelp": "All test history and generated files will be permanently deleted. This cannot be undone.",
     "search": "Search accounts",
-    "viewError": "View error"
+    "viewError": "View error",
+    "providers": "Providers",
+    "providerDescription": "Compare providers by generating a pelican animation.",
+    "providerHelp": "Choose a provider, saved key and model. Requests use an isolated temporary gateway; retries reload the saved credentials.",
+    "providerRequired": "Select a valid provider, API key and model.",
+    "providerModelMismatch": "Model mismatch: requested {{requested}}, received {{responded}}.",
+    "providerSearch": "Search providers or key names",
+    "providerEmpty": "No matching providers",
+    "providerClear": "Clear selection"
   },
   "common": {
     "dragSortHint": "Drag the left handle to reorder. Changes save automatically on release.",
@@ -3553,7 +3563,7 @@
         "modelAuto": "Auto (catalog / discover)",
         "modelCustom": "Custom model…",
         "modelLabel": "Test model",
-        "modelCustomPlaceholder": "Model ID, e.g. gpt-4.1-mini",
+        "modelCustomPlaceholder": "Model ID, e.g. gpt-6.1-sol",
         "modelHint": "Optional shared model. Leave empty to auto-pick from each provider’s catalog."
       },
       "enableAndStart": "Start",
@@ -4050,7 +4060,8 @@
         "medium": "Medium",
         "high": "High",
         "xhigh": "XHigh",
-        "max": "Max"
+        "max": "Max",
+        "ultra": "Ultra"
       }
     },
     "sessionManager": {
@@ -5540,6 +5551,11 @@
       "description": "Credentials were saved, but the Codex CLI daemon for this profile is still running and may retain the previous account.",
       "restartHint": "Finish active CLI tasks, then run this command in your terminal. Restarting interrupts sessions connected to this daemon.",
       "copyFailed": "Copy failed. Select the command above and copy it manually."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "The account binding changed. Its current setting was preserved."
+      }
     }
   },
   "codebuddy": {

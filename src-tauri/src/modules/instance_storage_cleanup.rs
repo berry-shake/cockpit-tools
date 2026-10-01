@@ -188,6 +188,9 @@ fn roots_and_defaults() -> Result<(Vec<PlatformRoot>, Vec<PathBuf>), String> {
         platform: "codex-app-data".into(),
         root: modules::account::get_data_dir()?.join("instances/codex-app-data"),
     });
+    for root in &mut roots {
+        root.root = modules::data_paths::without_compatibility_alias(&root.root);
+    }
     // Several legacy platform getters still resolve production paths even in a dev
     // process. Never use a dev registry to authorize deletion in production data.
     let data = modules::account::get_data_dir()?;
@@ -268,6 +271,8 @@ fn is_registered_instance_directory_owned(
     roots: &[PlatformRoot],
     defaults: &[PathBuf],
 ) -> Result<bool, String> {
+    let unaliased = modules::data_paths::without_compatibility_alias(path);
+    let path = unaliased.as_path();
     if !path.is_absolute()
         || path
             .components()
@@ -891,6 +896,33 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    struct PublicHomeGuard(Vec<(&'static str, Option<std::ffi::OsString>)>);
+    #[cfg(unix)]
+    impl PublicHomeGuard {
+        fn new(home: &Path) -> Self {
+            let keys = ["HOME", "COCKPIT_TOOLS_DATA_DIR"];
+            let previous = keys
+                .into_iter()
+                .map(|key| (key, std::env::var_os(key)))
+                .collect();
+            std::env::set_var("HOME", home);
+            std::env::remove_var("COCKPIT_TOOLS_DATA_DIR");
+            Self(previous)
+        }
+    }
+    #[cfg(unix)]
+    impl Drop for PublicHomeGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.0 {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
     #[test]
     fn registered_instance_deletion_only_owns_direct_managed_children() {
         let fixture = Fixture::new();
@@ -998,6 +1030,169 @@ mod tests {
         let file = roots[0].root.join("not-a-directory");
         fs::write(&file, "keep").unwrap();
         assert!(!is_registered_instance_directory_owned(&file, &roots, &[]).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_data_alias_preserves_managed_scanning_and_registered_deletion() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        let legacy_root = legacy.join("instances/codex");
+        fs::create_dir_all(legacy_root.join("profile")).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        let root = PlatformRoot {
+            platform: "codex".into(),
+            root: modules::data_paths::without_compatibility_alias(&alias.join("instances/codex")),
+        };
+        let roots = [root];
+        assert!(is_registered_instance_directory_owned(
+            &alias.join("instances/codex/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+        assert!(
+            is_registered_instance_directory_owned(&legacy_root.join("profile"), &roots, &[])
+                .unwrap()
+        );
+        let protection = Protection {
+            paths: vec![],
+            process_text: vec![],
+            runtime_paths: vec![],
+        };
+        let candidates = candidate_paths(&roots, &protection).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].1, legacy_root.join("profile"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_data_alias_still_rejects_linked_profiles_and_intermediate_directories() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        let outside = fixture.0.join("outside");
+        fs::create_dir_all(legacy.join("instances/codex")).unwrap();
+        fs::create_dir_all(outside.join("profile")).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        std::os::unix::fs::symlink(&outside, legacy.join("instances/codex/linked")).unwrap();
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root: legacy.join("instances/codex"),
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/codex/linked"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+        std::os::unix::fs::symlink(&outside, legacy.join("instances/linked-parent")).unwrap();
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root: legacy.join("instances/linked-parent"),
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/linked-parent/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn public_alias_name_does_not_authorize_arbitrary_link_targets() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        let outside = fixture.0.join("outside");
+        fs::create_dir(&legacy).unwrap();
+        fs::create_dir_all(outside.join("instances/codex/profile")).unwrap();
+        std::os::unix::fs::symlink(&outside, &alias).unwrap();
+        let alias_root = alias.join("instances/codex");
+        assert_eq!(
+            modules::data_paths::without_compatibility_alias(&alias_root),
+            alias_root
+        );
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root: alias_root,
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/codex/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
+        let protection = Protection {
+            paths: vec![],
+            process_text: vec![],
+            runtime_paths: vec![],
+        };
+        assert!(candidate_paths(&roots, &protection).unwrap().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn instance_with_public_alias_name_remains_a_link_and_is_never_owned() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let root = fixture.root();
+        let fake_legacy = root.root.join(".antigravity_cockpit");
+        let fake_alias = root.root.join(".cockpit_tools");
+        fs::create_dir_all(&fake_legacy).unwrap();
+        std::os::unix::fs::symlink(&fake_legacy, &fake_alias).unwrap();
+        assert_eq!(
+            modules::data_paths::without_compatibility_alias(&fake_alias),
+            fake_alias
+        );
+        assert!(!is_registered_instance_directory_owned(&fake_alias, &[root], &[]).unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn custom_data_root_alias_keeps_its_existing_cleanup_link_policy() {
+        let _lock = modules::test_support::env_lock()
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let fixture = Fixture::new();
+        let _home = PublicHomeGuard::new(&fixture.0);
+        let legacy = fixture.0.join(".antigravity_cockpit");
+        let alias = fixture.0.join(".cockpit_tools");
+        fs::create_dir_all(legacy.join("instances/codex/profile")).unwrap();
+        std::os::unix::fs::symlink(&legacy, &alias).unwrap();
+        std::env::set_var("COCKPIT_TOOLS_DATA_DIR", &alias);
+        let root = alias.join("instances/codex");
+        assert_eq!(
+            modules::data_paths::without_compatibility_alias(&root),
+            root
+        );
+        let roots = [PlatformRoot {
+            platform: "codex".into(),
+            root,
+        }];
+        assert!(!is_registered_instance_directory_owned(
+            &alias.join("instances/codex/profile"),
+            &roots,
+            &[]
+        )
+        .unwrap());
     }
 
     #[cfg(unix)]

@@ -72,6 +72,53 @@ impl Drop for Fixture {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn shared_data_alias_preserves_recovery_archive_locking_and_native_credentials() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    let mut f = Fixture::new();
+    let legacy = f.root.join(".antigravity_cockpit");
+    let alias = f.root.join(".cockpit_tools");
+    fs::create_dir(&legacy).unwrap();
+    f.archive = legacy.join("omp_accounts_recovery.json");
+    let original: Vec<_> = (1..=7).map(|id| f.data(id)).collect();
+    f.act(2, "switch").unwrap();
+    symlink(&legacy, &alias).unwrap();
+    let aliased_archive = alias.join("omp_accounts_recovery.json");
+    let selected = records(&f.db).unwrap()[&1].clone();
+    let before = fs::read(&f.archive).unwrap();
+    {
+        // Old and new processes must contend on the same recovery-file lock.
+        let _old_process_lock = archive_write_lock(&f.archive).unwrap();
+        assert!(
+            mutate_at(&f.root, &aliased_archive, 1, &identity(&selected), "switch")
+                .unwrap_err()
+                .contains("其他 Cockpit")
+        );
+        assert_eq!(fs::read(&f.archive).unwrap(), before);
+        assert_eq!(f.cause(1).as_deref(), Some(STANDBY));
+    }
+    mutate_at(&f.root, &aliased_archive, 1, &identity(&selected), "switch").unwrap();
+    assert_eq!(f.cause(1), None);
+    assert_eq!(f.cause(2).as_deref(), Some(STANDBY));
+    assert_eq!(f.cause(3), None);
+    assert_eq!(original, (1..=7).map(|id| f.data(id)).collect::<Vec<_>>());
+    assert_eq!(
+        fs::canonicalize(&f.archive).unwrap(),
+        fs::canonicalize(&aliased_archive).unwrap()
+    );
+    assert!(read_archive(&f.archive).unwrap().accounts[&1]
+        .disabled_cause
+        .is_none());
+    assert_eq!(
+        fs::metadata(&f.archive).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    assert!(f.root.join("agent/agent.db").is_file());
+    assert!(!alias.join("agent").exists());
+}
+
 #[test]
 fn switching_selects_exactly_one_provider_account_and_preserves_all_credential_bytes() {
     let f = Fixture::new();

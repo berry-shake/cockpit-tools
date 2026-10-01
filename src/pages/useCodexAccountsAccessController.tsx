@@ -1,3 +1,4 @@
+import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useState, useEffect, useMemo, useCallback, type ReactElement } from "react";
 import { RefreshCw, CircleAlert, Eye, EyeOff, Link2 } from "lucide-react";
 import * as codexService from "../services/codexService";
@@ -11,7 +12,7 @@ import { buildCodexAccountPresentation } from "../presentation/platformAccountPr
 import { recoverCodexBatchImportStartFromPreview } from "../utils/codexBatchImportQueue";
 import { CodexSwitchAccountError } from "../utils/codexSwitchAuthFailure";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { UnlistenFn } from "@tauri-apps/api/event";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
  import {
@@ -1976,7 +1977,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             reason: "import",
           });
         }
-  
+
         if (options.addToApiService) {
           const importedIds = result.imported
             .map((account) => account.id)
@@ -2020,7 +2021,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             ).replace("{{error}}", String(error).replace(/^Error:\s*/, ""));
           }
         }
-  
+
         if (apiServiceError) {
           setBatchImportError(apiServiceError);
         }

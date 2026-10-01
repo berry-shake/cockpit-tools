@@ -619,6 +619,44 @@ fn close_windows_codex_default_pids(pids: &[u32], timeout_secs: u64) -> Result<(
 }
 
 #[cfg(target_os = "windows")]
+fn codex_windows_last_pid_is_stale(pid: u32) -> bool {
+    // last_pid 是历史提示，不是进程身份；Windows 可以把退出后的 PID 分配给其他程序。
+    // 在探测未命中后重新读取该 PID，同时覆盖探测期间退出的竞态。
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    let process = system.process(Pid::from_u32(pid));
+    let name = process.map(|process| process.name().to_string_lossy());
+    let exe = process
+        .and_then(|process| process.exe())
+        .map(|path| path.to_string_lossy());
+    let stale =
+        codex_windows_process_snapshot_is_stale(name.as_deref().map(|name| (name, exe.as_deref())));
+    crate::modules::logger::log_info(&format!(
+        "[Codex Close] rechecked last_pid={}, process_name={:?}, exe={:?}, stale={}",
+        pid, name, exe, stale
+    ));
+    stale
+}
+
+/// 仅放行明确已退出或不属于 ChatGPT 的旧 PID；路径/命令行不可读不等于进程已退出。
+#[cfg(any(test, target_os = "windows"))]
+fn codex_windows_process_snapshot_is_stale(process: Option<(&str, Option<&str>)>) -> bool {
+    let Some((name, exe)) = process else {
+        return true;
+    };
+    let identity = exe
+        .filter(|path| !path.trim().is_empty())
+        .and_then(|path| path.rsplit(['\\', '/']).next())
+        .unwrap_or(name)
+        .trim();
+    !identity.is_empty() && !identity.eq_ignore_ascii_case("chatgpt.exe")
+}
+
+#[cfg(target_os = "windows")]
 fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
     let launch_path = resolve_codex_launch_path()?;
     let launch_path_text = launch_path.to_string_lossy().to_string();
@@ -666,6 +704,12 @@ fn close_codex_default_windows(timeout_secs: u64) -> Result<(), String> {
                     crate::modules::logger::log_info(&format!(
                         "[Codex Close] last_pid={} belongs to a managed instance (dir={:?}), skip default close",
                         pid, dir
+                    ));
+                }
+                None if codex_windows_last_pid_is_stale(pid) => {
+                    crate::modules::logger::log_info(&format!(
+                        "[Codex Close] ignoring stale last_pid={}, no default ChatGPT process found",
+                        pid
                     ));
                 }
                 None => {

@@ -55,8 +55,6 @@ const defaultStreamKeepAliveSeconds = 15
 const quotaReserveMaxSnapshotAge = 3 * time.Minute
 const codexAutoReviewModel = "codex-auto-review"
 const codexReserveModel = "gpt-reserve"
-const codexSparkModel = "gpt-5.3-codex-spark"
-const codexSparkCatalogTemplateModel = "gpt-5.3-codex"
 const defaultImagesMainModel = "gpt-5.5"
 const defaultImagesToolModel = "gpt-image-2.5"
 
@@ -1720,7 +1718,7 @@ func buildOllamaShowResponse(model string, modifiedAt time.Time) gin.H {
 
 func ollamaModelFamily(model string) string {
 	normalized := strings.ToLower(strings.TrimSpace(model))
-	for _, prefix := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-oss", "codex"} {
+	for _, prefix := range []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6", "gpt-5.5", "gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1", "gpt-oss", "codex"} {
 		if strings.HasPrefix(normalized, prefix) {
 			return prefix
 		}
@@ -1738,6 +1736,8 @@ func ollamaModelFamily(model string) string {
 
 func ollamaContextLength(model string) int {
 	switch {
+	case strings.HasPrefix(model, "gpt-6.1-sol"):
+		return 272000
 	case strings.HasPrefix(model, "gpt-6-astra"), strings.HasPrefix(model, "gpt-6-sol"), strings.HasPrefix(model, "gpt-6-luna"):
 		return 256000
 	// 以下家族值统一收敛到 Codex 客户端目录（codex_client_models.json）真值，
@@ -1782,7 +1782,7 @@ func ensureCodexClientCompactionLimit(model map[string]any) {
 
 func ollamaReasoningEfforts(model string) []string {
 	switch {
-	case strings.HasPrefix(model, "gpt-6-astra"), strings.HasPrefix(model, "gpt-6-sol"):
+	case strings.HasPrefix(model, "gpt-6.1-sol"), strings.HasPrefix(model, "gpt-6-astra"), strings.HasPrefix(model, "gpt-6-sol"):
 		return []string{"low", "medium", "high", "xhigh", "max", "ultra"}
 	// Luna 家族没有 ultra 档位，不要跟着上面一起放宽。
 	case strings.HasPrefix(model, "gpt-6-luna"):
@@ -1797,7 +1797,7 @@ func ollamaReasoningEfforts(model string) []string {
 }
 
 func ollamaDefaultReasoningEffort(model string) string {
-	if strings.HasPrefix(model, "gpt-5.6-sol") {
+	if strings.HasPrefix(model, "gpt-6.1-sol") || strings.HasPrefix(model, "gpt-5.6-sol") {
 		return "low"
 	}
 	return "medium"
@@ -1937,7 +1937,6 @@ func buildCodexClientModelsResponse(models []string, spec *apiKeySpec, windows m
 		return []string{"codex"}
 	}, false))
 	if data, ok := response["models"].([]map[string]any); ok {
-		hydrateCodexCompatibilityModels(data)
 		// Only declared routes to a known GPT template inherit capabilities.
 		var catalog struct {
 			Models []map[string]any `json:"models"`
@@ -2138,6 +2137,8 @@ func applyAutomaticRouteModelMetadata(spec *apiKeySpec, model map[string]any, sl
 // officialAutomaticModelDisplayName 返回 Cockpit 对官方命名空间模型的展示名。
 func officialAutomaticModelDisplayName(slug string) string {
 	switch strings.ToLower(strings.TrimSpace(slug)) {
+	case "gpt-6.1-sol":
+		return "GPT-6.1 Sol"
 	case "gpt-6-astra":
 		return "GPT-6 Astra"
 	case "gpt-6-sol":
@@ -2188,33 +2189,6 @@ func intModelValueAny(value any) int {
 	}
 }
 
-func hydrateCodexCompatibilityModels(models []map[string]any) {
-	var template map[string]any
-	for _, model := range models {
-		if model["slug"] == codexSparkCatalogTemplateModel {
-			template = model
-			break
-		}
-	}
-	if template == nil {
-		return
-	}
-
-	for index, model := range models {
-		if model["slug"] != codexSparkModel {
-			continue
-		}
-		compatibilityModel := make(map[string]any, len(template))
-		for key, value := range template {
-			compatibilityModel[key] = value
-		}
-		compatibilityModel["slug"] = codexSparkModel
-		compatibilityModel["display_name"] = "GPT-5.3 Codex Spark"
-		compatibilityModel["description"] = "GPT-5.3 Codex Spark"
-		models[index] = compatibilityModel
-	}
-}
-
 func displayNameForModel(model string) string {
 	switch model {
 	case "gpt-5-codex":
@@ -2227,6 +2201,8 @@ func displayNameForModel(model string) string {
 		return "GPT-5.6 Terra"
 	case "gpt-5.6-luna":
 		return "GPT-5.6 Luna"
+	case "gpt-6.1-sol":
+		return "GPT-6.1 Sol"
 	case "gpt-6-astra":
 		return "GPT-6 Astra"
 	case "gpt-6-sol":
@@ -2243,7 +2219,7 @@ func displayNameForModel(model string) string {
 		return "GPT-5.4 Mini"
 	case "gpt-5.3-codex":
 		return "GPT-5.3 Codex"
-	case codexSparkModel:
+	case "gpt-5.3-codex-spark":
 		return "GPT-5.3 Codex Spark"
 	case "gpt-5.2":
 		return "GPT-5.2"
@@ -2575,6 +2551,7 @@ func canonicalModelForClientModel(m *manifest, spec *apiKeySpec, model string) s
 // 工具调用写成文本标记返回（例如 DeepSeek 的 `<||DSML||...>`），客户端无法解析成工具调用，
 // 原始标记会直接落进正文，表现为「模型不能用工具」。
 var codexShellModelIDs = []string{
+	"gpt-6.1-sol",
 	"gpt-6-astra",
 	"gpt-6-sol",
 	"gpt-6-luna",
@@ -2582,11 +2559,6 @@ var codexShellModelIDs = []string{
 	"gpt-5.6-terra",
 	"gpt-5.6-luna",
 	"gpt-5.5",
-	"gpt-5.4",
-	"gpt-5.4-mini",
-	"gpt-5.3-codex",
-	"gpt-5.3-codex-spark",
-	"gpt-5.2",
 }
 
 func isCodexShellModelID(model string) bool {

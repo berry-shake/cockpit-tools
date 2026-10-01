@@ -1116,6 +1116,7 @@ pub fn run() {
             commands::codex::list_codex_accounts,
             commands::codex::get_current_codex_account,
             commands::codex::get_codex_config_toml_path,
+            commands::codex::get_codex_storage_paths,
             commands::codex::open_codex_config_toml,
             commands::codex::get_codex_quick_config,
             commands::codex::save_codex_context_management,

@@ -1002,13 +1002,10 @@ export function useCodexAccountsLocalAccessController(context: Pick<ReturnType<t
       void refreshInstanceGateways();
     }, [refreshInstanceGateways]);
 
-    const instanceGatewaySummary = useMemo(() => {
-      const total = instanceGateways.length;
-      const running = instanceGateways.filter(
-        (gateway) => gateway.status === "running",
-      ).length;
-      return { total, running, issues: Math.max(0, total - running) };
-    }, [instanceGateways]);
+    const instanceGatewaySummary = useMemo(
+      () => ({ total: instanceGateways.length, running: instanceGateways.filter(gateway => gateway.status === 'running').length, issues: instanceGateways.filter(gateway => gateway.status !== 'running').length }),
+      [instanceGateways],
+    );
   
     const openCodexApiServicePage = useCallback(() => {
       setShowLocalAccessModal(false);

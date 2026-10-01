@@ -290,11 +290,13 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 
 - **这是本地桌面工具**：不需要单独注册平台账号，也不依赖项目自建云端来存你的账号列表。
 - **数据主要保存在本机**：
-  - `~/.antigravity_cockpit`：Antigravity IDE 账号、配置、WebSocket 状态等
+  - `~/.cockpit_tools`：各平台账号、公共配置、日志、备份与实例配置；开发环境使用 `~/.cockpit_tools_dev`，`COCKPIT_TOOLS_DATA_DIR` 可指定自定义目录
+  - 已有安装会在后台自动为 `~/.antigravity_cockpit` / `~/.antigravity_cockpit_dev` 建立新名称的兼容入口（Unix 符号链接 / Windows 目录联接），无需手动迁移。旧物理目录和已有实例路径保留，两入口读写同一数据；当前会话保持原路径，后续启动使用新入口。无法建立链接时继续使用旧目录；新旧均为独立目录时保留旧目录，不自动合并或覆盖
+  - 受管实例默认位于公共目录的 `instances/<平台>`；Windows 部分平台的实例位于 `%APPDATA%\.cockpit_tools\instances\<平台>`，其旧目录同样自动兼容；自定义目录保持原样
   - `~/.codex`：Codex 官方当前登录 `auth.json`
   - `~/.grok`：Grok CLI 官方默认实例与当前登录 `auth.json`
   - `~/.zcode/v2`：ZCode 官方当前登录加密凭据与配额缓存
-  - 系统本地应用数据目录下 `com.antigravity.cockpit-tools`：Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Grok CLI / CodeBuddy / CodeBuddy CN / Qoder / Trae 套件 / Zed / ZCode 多账号数据等；Grok CLI 的账号详情、受管 profile 与实例配置也保存在此
+  - 系统应用数据目录下 `com.jlcodes.cockpit-tools`：宿主应用的 WebView 状态等；历史 `com.antigravity.cockpit-tools` 目录仅用于旧数据兼容导入
 - **Grok CLI 凭据不加密**：access token/refresh token 以明文 JSON 保存在本机，主要依赖操作系统账号隔离与本地文件权限保护；Unix 系统上凭据目录设为 `0700`、凭据文件设为 `0600`。脱敏导出不包含 token，不能作为登录备份
 - **WebSocket 默认仅本机访问**：监听 `127.0.0.1`，默认端口 `19528`，可在设置中关闭或改端口。
 - **什么时候会联网**：OAuth 登录、Token 刷新、配额查询、版本更新检查等官方接口请求。
@@ -358,7 +360,9 @@ Grok CLI 默认实例通常直接沿用官方 `~/.grok` 目录，启动时不设
 前往 [GitHub Releases](https://github.com/jlcodes99/cockpit-tools/releases) 下载对应系统的安装包：
 
 *   **macOS**: `.dmg` (Apple Silicon & Intel)
-*   **Windows**: `.msi` (推荐) 或 `.exe`
+*   **Windows**: `.msi`（推荐）、`.exe`，或 `x64-portable.zip`（解压即用，无需安装）
+
+Windows 便携包解压后直接运行其中的 `Cockpit Tools.exe`（或同名主程序）。系统需要 Windows 10/11 的 Microsoft Edge WebView2 Runtime；账号和配置仍按当前 Windows 用户目录保存，不会随 ZIP 文件夹自动迁移。
 *   **Linux**: `.deb` (Debian/Ubuntu)、`.rpm` 或 `.AppImage` (通用)
 
 ### 选项 B: Homebrew 安装 (macOS)

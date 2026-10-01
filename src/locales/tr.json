@@ -22,7 +22,9 @@
       "storage": "Test geçmişi okunamıyor veya kaydedilemiyor.",
       "unsafePath": "Güvenli olmayan sonuç yolu.",
       "historyMissing": "Test kaydı bulunamadı.",
-      "invalidId": "Geçersiz kayıt kimliği."
+      "invalidId": "Geçersiz kayıt kimliği.",
+      "providerUnavailable": "Sağlayıcı veya kayıtlı API anahtarı kullanılamıyor.",
+      "providerChanged": "Adres veya protokol değişti. Yeni bir test başlatın."
     },
     "title": "Pelikan testi",
     "description": "Aynı istemle paralel HTML üretin. Sonuçları kendiniz karşılaştırın; otomatik puanlama yapılmaz.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Tüm Pelican testleri temizlensin mi?",
     "clearAllHelp": "Tüm test geçmişi ve oluşturulan dosyalar kalıcı olarak silinecek. Bu işlem geri alınamaz.",
     "search": "Hesap ara",
-    "viewError": "Hatayı görüntüle"
+    "viewError": "Hatayı görüntüle",
+    "providers": "Sağlayıcılar",
+    "providerDescription": "Pelikan animasyonu oluşturarak sağlayıcıları karşılaştırın.",
+    "providerHelp": "Sağlayıcı, kayıtlı anahtar ve model seçin. İstekler ayrı bir geçici ağ geçidi kullanır; yeniden denemede kimlik bilgileri tekrar okunur.",
+    "providerRequired": "Geçerli sağlayıcı, API anahtarı ve model seçin.",
+    "providerModelMismatch": "Model farklı: istenen {{requested}}, dönen {{responded}}.",
+    "providerSearch": "Sağlayıcı veya anahtar adı ara",
+    "providerEmpty": "Eşleşen sağlayıcı yok",
+    "providerClear": "Seçimi temizle"
   },
   "common": {
     "dragSortHint": "Sıralamayı değiştirmek için soldaki tutamacı sürükleyin. Bıraktığınızda otomatik kaydedilir.",
@@ -3147,7 +3157,8 @@
         "medium": "Orta",
         "high": "Yüksek",
         "xhigh": "Çok yüksek",
-        "max": "Maks."
+        "max": "Maks.",
+        "ultra": "En üst"
       },
       "scheduleQuotaResetHint": "Kota sıfırlaması sonrası uyandırma açıldığında otomatik yenileme her 2 dakikaya ayarlanır.",
       "scheduleQuotaResetSummary": "Kota sıfırlamasından sonra çalıştır",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Otomatik (katalog / keşif)",
         "modelCustom": "Özel model…",
         "modelLabel": "Test modeli",
-        "modelCustomPlaceholder": "Model kimliği, örn. gpt-4.1-mini",
+        "modelCustomPlaceholder": "Model kimliği, örn. gpt-6.1-sol",
         "modelHint": "İsteğe bağlı ortak model. Boş = katalogdan otomatik."
       },
       "enableAndStart": "Başlat",
@@ -5320,6 +5331,11 @@
       "description": "Kimlik bilgileri kaydedildi ancak bu profilin Codex CLI arka plan hizmeti hâlâ çalışıyor ve önceki hesabı kullanmayı sürdürebilir.",
       "restartHint": "Etkin CLI görevlerini bitirin, ardından terminalde bu komutu çalıştırın. Yeniden başlatma, bu hizmete bağlı oturumları keser.",
       "copyFailed": "Kopyalanamadı. Yukarıdaki komutu seçip elle kopyalayın."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "Hesap bağlantısı değişti. Güncel ayar korundu."
+      }
     }
   },
   "githubCopilot": {

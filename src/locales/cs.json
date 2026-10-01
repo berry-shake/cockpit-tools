@@ -22,7 +22,9 @@
       "storage": "Nelze načíst nebo uložit historii testů.",
       "unsafePath": "Nebezpečná cesta k výsledku.",
       "historyMissing": "Záznam testu nebyl nalezen.",
-      "invalidId": "Neplatný identifikátor záznamu."
+      "invalidId": "Neplatný identifikátor záznamu.",
+      "providerUnavailable": "Poskytovatel nebo uložený klíč API není dostupný.",
+      "providerChanged": "Adresa nebo protokol se změnil. Spusťte nový test."
     },
     "title": "Test s pelikánem",
     "description": "Generujte HTML souběžně se stejným zadáním. Výsledky porovnejte sami, bez automatického hodnocení.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Vymazat všechny testy Pelican?",
     "clearAllHelp": "Veškerá historie testů a vygenerované soubory budou trvale smazány. Tuto akci nelze vrátit.",
     "search": "Hledat účty",
-    "viewError": "Zobrazit chybu"
+    "viewError": "Zobrazit chybu",
+    "providers": "Poskytovatelé",
+    "providerDescription": "Porovnejte poskytovatele vytvořením animace pelikána.",
+    "providerHelp": "Vyberte poskytovatele, uložený klíč a model. Požadavky používají oddělenou dočasnou bránu; při opakování se přihlašovací údaje načtou znovu.",
+    "providerRequired": "Vyberte platného poskytovatele, klíč API a model.",
+    "providerModelMismatch": "Jiný model: požadován {{requested}}, obdržen {{responded}}.",
+    "providerSearch": "Hledat poskytovatele nebo název klíče",
+    "providerEmpty": "Žádní odpovídající poskytovatelé",
+    "providerClear": "Zrušit výběr"
   },
   "common": {
     "dragSortHint": "Přetažením úchytu vlevo změňte pořadí. Po uvolnění se automaticky uloží.",
@@ -3147,7 +3157,8 @@
         "medium": "Střední",
         "high": "Vysoká",
         "xhigh": "Velmi vysoká",
-        "max": "Maximální"
+        "max": "Maximální",
+        "ultra": "Extrémní"
       },
       "scheduleQuotaResetHint": "Při zapnutí probuzení po resetu kvóty se automatické obnovování upraví na každé 2 minuty.",
       "scheduleQuotaResetSummary": "Spustit po resetu kvóty",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Auto (katalog / zjištění)",
         "modelCustom": "Vlastní model…",
         "modelLabel": "Testovací model",
-        "modelCustomPlaceholder": "ID modelu, např. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID modelu, např. gpt-6.1-sol",
         "modelHint": "Volitelné: společný model. Prázdné = auto z katalogu."
       },
       "enableAndStart": "Spustit",
@@ -5320,6 +5331,11 @@
       "description": "Přihlašovací údaje byly uloženy, ale služba Codex CLI tohoto profilu stále běží a může používat předchozí účet.",
       "restartHint": "Dokončete běžící úlohy CLI a poté spusťte tento příkaz v terminálu. Restart přeruší relace připojené k této službě.",
       "copyFailed": "Kopírování selhalo. Vyberte příkaz výše a zkopírujte jej ručně."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "Vazba účtu se změnila. Aktuální nastavení bylo zachováno."
+      }
     }
   },
   "githubCopilot": {

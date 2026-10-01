@@ -8,6 +8,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.3.64] - 2026-10-01
+
+### Changed
+
+- Shared data directory entries now use `.cockpit_tools` / `.cockpit_tools_dev`. Existing installations automatically retain access through compatibility links, preserving stored accounts and running instance paths without manual migration. Codex provider previews show the actual configured storage paths.
+
+### Fixed
+
+- Fix Windows Codex switching and startup being blocked by a saved process ID that has exited or been reused by another program, while preserving instance ownership checks for ChatGPT processes.
+
+- Fix configured proxies not reliably reaching Codex subprocesses when launching the default Microsoft Store instance on Windows.
+
+- Fix Codex model-provider Responses streams buffering replies until generation ends; events now reach the client as they arrive.
+
+## [1.3.63] - 2026-09-30
+
+### Added
+
+- Add official GPT-6.1 Sol cost estimates, including cached reads/writes, Fast/Flex rates and long-context pricing.
+
+- Add GPT-6.1 Sol to built-in model catalogs, wakeup/Pelican selection, provider test candidates and native gateway model recognition. Existing default model choices are preserved, and GPT-6.1 Sol supports the `ultra` reasoning effort in wakeup tasks and Pelican tests.
+
+- Model providers offer Pelican tests in the existing dialog, with saved provider/key/model selection, attributed results, shared history and retries. Tests use an isolated temporary gateway and resolve saved credentials again on retry.
+
+### Fixed
+
+- Provider chat tests share the wakeup default model (`gpt-5.6-luna`) for the local Responses gateway and prefer it when available in the provider catalog. Explicit model choices and provider-specific upstream models remain supported.
+
+- Manual quota refresh now reports local proxy errors instead of failing without feedback.
+
+- Antigravity metadata scanning no longer probes WSL paths on Windows, so it cannot start WSL or stall while looking for a local client.
+
+- Pelican results stay on the batch you opened while other batches keep updating, and retrying a failed item resumes that batch instead of switching away.
+
+- Codex account toolbar actions no longer crowd the search and filter fields in narrow windows.
+
+### Changed
+
+- Remove pre-5.5 GPT models from built-in catalogs, provider test candidates and legacy gateway shells. DeepSeek mappings use current shells; historical logs retain their original pricing support.
+
+- Windows builds include an `x64-portable.zip` package with the host application and bundled resources; WebView2 is required and user data remains in the normal Windows profile.
+
+- Codex proxy display styles are selected from the proxy preview; duplicate general and quick-setting controls have been removed.
+
 ## [1.3.62] - 2026-09-29
 
 ### Fixed

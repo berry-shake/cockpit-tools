@@ -741,6 +741,18 @@
         )
         .expect("direct collection should build");
 
+        let default_model = crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL;
+        assert_eq!(direct_collection.model_aliases.len(), 1);
+        assert_eq!(direct_collection.model_aliases[0].alias, default_model);
+        assert_eq!(
+            direct_collection.model_aliases[0].source_model,
+            request.model_id.trim()
+        );
+        assert_eq!(
+            direct_collection.api_keys[0].allowed_models,
+            vec![default_model]
+        );
+
         assert_eq!(
             direct_collection.image_generation_mode,
             CodexLocalAccessImageGenerationMode::Enabled
@@ -1246,7 +1258,7 @@
             .and_then(Value::as_array)
             .cloned()
             .unwrap_or_default();
-        assert!(excluded.iter().any(|item| item.as_str() == Some("gpt-5.4")));
+        assert!(excluded.iter().any(|item| item.as_str() == Some("gpt-6.1-sol")));
         assert!(!excluded
             .iter()
             .any(|item| item.as_str() == Some("gpt-5.6-sol")));

@@ -1,5 +1,5 @@
 import { ModalErrorMessage } from "../ModalErrorMessage";
-import { ArrowDownWideNarrow, ArrowDown, ArrowUp, Check, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, HelpCircle, KeyRound, Link2, LayoutGrid, Pencil, Plus, Rows3, Star, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
+import { Bird, ArrowDownWideNarrow, ArrowDown, ArrowUp, Check, CircleAlert, ChevronDown, Copy, Clock, Database, ExternalLink, GripVertical, HelpCircle, KeyRound, Link2, LayoutGrid, Pencil, Plus, Rows3, Star, Trash2, X, Search, Settings, Activity, RefreshCw, RotateCw, Play } from "lucide-react";
 import { MultiSelectFilterDropdown } from "../MultiSelectFilterDropdown";
 import { SingleSelectFilterDropdown } from "../SingleSelectFilterDropdown";
 import { SingleSelectDropdown } from "../SingleSelectDropdown";
@@ -28,6 +28,7 @@ export type CodexModelProviderManagerViewProps = ReturnType<typeof useCodexModel
 export function CodexModelProviderManagerView(props: CodexModelProviderManagerViewProps) {
   const {
     apiKeyPickerProviderId,
+    openProviderPelican,
     batchTestCancelling,
     batchTestDeleting,
     batchTestError,
@@ -367,6 +368,10 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
             )}
           </div>
           <div className="codex-overview-selection-actions">
+            <button type="button" className="btn btn-secondary" onClick={openProviderPelican}
+              disabled={filteredProviders.every((provider) => !getSelectedProviderApiKey(provider))}>
+              <Bird size={14} />{t("pelican.title")}
+            </button>
             <button
               type="button"
               className="btn btn-secondary"
@@ -927,7 +932,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                         }
                         placeholder={t(
                           "codex.modelProviders.batchTest.modelCustomPlaceholder",
-                          "输入模型 ID，例如 gpt-4.1-mini",
+                          "输入模型 ID，例如 gpt-6.1-sol",
                         )}
                         style={{ marginTop: 8 }}
                       />
@@ -1969,7 +1974,7 @@ export function CodexModelProviderManagerView(props: CodexModelProviderManagerVi
                           onChange={(event) =>
                             mutateForm({ visionModelText: event.target.value })
                           }
-                          placeholder={"qwen-vl-plus\ngpt-4o"}
+                          placeholder={"qwen-vl-plus\ngpt-6.1-sol"}
                           disabled={saving}
                         />
                         <p className="api-provider-hint">

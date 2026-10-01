@@ -4,6 +4,7 @@
 include!("codex_local_access_foundation.rs");
 include!("codex_local_access_quota_cooldown.rs");
 include!("codex_local_access_request_transform.rs");
+include!("codex_local_access_historical_pricing.rs");
 include!("codex_local_access_routing_pricing.rs");
 include!("codex_local_access_request_logs.rs");
 include!("codex_local_access_profile_takeover.rs");
@@ -18,6 +19,7 @@ include!("codex_local_access_provider_auth_sync.rs");
 include!("codex_local_access_instance_gateways.rs");
 include!("codex_local_access_probe_chat.rs");
 include!("codex_pelican_transport.rs");
+include!("codex_pelican_provider_transport.rs");
 include!("codex_local_access_commands.rs");
 include!("codex_local_access_http.rs");
 // The retired in-process WebSocket gateway is retained only as a test oracle.

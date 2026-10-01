@@ -22,7 +22,9 @@
       "storage": "Không thể đọc hoặc lưu lịch sử thử.",
       "unsafePath": "Đường dẫn kết quả không an toàn.",
       "historyMissing": "Không tìm thấy bản ghi lần thử.",
-      "invalidId": "Mã bản ghi không hợp lệ."
+      "invalidId": "Mã bản ghi không hợp lệ.",
+      "providerUnavailable": "Nhà cung cấp hoặc khóa API đã lưu không khả dụng.",
+      "providerChanged": "Địa chỉ hoặc giao thức đã thay đổi. Hãy tạo phép thử mới."
     },
     "title": "Thử thách bồ nông",
     "description": "Tạo HTML song song với cùng lời nhắc. Bạn tự so sánh kết quả; không chấm điểm tự động.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Dọn dẹp tất cả bài kiểm thử Pelican?",
     "clearAllHelp": "Toàn bộ lịch sử kiểm thử và tệp đã tạo sẽ bị xóa vĩnh viễn. Không thể hoàn tác.",
     "search": "Tìm tài khoản",
-    "viewError": "Xem lỗi"
+    "viewError": "Xem lỗi",
+    "providers": "Nhà cung cấp",
+    "providerDescription": "So sánh các nhà cung cấp bằng cách tạo hoạt ảnh bồ nông.",
+    "providerHelp": "Chọn nhà cung cấp, khóa đã lưu và mô hình. Yêu cầu đi qua cổng tạm riêng; thông tin xác thực được đọc lại khi thử lại.",
+    "providerRequired": "Hãy chọn nhà cung cấp, khóa API và mô hình hợp lệ.",
+    "providerModelMismatch": "Mô hình khác: yêu cầu {{requested}}, nhận {{responded}}.",
+    "providerSearch": "Tìm nhà cung cấp hoặc tên khóa",
+    "providerEmpty": "Không có nhà cung cấp phù hợp",
+    "providerClear": "Bỏ chọn"
   },
   "common": {
     "dragSortHint": "Kéo tay nắm bên trái để đổi thứ tự. Thay đổi tự động lưu khi thả.",
@@ -3147,7 +3157,8 @@
         "medium": "Trung bình",
         "high": "Cao",
         "xhigh": "Rất cao",
-        "max": "Tối đa"
+        "max": "Tối đa",
+        "ultra": "Cực cao"
       },
       "scheduleQuotaResetHint": "Khi bật đánh thức sau khi đặt lại hạn mức, làm mới tự động sẽ được điều chỉnh mỗi 2 phút.",
       "scheduleQuotaResetSummary": "Chạy sau khi đặt lại hạn mức",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Tự động (danh mục / phát hiện)",
         "modelCustom": "Mô hình tùy chỉnh…",
         "modelLabel": "Mô hình kiểm tra",
-        "modelCustomPlaceholder": "ID mô hình, vd. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID mô hình, vd. gpt-6.1-sol",
         "modelHint": "Tùy chọn: mô hình chung. Để trống sẽ tự chọn từ danh mục."
       },
       "enableAndStart": "Chạy",
@@ -5320,6 +5331,11 @@
       "description": "Thông tin xác thực đã được lưu nhưng dịch vụ nền Codex CLI của hồ sơ này vẫn chạy và có thể tiếp tục dùng tài khoản cũ.",
       "restartHint": "Hoàn tất các tác vụ CLI đang chạy rồi thực thi lệnh này trong cửa sổ dòng lệnh. Khởi động lại sẽ ngắt các phiên đang kết nối với dịch vụ này.",
       "copyFailed": "Sao chép thất bại. Hãy chọn lệnh ở trên và sao chép thủ công."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "Liên kết tài khoản đã đổi. Giữ nguyên thiết lập hiện tại."
+      }
     }
   },
   "githubCopilot": {

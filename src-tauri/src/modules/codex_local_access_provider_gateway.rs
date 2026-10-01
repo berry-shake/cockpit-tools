@@ -638,8 +638,8 @@ const DEEPSEEK_OFFICIAL_SHELL_SLOTS: &[(&str, &str)] = &[
     ("deepseek-flash", "gpt-5.5"),
     // 旧模型名保留同一套壳位，已存在的账号不需要迁移。
     ("deepseek-v4-flash", "gpt-5.5"),
-    ("deepseek-v4-pro", "gpt-5.4"),
-    ("deepseek-v4-flash-vision-exp", "gpt-5.4-mini"),
+    ("deepseek-v4-pro", "gpt-5.6-sol"),
+    ("deepseek-v4-flash-vision-exp", "gpt-5.6-terra"),
 ];
 
 /// DeepSeek 目录壳位映射（客户端可见名 → 上游模型）。
@@ -2100,10 +2100,7 @@ fn model_provider_test_uses_provider_gateway(
 }
 
 fn model_provider_direct_test_client_model() -> String {
-    supported_codex_model_ids()
-        .into_iter()
-        .find(|model| model.eq_ignore_ascii_case("gpt-5.4"))
-        .unwrap_or_else(|| "gpt-5.4".to_string())
+    crate::modules::codex_wakeup::DEFAULT_WAKEUP_MODEL.to_string()
 }
 
 fn build_model_provider_gateway_test_collection(

@@ -1659,7 +1659,7 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                       onClick={() =>
                         openQuotaErrorDetail(
                           t("codex.localAccess.title", "API 服务"),
-                          localAccessState.lastError || "",
+                          localAccessState.lastError ?? "",
                         )
                       }
                       title={t("codex.quotaError.viewDetails", "查看详情")}
@@ -1671,8 +1671,8 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
                     type="button"
                     className="folder-icon-btn codex-local-access-error-action"
                     onClick={() => void handleKillLocalAccessPort()}
-                    title={t("codex.localAccess.killPortAction", "清理端口")}
-                    aria-label={t("codex.localAccess.killPortAction", "清理端口")}
+                    title={t("codex.localAccess.killPortAction")}
+                    aria-label={t("codex.localAccess.killPortAction")}
                     disabled={localAccessBusy || !localAccessCollection}
                   >
                     {localAccessPortKilling ? (
@@ -2456,19 +2456,19 @@ export function useCodexAccountsRenderers(context: Pick<ReturnType<typeof useCod
       setActiveTab("overview");
       closeExternalImportProgressModal();
     };
-  
+
     useEffect(() => {
       if (externalImportRunning) {
         setExternalImportSyncError(null);
       }
     }, [externalImportRunning]);
-  
+
     useEffect(() => {
       if (importApiServiceGuideCount === null) return;
       setActiveTab("overview");
       setLocalAccessDetailsExpanded(true);
     }, [importApiServiceGuideCount]);
-  
+
     const renderApiKeyUsageDetailModal = () => {
       const account = apiKeyUsageDetailAccount;
       if (!account) return null;

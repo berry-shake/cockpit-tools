@@ -1,7 +1,6 @@
 import { AutoSwitchAccountScopeSelector } from '../components/AutoSwitchAccountScopeSelector';
 import { CodexContextManagementControl } from '../components/codex/CodexContextManagementControl';
 import { CodexSshSyncSettingsControl } from '../components/codex/CodexSshSyncSettingsControl';
-import { CodexProxyDisplayControl } from '../components/codex/CodexProxyDisplayControl';
 import './settings/Settings.css';
 import { RefreshCw } from 'lucide-react';
 import type { SettingsPageViewProps } from "./SettingsPageView";
@@ -85,7 +84,6 @@ export function SettingsCodexPlatformPanel(props: SettingsPageViewProps) {
   return <div style={{ order: platformSettingsOrder.codex }}>
                 <div className="group-title">{t('settings.general.codexSettingsTitle', 'Codex 设置')}</div>
                 <div className="settings-group">
-              <CodexProxyDisplayControl />
               <div className="settings-row">
                 <div className="row-label">
                   <div className="row-title">

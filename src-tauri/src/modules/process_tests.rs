@@ -822,14 +822,52 @@ mod tests {
 #[cfg(test)]
 mod codex_windows_default_instance_tests {
     use super::{
-        filter_codex_windows_default_process_entries, is_codex_windows_default_process_dir,
-        next_codex_default_start_candidate, normalize_path_for_compare,
+        codex_windows_process_snapshot_is_stale, filter_codex_windows_default_process_entries,
+        is_codex_windows_default_process_dir, next_codex_default_start_candidate,
+        normalize_path_for_compare,
     };
     use std::collections::HashSet;
 
     const DEFAULT_APP_DIR: &str = r"C:\Users\me\AppData\Roaming\Codex\web\Codex";
     const MANAGED_APP_DIR: &str =
         r"C:\Users\me\AppData\Roaming\.antigravity_cockpit\instances\codex-app-data\5184";
+
+    #[test]
+    fn ignores_last_pid_reused_by_an_unrelated_process() {
+        assert!(codex_windows_process_snapshot_is_stale(Some((
+            "notepad.exe",
+            Some(r"C:\Windows\System32\notepad.exe"),
+        ))));
+        // PID 仍存在但路径不可读时，明确的非 ChatGPT 进程名也能证明历史 PID 已失效。
+        assert!(codex_windows_process_snapshot_is_stale(Some((
+            "explorer.exe",
+            None
+        ))));
+    }
+
+    #[test]
+    fn ignores_last_pid_that_exited_between_probes() {
+        assert!(codex_windows_process_snapshot_is_stale(None));
+    }
+
+    #[test]
+    fn preserves_ownership_guard_for_chatgpt_and_unreadable_identity() {
+        for process in [
+            ("ChatGPT.exe", None),
+            ("CHATGPT.EXE", Some("")),
+            ("", None),
+            (
+                "",
+                Some(r"C:\Program Files\WindowsApps\OpenAI.Codex_26.930_x64__test\app\ChatGPT.exe"),
+            ),
+            ("ChatGPT.exe", Some("C:/Apps/ChatGPT.exe")),
+        ] {
+            assert!(
+                !codex_windows_process_snapshot_is_stale(Some(process)),
+                "{process:?}"
+            );
+        }
+    }
 
     #[test]
     fn classifies_default_processes_without_mixing_managed_instances() {

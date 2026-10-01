@@ -95,6 +95,172 @@ fn preserves_injection_and_proxy_environment_without_overriding_isolation() {
 }
 
 #[test]
+fn default_package_launch_injects_proxy_without_managed_profile_paths() {
+    let proxy = "socks5h://127.0.0.1:53669";
+    let mut env = account_proxy_env_pairs(proxy)
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect::<Vec<_>>();
+    env.push(("CODEX_HOME".into(), "inherited-managed-home".into()));
+    env.push((
+        "CODEX_ELECTRON_USER_DATA_PATH".into(),
+        "inherited-data".into(),
+    ));
+    let args = vec![
+        "--proxy-server=socks5://127.0.0.1:53669".into(),
+        "--proxy-bypass-list=localhost;127.0.0.1;[::1]".into(),
+    ];
+    let script = build_codex_package_launch_script(&package(), None, None, &args, &env);
+    assert!(script.contains("-PreventBreakaway"));
+    assert!(script.contains("-WindowStyle Hidden"));
+    assert!(!script.contains("shell:AppsFolder"));
+    let inner = decode_inner_script(&script);
+    for key in [
+        "ALL_PROXY",
+        "all_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+    ] {
+        assert!(inner.contains(&format!(
+            "SetEnvironmentVariable('{key}', '{proxy}', 'Process')"
+        )));
+    }
+    for key in ["CODEX_HOME", "CODEX_ELECTRON_USER_DATA_PATH"] {
+        let clear = format!("SetEnvironmentVariable('{key}', $null, 'Process')");
+        assert!(inner.find(&clear).unwrap() > inner.find("inherited-data").unwrap());
+        assert!(inner.find(&clear).unwrap() < inner.find("Process]::Start").unwrap());
+    }
+    assert!(!inner.contains("--user-data-dir"));
+    assert!(inner.contains(&args[0]));
+    assert!(inner.contains("$psi.UseShellExecute = $false"));
+}
+
+#[test]
+fn default_registration_probe_requires_exact_app_identity_and_gui() {
+    for invalid in ["", "pkg", "!App", "pkg!", "pkg!App!Other"] {
+        assert!(
+            build_codex_default_registered_launch_probe(invalid).is_err(),
+            "{invalid}"
+        );
+    }
+    let script = build_codex_default_registered_launch_probe(" OpenAI.Codex_pub!O'Brien ").unwrap();
+    assert!(script.contains("$family = 'OpenAI.Codex_pub'"));
+    assert!(script.contains("$appId = 'O''Brien'"));
+    assert!(script.contains("$application.Id -ne $appId"));
+    assert!(script.contains("-ieq 'ChatGPT.exe'"));
+    assert!(script.contains("[IO.Path]::IsPathRooted($relative)"));
+    assert!(script.contains("$exe.StartsWith($root + '\\'"));
+    assert!(script.contains("$matches.Count -ne 1"));
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn default_registration_resolves_selected_gui_and_rejects_runner() {
+    // Real PowerShell parsing with fake registration; no desktop is launched.
+    let setup = r#"
+function Get-AppxPackage {
+  [PSCustomObject]@{ Version=[version]'26.924'; PackageFamilyName='OpenAI.Codex_pub'; InstallLocation='C:\Program Files\WindowsApps\OpenAI.Codex_26.924_x64__pub' }
+}
+function Get-AppxPackageManifest {
+  [PSCustomObject]@{ Package=@{ Applications=@{ Application=@(
+    @{Id='Runner';Executable='app\resources\codex.exe'},
+    @{Id='Gui';Executable='app\ChatGPT.exe'}
+  ) } } }
+}
+function Test-Path { return $true }
+"#;
+    let probe = build_codex_default_registered_launch_probe("OpenAI.Codex_pub!Gui").unwrap();
+    let output = codex_launch_powershell_output(&format!("{setup}\n{probe}")).unwrap();
+    let registered = parse_codex_registered_launch(&output).unwrap().unwrap();
+    assert_eq!(registered.app_id, "Gui");
+    assert!(registered.executable.ends_with(r"app\ChatGPT.exe"));
+    for id in ["Runner", "Missing"] {
+        let probe =
+            build_codex_default_registered_launch_probe(&format!("OpenAI.Codex_pub!{id}")).unwrap();
+        assert!(codex_launch_powershell_output(&format!("{setup}\n{probe}")).is_err());
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn default_package_child_receives_proxy_and_clears_inherited_profile() {
+    // Replace package activation only. The generated inner launcher starts a
+    // real, hidden PowerShell child to report its environment; no GUI or network.
+    let executable = PathBuf::from(std::env::var("SystemRoot").unwrap())
+        .join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+    let output_path =
+        std::env::temp_dir().join(format!("codex-default-proxy-{}.json", uuid::Uuid::new_v4()));
+    let mut package = package();
+    package.executable = executable.to_string_lossy().into_owned();
+    let proxy = "socks5h://127.0.0.1:53669";
+    let report = format!(
+        "$values = @{{}}; foreach ($key in @('ALL_PROXY','HTTP_PROXY','HTTPS_PROXY','CODEX_HOME','CODEX_ELECTRON_USER_DATA_PATH')) {{ $values[$key] = [Environment]::GetEnvironmentVariable($key, 'Process') }}; [IO.File]::WriteAllText('{}', ($values | ConvertTo-Json -Compress))",
+        escape_powershell_single_quoted(&output_path.to_string_lossy()),
+    );
+    let args = vec![
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-WindowStyle".into(),
+        "Hidden".into(),
+        "-Command".into(),
+        report,
+    ];
+    let env = account_proxy_env_pairs(proxy)
+        .into_iter()
+        .map(|(key, value)| (key.to_string(), value))
+        .collect::<Vec<_>>();
+    let script = build_codex_package_launch_script(&package, None, None, &args, &env);
+    let setup = format!(
+        r#"
+$env:CODEX_HOME = 'inherited-home'
+$env:CODEX_ELECTRON_USER_DATA_PATH = 'inherited-data'
+function Get-AppxPackage {{
+  [PSCustomObject]@{{ Version=[version]'1'; PackageFamilyName='{family}'; InstallLocation='{root}' }}
+}}
+function Get-AppxPackageManifest {{
+  [PSCustomObject]@{{ Package=@{{ Applications=@{{ Application=@(@{{Id='{app_id}';Executable='powershell.exe'}}) }} }} }}
+}}
+function Invoke-CommandInDesktopPackage {{
+  param($PackageFamilyName, $AppId, [switch]$PreventBreakaway, $Command, $Args)
+  if ($Args -notmatch '-EncodedCommand ([A-Za-z0-9+/=]+)') {{ throw 'Missing encoded launcher' }}
+  $bytes = [Convert]::FromBase64String($Matches[1])
+  $inner = [Text.Encoding]::Unicode.GetString($bytes)
+  # The fixture uses a console executable in place of the actual GUI executable.
+  $inner = $inner.Replace('$psi.UseShellExecute = $false', '$psi.UseShellExecute = $false; $psi.CreateNoWindow = $true')
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
+  & $Command -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand $encoded
+  if ($LASTEXITCODE -ne 0) {{ throw 'Inner launcher failed' }}
+}}
+"#,
+        family = escape_powershell_single_quoted(&package.family_name),
+        app_id = escape_powershell_single_quoted(&package.app_id),
+        root = escape_powershell_single_quoted(&executable.parent().unwrap().to_string_lossy()),
+    );
+    codex_launch_powershell_output(&format!("{setup}\n{script}")).unwrap();
+    let started = Instant::now();
+    let result = loop {
+        if let Ok(bytes) = std::fs::read(&output_path) {
+            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                break value;
+            }
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "child environment report timed out"
+        );
+        thread::sleep(Duration::from_millis(20));
+    };
+    std::fs::remove_file(output_path).unwrap();
+    for key in ["ALL_PROXY", "HTTP_PROXY", "HTTPS_PROXY"] {
+        assert_eq!(result[key], proxy);
+    }
+    assert!(result["CODEX_HOME"].is_null());
+    assert!(result["CODEX_ELECTRON_USER_DATA_PATH"].is_null());
+}
+
+#[test]
 fn registration_response_requires_gui_identity() {
     assert!(parse_codex_registered_launch("null").unwrap().is_none());
     let registered = parse_codex_registered_launch(r#"{"family_name":"OpenAI.Codex_publisher","app_id":"Gui","executable":"D:\\WindowsApps\\new\\app\\ChatGPT.exe"}"#).unwrap().unwrap();

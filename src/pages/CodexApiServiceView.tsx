@@ -3154,7 +3154,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                     }
                     placeholder={t(
                       "codex.apiService.accountModelRules.placeholder",
-                      "gpt-5.4-mini\ngpt-5.3-*",
+                      "gpt-6-luna\ngpt-6-*",
                     )}
                   />
                 </label>
@@ -3236,7 +3236,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                         }
                         placeholder={t(
                           "codex.apiService.accountModelRules.placeholder",
-                          "gpt-5.4-mini\ngpt-5.3-*",
+                          "gpt-6-luna\ngpt-6-*",
                         )}
                         disabled={busy}
                       />

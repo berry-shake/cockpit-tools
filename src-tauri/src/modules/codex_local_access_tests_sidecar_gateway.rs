@@ -52,11 +52,11 @@
                     upstream_model: "deepseek-v4-flash".to_string(),
                 },
                 super::ProviderGatewayModelSlot {
-                    client_model: "gpt-5.4".to_string(),
+                    client_model: "gpt-5.6-sol".to_string(),
                     upstream_model: "deepseek-v4-pro".to_string(),
                 },
                 super::ProviderGatewayModelSlot {
-                    client_model: "gpt-5.4-mini".to_string(),
+                    client_model: "gpt-5.6-terra".to_string(),
                     upstream_model: "deepseek-v4-flash-vision-exp".to_string(),
                 },
             ]
@@ -400,8 +400,8 @@
     #[test]
     fn catalog_context_windows_keep_official_and_override_third_party() {
         let official = super::ProviderGatewayModelSlot {
-            client_model: "gpt-5.4".to_string(),
-            upstream_model: "gpt-5.4".to_string(),
+            client_model: "gpt-6.1-sol".to_string(),
+            upstream_model: "gpt-6.1-sol".to_string(),
         };
         let remapped = super::ProviderGatewayModelSlot {
             client_model: "gpt-5.6-sol".to_string(),
@@ -413,7 +413,7 @@
         };
         let catalog = serde_json::json!({
             "models": [
-                { "slug": "gpt-5.4", "context_window": 272000, "max_context_window": 272000 },
+                { "slug": "gpt-6.1-sol", "context_window": 272000, "max_context_window": 272000 },
                 { "slug": "gpt-5.6-sol", "context_window": 372000, "max_context_window": 372000 },
                 { "slug": "gpt-5.5", "context_window": 1048576, "max_context_window": 1048576 }
             ]
@@ -437,7 +437,7 @@
                 .find(|model| model["slug"] == slug)
                 .and_then(|model| model["context_window"].as_i64())
         };
-        assert_eq!(window("gpt-5.4"), Some(272000));
+        assert_eq!(window("gpt-6.1-sol"), Some(272000));
         assert_eq!(window("gpt-5.6-sol"), Some(900_000));
         assert_eq!(window("gpt-5.5"), Some(1048576));
         // 统一口径：显式写窗口时必须同时写 90% 的压缩阈值。
@@ -1719,7 +1719,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                 .collect::<Vec<_>>(),
             vec![
                 ("gpt-5.5", "deepseek-v4-flash"),
-                ("gpt-5.4", "deepseek-v4-pro"),
+                ("gpt-5.6-sol", "deepseek-v4-pro"),
             ]
         );
 
@@ -1915,7 +1915,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         );
         assert_eq!(
             models[1].get("slug").and_then(Value::as_str),
-            Some("gpt-5.4")
+            Some("gpt-5.6-sol")
         );
         assert_eq!(
             models[1].get("display_name").and_then(Value::as_str),
@@ -2061,11 +2061,11 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
                 ("gpt-5.6-sol", "deepseek-v4-pro"),
                 ("gpt-5.6-terra", "deepseek-v4-flash"),
                 ("gpt-5.6-luna", "deepseek-v4-lite"),
-                ("gpt-5.4", "deepseek-v4-extra"),
-                ("gpt-5.4-mini", "custom-overflow-a"),
-                ("gpt-5.3-codex", "custom-overflow-b"),
-                ("gpt-5.3-codex-spark", "custom-overflow-c"),
-                ("gpt-5.2", "custom-overflow-d"),
+                ("deepseek-v4-extra", "deepseek-v4-extra"),
+                ("custom-overflow-a", "custom-overflow-a"),
+                ("custom-overflow-b", "custom-overflow-b"),
+                ("custom-overflow-c", "custom-overflow-c"),
+                ("custom-overflow-d", "custom-overflow-d"),
                 // Shell pool exhausted: keep upstream IDs so all models remain listed.
                 ("custom-overflow-e", "custom-overflow-e"),
                 ("custom-overflow-f", "custom-overflow-f"),
@@ -2097,6 +2097,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
     #[test]
     fn provider_gateway_model_slots_keep_identity_for_gpt_6_family() {
         let slots = provider_gateway_model_slots(&[
+            "gpt-6.1-sol".to_string(),
             "gpt-6-astra".to_string(),
             "gpt-6-sol".to_string(),
             "gpt-6-luna".to_string(),
@@ -2104,6 +2105,10 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
         assert_eq!(
             slots,
             vec![
+                super::ProviderGatewayModelSlot {
+                    client_model: "gpt-6.1-sol".to_string(),
+                    upstream_model: "gpt-6.1-sol".to_string(),
+                },
                 super::ProviderGatewayModelSlot {
                     client_model: "gpt-6-astra".to_string(),
                     upstream_model: "gpt-6-astra".to_string(),
@@ -2205,7 +2210,7 @@ HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings
             .expect("models should be an array");
         for (model_id, display_name) in [
             ("gpt-5.5", "deepseek-v4-flash"),
-            ("gpt-5.4", "deepseek-v4-pro"),
+            ("gpt-5.6-sol", "deepseek-v4-pro"),
         ] {
             assert!(models.iter().any(|model| {
                 model.get("slug").and_then(Value::as_str) == Some(model_id)

@@ -22,7 +22,9 @@
       "storage": "Testverlauf kann nicht gelesen oder gespeichert werden.",
       "unsafePath": "Unsicherer Ergebnispfad.",
       "historyMissing": "Testeintrag nicht gefunden.",
-      "invalidId": "Ungültige Eintragskennung."
+      "invalidId": "Ungültige Eintragskennung.",
+      "providerUnavailable": "Anbieter oder gespeicherter API-Schlüssel nicht verfügbar.",
+      "providerChanged": "Adresse oder Protokoll wurde geändert. Einen neuen Test starten."
     },
     "title": "Pelikan-Test",
     "description": "HTML mit demselben Prompt parallel erzeugen. Vergleiche die Ergebnisse selbst; es gibt keine automatische Bewertung.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Alle Pelican-Tests löschen?",
     "clearAllHelp": "Der gesamte Testverlauf und erzeugte Dateien werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "search": "Konten suchen",
-    "viewError": "Fehler anzeigen"
+    "viewError": "Fehler anzeigen",
+    "providers": "Anbieter",
+    "providerDescription": "Anbieter anhand einer Pelikan-Animation vergleichen.",
+    "providerHelp": "Anbieter, gespeicherten Schlüssel und Modell wählen. Anfragen nutzen ein isoliertes temporäres Gateway; bei Wiederholung werden die Zugangsdaten neu geladen.",
+    "providerRequired": "Gültigen Anbieter, API-Schlüssel und Modell wählen.",
+    "providerModelMismatch": "Modellabweichung: angefordert {{requested}}, erhalten {{responded}}.",
+    "providerSearch": "Anbieter oder Schlüsselnamen suchen",
+    "providerEmpty": "Keine passenden Anbieter",
+    "providerClear": "Auswahl leeren"
   },
   "common": {
     "dragSortHint": "Zum Sortieren am linken Griff ziehen. Beim Loslassen wird automatisch gespeichert.",
@@ -3147,7 +3157,8 @@
         "medium": "Mittel",
         "high": "Hoch",
         "xhigh": "Sehr hoch",
-        "max": "Maximal"
+        "max": "Maximal",
+        "ultra": "Extrem"
       },
       "scheduleQuotaResetHint": "Wenn das Aufwecken nach Kontingent-Reset aktiviert ist, wird die automatische Aktualisierung auf alle 2 Minuten angepasst.",
       "scheduleQuotaResetSummary": "Nach Kontingent-Reset ausführen",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Auto (Katalog / Erkennung)",
         "modelCustom": "Eigenes Modell…",
         "modelLabel": "Testmodell",
-        "modelCustomPlaceholder": "Modell-ID, z. B. gpt-4.1-mini",
+        "modelCustomPlaceholder": "Modell-ID, z. B. gpt-6.1-sol",
         "modelHint": "Optional: gemeinsames Testmodell. Leer = Auto aus dem Katalog."
       },
       "enableAndStart": "Starten",
@@ -5320,6 +5331,11 @@
       "description": "Die Zugangsdaten wurden gespeichert, aber der Codex CLI-Daemon dieses Profils läuft noch und verwendet möglicherweise weiterhin das vorherige Konto.",
       "restartHint": "Beenden Sie laufende CLI-Aufgaben und führen Sie diesen Befehl im Terminal aus. Ein Neustart unterbricht die mit diesem Daemon verbundenen Sitzungen.",
       "copyFailed": "Kopieren fehlgeschlagen. Markieren und kopieren Sie den Befehl oben manuell."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "Die Kontobindung wurde geändert; die aktuelle Einstellung bleibt erhalten."
+      }
     }
   },
   "githubCopilot": {

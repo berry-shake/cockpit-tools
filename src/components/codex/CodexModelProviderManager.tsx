@@ -1,3 +1,5 @@
+import { useCodexPelicanStore } from "../../stores/useCodexPelicanStore";
+import { pelicanProviderTarget } from "./pelican/pelicanProviderModel";
 import { isValidProviderApiKeyUrl } from "../../utils/codexProviderApiKeyUrl";
 import { getCodexAccountQuotaError } from "../../utils/codexProxyRuntimeError";
 import {
@@ -10,7 +12,6 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
-import { homeDir, join } from "@tauri-apps/api/path";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { MultiSelectFilterOption } from "../MultiSelectFilterDropdown";
 import { useEscClose } from "../../hooks/useEscClose";
@@ -29,6 +30,7 @@ import {
   addCodexAccountWithApiKey,
   deleteCodexAccounts,
   getCurrentCodexAccount,
+  getCodexStoragePaths,
   listCodexAccounts,
   syncCodexApiKeyProviderAccounts,
   updateCodexAccountName,
@@ -129,6 +131,7 @@ import {
 } from "../../utils/codexModelProviderAccountName";
 import { findCodexAccountsReferencingModelProvider } from "../../utils/codexModelProviderAccountSync";
 import { buildProviderModelVisionCapabilities } from "../../utils/codexModelProviderVision";
+import { isImageGenerationModelId, selectProviderBatchTestModelId } from "../../utils/codexTestModel";
 import { CodexModelProviderManagerView } from "./CodexModelProviderManagerView";
 
 
@@ -479,9 +482,9 @@ function resolveProviderApiKeyLabel(
 }
 
 const DEFAULT_PROVIDER_PREVIEW_PATHS: ProviderPreviewPaths = {
-  providerStorePath: "~/.antigravity_cockpit/codex_model_providers.json",
-  codexConfigPath: "~/.codex/config.toml",
-  codexAuthPath: "~/.codex/auth.json",
+  providerStorePath: "codex_model_providers.json",
+  codexConfigPath: "config.toml",
+  codexAuthPath: "auth.json",
 };
 
 function resolveDefaultProviderWireApi(
@@ -519,46 +522,6 @@ function resolveProviderWireApi(provider: CodexModelProvider): CodexProviderWire
     baseUrl: provider.baseUrl,
     wireApi: provider.wireApi,
   }).wireApi;
-}
-
-const RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY = [
-  "gpt-5.5",
-  "gpt-5.4",
-  "gpt-5",
-  "gpt-4.1",
-  "gpt-4o",
-];
-
-function isImageGenerationModelId(modelId: string): boolean {
-  const lower = modelId.trim().toLowerCase();
-  return (
-    lower.startsWith("gpt-image") ||
-    lower.startsWith("dall-e") ||
-    lower.includes("image-gen")
-  );
-}
-
-function selectProviderBatchTestModelId(
-  wireApi: CodexProviderWireApi,
-  modelCatalog?: string[] | null,
-): string | null {
-  const models = (modelCatalog ?? [])
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-  if (models.length === 0) return null;
-
-  if (wireApi === "responses") {
-    for (const preferred of RESPONSES_NATIVE_CHAT_TEST_MODEL_PRIORITY) {
-      const model = models.find(
-        (item) => item.toLowerCase() === preferred.toLowerCase(),
-      );
-      if (model) return model;
-    }
-    const textModel = models.find((item) => !isImageGenerationModelId(item));
-    if (textModel) return textModel;
-  }
-
-  return models[0] ?? null;
 }
 
 function formatDateTime(value: number): string {
@@ -1081,21 +1044,15 @@ export function useCodexModelProviderManagerController({
 
     void (async () => {
       try {
-        const home = await homeDir();
-        const [providerStorePath, codexConfigPath, codexAuthPath] =
-          await Promise.all([
-            join(home, ".antigravity_cockpit", "codex_model_providers.json"),
-            join(home, ".codex", "config.toml"),
-            join(home, ".codex", "auth.json"),
-          ]);
+        const paths = await getCodexStoragePaths();
         if (cancelled) return;
         setPreviewPaths({
-          providerStorePath,
-          codexConfigPath,
-          codexAuthPath,
+          providerStorePath: paths.providerStorePath,
+          codexConfigPath: paths.configPath,
+          codexAuthPath: paths.authPath,
         });
       } catch {
-        // ignore path resolution failures and keep fallback preview paths
+        // Keep file names until the backend can report the actual configured paths.
       }
     })();
 
@@ -1367,6 +1324,15 @@ export function useCodexModelProviderManagerController({
     const trimmed = batchTestModelId.trim();
     return trimmed || null;
   }, [batchTestModelCustom, batchTestModelId]);
+
+  const openProviderPelican = useCallback(() => {
+    const source = selectedProviderIds.size > 0
+      ? filteredProviders.filter((provider) => selectedProviderIds.has(provider.id)) : filteredProviders;
+    useCodexPelicanStore.getState().openProviders(source.flatMap((provider) => {
+      const target = pelicanProviderTarget(provider, getSelectedProviderApiKey(provider)?.id);
+      return target ? [target] : [];
+    }));
+  }, [filteredProviders, selectedProviderIds, getSelectedProviderApiKey]);
 
   const openBatchTestModal = useCallback(() => {
     const defaultSource =
@@ -3666,6 +3632,7 @@ export function useCodexModelProviderManagerController({
     mutateForm,
     notice,
     openBatchTestModal,
+    openProviderPelican,
     openCreateModal,
     openEditModal,
     parseModelCatalogText,

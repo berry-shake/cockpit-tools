@@ -22,7 +22,9 @@
       "storage": "Tidak dapat membaca atau menyimpan riwayat uji.",
       "unsafePath": "Jalur hasil tidak aman.",
       "historyMissing": "Catatan pengujian tidak ditemukan.",
-      "invalidId": "Pengenal catatan tidak valid."
+      "invalidId": "Pengenal catatan tidak valid.",
+      "providerUnavailable": "Penyedia atau kunci API tersimpan tidak tersedia.",
+      "providerChanged": "Alamat atau protokol berubah. Mulai tes baru."
     },
     "title": "Uji pelikan",
     "description": "Buat HTML secara paralel dengan perintah yang sama. Bandingkan hasilnya sendiri tanpa penilaian otomatis.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Bersihkan semua pengujian Pelican?",
     "clearAllHelp": "Semua riwayat pengujian dan file yang dihasilkan akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.",
     "search": "Cari akun",
-    "viewError": "Lihat kesalahan"
+    "viewError": "Lihat kesalahan",
+    "providers": "Penyedia",
+    "providerDescription": "Bandingkan penyedia dengan membuat animasi pelikan.",
+    "providerHelp": "Pilih penyedia, kunci tersimpan, dan model. Permintaan memakai gerbang sementara terpisah; kredensial dibaca ulang saat mencoba lagi.",
+    "providerRequired": "Pilih penyedia, kunci API, dan model yang valid.",
+    "providerModelMismatch": "Model berbeda: diminta {{requested}}, diterima {{responded}}.",
+    "providerSearch": "Cari penyedia atau nama kunci",
+    "providerEmpty": "Tidak ada penyedia yang cocok",
+    "providerClear": "Hapus pilihan"
   },
   "common": {
     "dragSortHint": "Seret pegangan kiri untuk mengubah urutan. Perubahan otomatis disimpan saat dilepas.",
@@ -3344,7 +3354,8 @@
         "medium": "Sedang",
         "high": "Tinggi",
         "xhigh": "Sangat Tinggi",
-        "max": "Maks"
+        "max": "Maks",
+        "ultra": "Tertinggi"
       }
     },
     "sessionManager": {
@@ -3910,7 +3921,7 @@
         "modelAuto": "Otomatis (katalog / deteksi)",
         "modelCustom": "Model kustom…",
         "modelLabel": "Model uji",
-        "modelCustomPlaceholder": "ID model, mis. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID model, mis. gpt-6.1-sol",
         "modelHint": "Opsional: model bersama. Kosong = otomatis dari katalog."
       },
       "enableAndStart": "Mulai",
@@ -5367,6 +5378,11 @@
       "description": "Kredensial telah disimpan, tetapi layanan latar belakang Codex CLI untuk profil ini masih berjalan dan mungkin tetap memakai akun sebelumnya.",
       "restartHint": "Selesaikan tugas CLI yang aktif, lalu jalankan perintah ini di terminal. Memulai ulang akan memutus sesi yang terhubung ke layanan ini.",
       "copyFailed": "Gagal menyalin. Pilih perintah di atas dan salin secara manual."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "Ikatan akun berubah. Pengaturan saat ini dipertahankan."
+      }
     }
   },
   "codebuddy": {

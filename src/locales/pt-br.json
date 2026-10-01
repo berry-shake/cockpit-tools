@@ -22,7 +22,9 @@
       "storage": "Não foi possível ler ou salvar o histórico de testes.",
       "unsafePath": "Caminho do resultado inseguro.",
       "historyMissing": "Registro de teste não encontrado.",
-      "invalidId": "Identificador de registro inválido."
+      "invalidId": "Identificador de registro inválido.",
+      "providerUnavailable": "O fornecedor ou a chave API salva está indisponível.",
+      "providerChanged": "O endereço ou protocolo mudou. Inicie um novo teste."
     },
     "title": "Teste do pelicano",
     "description": "Gere HTML em paralelo com a mesma instrução. Compare os resultados por conta própria, sem pontuação automática.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Limpar todos os testes do Pelican?",
     "clearAllHelp": "Todo o histórico de testes e os arquivos gerados serão excluídos permanentemente. Não é possível desfazer.",
     "search": "Buscar contas",
-    "viewError": "Ver erro"
+    "viewError": "Ver erro",
+    "providers": "Fornecedores",
+    "providerDescription": "Compare fornecedores gerando uma animação de pelicano.",
+    "providerHelp": "Escolha fornecedor, chave salva e modelo. As solicitações usam um gateway temporário isolado; as credenciais são relidas a cada nova tentativa.",
+    "providerRequired": "Selecione um fornecedor, uma chave API e um modelo válidos.",
+    "providerModelMismatch": "Modelo diferente: solicitado {{requested}}, recebido {{responded}}.",
+    "providerSearch": "Buscar fornecedor ou nome da chave",
+    "providerEmpty": "Nenhum fornecedor correspondente",
+    "providerClear": "Limpar seleção"
   },
   "common": {
     "dragSortHint": "Arraste a alça à esquerda para reordenar. As alterações são salvas ao soltar.",
@@ -3147,7 +3157,8 @@
         "medium": "Médio",
         "high": "Alto",
         "xhigh": "Muito alto",
-        "max": "Máximo"
+        "max": "Máximo",
+        "ultra": "Extremo"
       },
       "scheduleQuotaResetHint": "Quando o despertar após redefinição de cota estiver ativado, a atualização automática será ajustada para cada 2 minutos.",
       "scheduleQuotaResetSummary": "Executar após redefinição de cota",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Auto (catálogo / detectar)",
         "modelCustom": "Modelo personalizado…",
         "modelLabel": "Modelo de teste",
-        "modelCustomPlaceholder": "ID do modelo, ex. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID do modelo, ex. gpt-6.1-sol",
         "modelHint": "Opcional: modelo comum. Vazio = auto do catálogo."
       },
       "enableAndStart": "Iniciar",
@@ -5320,6 +5331,11 @@
       "description": "As credenciais foram salvas, mas o serviço Codex CLI deste perfil continua ativo e pode manter a conta anterior.",
       "restartHint": "Conclua as tarefas CLI em execução e execute este comando no terminal. A reinicialização interrompe as sessões conectadas a este serviço.",
       "copyFailed": "Falha ao copiar. Selecione o comando acima e copie-o manualmente."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "O vínculo da conta mudou. A configuração atual foi preservada."
+      }
     }
   },
   "githubCopilot": {

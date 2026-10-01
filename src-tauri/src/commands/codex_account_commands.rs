@@ -120,7 +120,7 @@ fn now_unix_seconds() -> i64 {
 fn get_codex_batch_delete_jobs_dir() -> PathBuf {
     let data_dir = account::get_data_dir()
         .or_else(|_| account::resolve_data_dir())
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+        .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir());
     data_dir.join(CODEX_BATCH_DELETE_JOBS_DIR)
 }
 
@@ -732,6 +732,32 @@ pub fn get_current_codex_account() -> Result<Option<CodexAccount>, String> {
 pub fn get_codex_config_toml_path() -> Result<String, String> {
     let path = codex_account::get_codex_home().join("config.toml");
     Ok(path.to_string_lossy().to_string())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexStoragePaths {
+    provider_store_path: String,
+    config_path: String,
+    auth_path: String,
+}
+
+#[tauri::command]
+pub async fn get_codex_storage_paths() -> Result<CodexStoragePaths, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let data_dir = account::get_data_dir()?;
+        let codex_home = codex_account::get_codex_home();
+        Ok(CodexStoragePaths {
+            provider_store_path: data_dir
+                .join("codex_model_providers.json")
+                .to_string_lossy()
+                .to_string(),
+            config_path: codex_home.join("config.toml").to_string_lossy().to_string(),
+            auth_path: codex_home.join("auth.json").to_string_lossy().to_string(),
+        })
+    })
+    .await
+    .map_err(|error| format!("读取 Codex 存储路径后台任务失败: {}", error))?
 }
 
 #[tauri::command]

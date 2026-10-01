@@ -2051,7 +2051,7 @@ fn next_codex_batch_import_session_id() -> String {
 fn get_codex_batch_import_sessions_dir() -> PathBuf {
     let data_dir = account::get_data_dir()
         .or_else(|_| account::resolve_data_dir())
-        .unwrap_or_else(|_| PathBuf::from(".antigravity_cockpit"));
+        .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir());
     data_dir.join(CODEX_BATCH_IMPORT_SESSIONS_DIR)
 }
 

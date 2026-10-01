@@ -74,6 +74,8 @@ const CODEX_EXPERIMENTAL_MODEL_USER_CUSTOMIZED_FILE: &str =
     ".cockpit-experimental-model-catalog-user-customized";
 const CODEX_EXPERIMENTAL_MODEL_PREVIOUS_CATALOG_FILE: &str =
     ".cockpit-experimental-model-catalog-previous.json";
+pub(crate) const GPT_6_1_SOL_MODEL_ID: &str = "gpt-6.1-sol";
+const GPT_6_1_SOL_MODEL_CATALOG_MIGRATION_ID: &str = "add-gpt-6-1-sol-model";
 pub(crate) const GPT_6_ASTRA_MODEL_ID: &str = "gpt-6-astra";
 pub(crate) const GPT_6_SOL_MODEL_ID: &str = "gpt-6-sol";
 pub(crate) const GPT_6_LUNA_MODEL_ID: &str = "gpt-6-luna";
@@ -105,17 +107,14 @@ const PRE_GPT_6_SOL_LUNA_SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
 const EXPERIMENTAL_MODEL_CATALOG_CONFIG_VERSION: u32 = 4;
 const CODEX_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
 const SHIPPED_VISIBLE_CODEX_MODEL_IDS: &[&str] = &[
+    GPT_6_1_SOL_MODEL_ID,
     GPT_6_ASTRA_MODEL_ID,
     GPT_6_SOL_MODEL_ID,
     GPT_6_LUNA_MODEL_ID,
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
-    "gpt-5.3-codex",
     "gpt-5.5",
-    "gpt-5.4",
-    "gpt-5.4-mini",
-    "gpt-5.3-codex-spark",
     "gpt-reserve",
 ];
 /// Official DeepSeek Codex setup writes `models.json` and points `model_catalog_json` at it.
@@ -822,8 +821,9 @@ fn normalize_deepseek_account(account: &mut CodexAccount) -> bool {
         let mappings_before = account.api_model_mappings.len();
         account.api_model_mappings.retain(|mapping| {
             let client = mapping.client_model.trim();
-            !crate::modules::codex_local_access::is_codex_provider_shell_model_id(client)
-                || is_allowed_deepseek_client_model(client)
+            !crate::modules::codex_wakeup::is_codex_model_before_5_5(client)
+                && (!crate::modules::codex_local_access::is_codex_provider_shell_model_id(client)
+                    || is_allowed_deepseek_client_model(client))
         });
         if account.api_model_mappings.len() != mappings_before {
             changed = true;

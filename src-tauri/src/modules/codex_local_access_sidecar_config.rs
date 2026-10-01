@@ -1237,7 +1237,8 @@ fn sidecar_client_api_keys_with_internal(
         // Explicit model routes remain usable while the bound OAuth account is
         // temporarily unavailable. Their credentials were validated when saved.
         let has_resolvable_scope = item.provider_gateway.is_some()
-            || item.model_routing.as_ref().is_some_and(|routing| !routing.routes.is_empty())
+            || (item.model_routing.as_ref().is_some_and(|routing| !routing.routes.is_empty())
+                && !effective_api_key_account_ids(collection, item).is_empty())
             || !sidecar_auth_ids_for_account_ids_with_overrides(
                 effective_api_key_account_ids(collection, item),
                 account_overrides,

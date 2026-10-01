@@ -2317,19 +2317,6 @@ fn detect_codex_store_app_user_model_id() -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn powershell_argument_list_clause(values: &[String]) -> String {
-    let arguments = values
-        .iter()
-        .filter(|value| !value.trim().is_empty())
-        .map(|value| format!("'{}'", escape_powershell_single_quoted(value)))
-        .collect::<Vec<_>>();
-    if arguments.is_empty() {
-        return String::new();
-    }
-    format!(" -ArgumentList @({})", arguments.join(", "))
-}
-
-#[cfg(target_os = "windows")]
 fn launch_codex_via_store_app_user_model_id(
     app_user_model_id: &str,
     codex_home: Option<&str>,
@@ -2342,52 +2329,25 @@ fn launch_codex_via_store_app_user_model_id(
         return Err("Codex AppUserModelId 为空".to_string());
     }
 
-    let escaped = escape_powershell_single_quoted(app_user_model_id);
-    let mut env_pairs: Vec<(&str, String)> = managed_proxy_env_pairs();
-    if let Some(codex_home) = codex_home.map(str::trim).filter(|value| !value.is_empty()) {
-        env_pairs.push(("CODEX_HOME", codex_home.to_string()));
-    }
-    if let Some(app_user_data_dir) = app_user_data_dir
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        env_pairs.push((
-            "CODEX_ELECTRON_USER_DATA_PATH",
-            app_user_data_dir.to_string(),
-        ));
-    }
-    for (key, value) in extra_env {
-        env_pairs.push((key.as_str(), value.clone()));
-    }
-    let env_lines = env_pairs
+    let probe = build_codex_default_registered_launch_probe(app_user_model_id)?;
+    let package = parse_codex_registered_launch(&codex_launch_powershell_output(&probe)?)?
+        .ok_or_else(|| "No registered Codex GUI application".to_string())?;
+    let mut env_pairs = managed_proxy_env_pairs()
         .into_iter()
-        .map(|(key, value)| format!("$env:{}='{}'", key, escape_powershell_single_quoted(&value)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let argument_list = powershell_argument_list_clause(extra_args);
-    let script = format!(
-        r#"{env_lines}
-$appId='{escaped}';
-$target='shell:AppsFolder\' + $appId
-Start-Process -FilePath $target{argument_list} -ErrorAction Stop | Out-Null"#
+        .map(|(key, value)| (key.to_string(), value))
+        .collect::<Vec<_>>();
+    env_pairs.extend_from_slice(extra_env);
+    let script = build_codex_package_launch_script(
+        &package,
+        codex_home.map(str::trim).filter(|value| !value.is_empty()),
+        app_user_data_dir
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(Path::new),
+        extra_args,
+        &env_pairs,
     );
-
-    let output = powershell_output(&["-Command", &script])
-        .map_err(|e| format!("系统入口启动调用失败: {}", e))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stderr_head = stderr.trim().chars().take(400).collect::<String>();
-        return Err(format!(
-            "系统入口启动失败: status={}, stderr={}",
-            output.status,
-            if stderr_head.is_empty() {
-                "<empty>".to_string()
-            } else {
-                stderr_head
-            }
-        ));
-    }
-    Ok(())
+    codex_launch_powershell_output(&script).map(|_| ())
 }
 
 const CODEX_MANAGED_STORE_LAUNCH_UNSAFE_PREFIX: &str = "CODEX_MANAGED_STORE_LAUNCH_UNSAFE:";

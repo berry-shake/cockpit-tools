@@ -22,7 +22,9 @@
       "storage": "Impossible de lire ou d’enregistrer l’historique des tests.",
       "unsafePath": "Chemin du résultat non sécurisé.",
       "historyMissing": "Test introuvable dans l’historique.",
-      "invalidId": "Identifiant de l’enregistrement invalide."
+      "invalidId": "Identifiant de l’enregistrement invalide.",
+      "providerUnavailable": "Le fournisseur ou la clé API enregistrée est indisponible.",
+      "providerChanged": "L’adresse ou le protocole a changé. Lancez un nouveau test."
     },
     "title": "Test du pélican",
     "description": "Générez du HTML en parallèle avec la même consigne. Comparez les résultats vous-même, sans notation automatique.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Nettoyer tous les tests Pelican ?",
     "clearAllHelp": "Tout l’historique des tests et les fichiers générés seront définitivement supprimés. Cette action est irréversible.",
     "search": "Rechercher un compte",
-    "viewError": "Voir l’erreur"
+    "viewError": "Voir l’erreur",
+    "providers": "Fournisseurs",
+    "providerDescription": "Comparez les fournisseurs en générant une animation de pélican.",
+    "providerHelp": "Choisissez un fournisseur, une clé enregistrée et un modèle. Les requêtes passent par une passerelle temporaire isolée ; les identifiants sont relus à chaque nouvel essai.",
+    "providerRequired": "Sélectionnez un fournisseur, une clé API et un modèle valides.",
+    "providerModelMismatch": "Modèle différent : demandé {{requested}}, reçu {{responded}}.",
+    "providerSearch": "Rechercher un fournisseur ou une clé",
+    "providerEmpty": "Aucun fournisseur correspondant",
+    "providerClear": "Effacer la sélection"
   },
   "common": {
     "dragSortHint": "Faites glisser la poignée à gauche pour réordonner. L’ordre est enregistré au relâchement.",
@@ -3147,7 +3157,8 @@
         "medium": "Moyen",
         "high": "Élevé",
         "xhigh": "Très élevé",
-        "max": "Maximal"
+        "max": "Maximal",
+        "ultra": "Extrême"
       },
       "scheduleQuotaResetHint": "Lorsque le réveil après réinitialisation du quota est activé, l'actualisation automatique est réglée toutes les 2 minutes.",
       "scheduleQuotaResetSummary": "Exécuter après réinitialisation du quota",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Auto (catalogue / détection)",
         "modelCustom": "Modèle perso…",
         "modelLabel": "Modèle de test",
-        "modelCustomPlaceholder": "ID modèle, ex. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID modèle, ex. gpt-6.1-sol",
         "modelHint": "Optionnel : modèle commun. Vide = auto via le catalogue."
       },
       "enableAndStart": "Lancer",
@@ -5320,6 +5331,11 @@
       "description": "Les identifiants ont été enregistrés, mais le service Codex CLI de ce profil est toujours actif et peut conserver le compte précédent.",
       "restartHint": "Terminez les tâches CLI en cours, puis exécutez cette commande dans le terminal. Le redémarrage interrompt les sessions connectées à ce service.",
       "copyFailed": "Échec de la copie. Sélectionnez la commande ci-dessus et copiez-la manuellement."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "La liaison du compte a changé. Son réglage actuel a été conservé."
+      }
     }
   },
   "githubCopilot": {

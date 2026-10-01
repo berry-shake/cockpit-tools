@@ -1,4 +1,5 @@
-import { useMfaCountdown } from '../hooks/useMfaCountdown';
+import { listenSafely as listen } from "../utils/tauriEventListener";
+import { refreshCodexQuotaWithFeedback } from "../utils/codexQuotaRefreshFeedback";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Download, Copy, Check, Eye, EyeOff, FileText, FolderOpen } from "lucide-react";
 import { useCodexAccountStore } from "../stores/useCodexAccountStore";
@@ -14,7 +15,7 @@ import { buildCodexAccountPresentation } from "../presentation/platformAccountPr
 import { type CodexWindowStats } from "../utils/codexWindowStats";
 import { readCodexImportSyncApiService, writeCodexImportSyncApiService } from "../utils/codexImportPreferences";
 import { CODEX_OPEN_ADD_ACCOUNT_EVENT, takePendingCodexOpenAddAccountRequest, type CodexOAuthBindingRetryDetail, type CodexOpenAddAccountDetail } from "../utils/codexAddAccountRequest";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
@@ -24,6 +25,7 @@ import { useProviderAccountsPage } from "../hooks/useProviderAccountsPage";
 import { getActiveGroupTab, setActiveGroupTab } from "../services/platformGroupService";
 import { usePlatformRuntimeSupport } from "../hooks/usePlatformRuntimeSupport";
 import { useEscClose } from "../hooks/useEscClose";
+import { useMfaCountdown } from "../hooks/useMfaCountdown";
 import { useLaunchTerminalOptions } from "../hooks/useLaunchTerminalOptions";
 import { useRememberMfaQuery } from "../hooks/useRememberMfaQuery";
 import type { SingleSelectFilterOption } from "../components/SingleSelectFilterDropdown";
@@ -249,7 +251,7 @@ export function useCodexAccountsBaseController() {
       },
       [ensureLocalAccessEntryVisible],
     );
-  
+
     const [codexGroupsReady, setCodexGroupsReady] = useState(false);
     const reloadCodexGroups = useCallback(async () => {
       // 分组文件也可能被导入流程直接改写，这里始终以磁盘为准。
@@ -500,8 +502,13 @@ export function useCodexAccountsBaseController() {
         fetchAccounts: store.fetchAccounts,
         switchAccount: store.switchAccount,
         deleteAccounts: store.deleteAccounts,
-        refreshToken: (id) => store.refreshQuota(id).then(() => {}),
-        refreshAllTokens: () => store.refreshAllQuotas().then(() => {}),
+        // The callbacks execute after the page hook has initialized its message state.
+        refreshToken: (id): Promise<void> => refreshCodexQuotaWithFeedback(
+          () => store.refreshQuota(id), page.t, page.setMessage,
+        ),
+        refreshAllTokens: (): Promise<void> => refreshCodexQuotaWithFeedback(
+          () => store.refreshAllQuotas(), page.t, page.setMessage,
+        ),
         updateAccountTags: store.updateAccountTags,
       },
       dataService: {
@@ -615,7 +622,7 @@ export function useCodexAccountsBaseController() {
       setActiveGroupId(null);
       setSelected(new Set());
     }, [clearTagFilter, setSearchQuery, setSelected]);
-  
+
     const handleSyncImportedToApiServiceChange = useCallback(
       (enabled: boolean) => {
         setSyncImportedToApiService(enabled);
@@ -623,7 +630,7 @@ export function useCodexAccountsBaseController() {
       },
       [],
     );
-  
+
     const syncImportedAccountsToApiService = useCallback(
       async (accountIds: string[], force = false) => {
         if ((!syncImportedToApiService && !force) || accountIds.length === 0)
@@ -641,7 +648,7 @@ export function useCodexAccountsBaseController() {
       },
       [ensureLocalAccessEntryVisible, syncImportedToApiService],
     );
-  
+
     const reauthTargetAccountId = reauthTargetAccount?.id?.trim() ?? "";
     const reauthTargetEmail = reauthTargetAccount?.email?.trim() ?? "";
     const shouldShowPendingOAuthDraftForm =

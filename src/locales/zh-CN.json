@@ -22,7 +22,9 @@
       "storage": "无法读写测试记录",
       "unsafePath": "结果路径不安全",
       "historyMissing": "未找到测试记录",
-      "invalidId": "记录标识无效"
+      "invalidId": "记录标识无效",
+      "providerUnavailable": "供应商或已保存的 API Key 不可用。",
+      "providerChanged": "供应商地址或协议已变更，请新建测试。"
     },
     "title": "鹈鹕测智",
     "description": "同题并行生成 HTML，由你比较结果，不自动评分。",
@@ -83,7 +85,15 @@
     "confirmClearAll": "清理全部鹈鹕测智记录？",
     "clearAllHelp": "将永久删除所有测试记录及生成文件，且无法恢复。",
     "search": "搜索账号",
-    "viewError": "查看错误"
+    "viewError": "查看错误",
+    "providers": "供应商",
+    "providerDescription": "比较供应商生成鹈鹕动画的效果。",
+    "providerHelp": "选择供应商、已保存的 Key 和模型。请求通过独立临时网关发送，重试时重新读取已保存的凭据。",
+    "providerRequired": "请选择有效的供应商、API Key 和模型。",
+    "providerModelMismatch": "模型不一致：请求 {{requested}}，返回 {{responded}}。",
+    "providerSearch": "搜索供应商或 Key 名称",
+    "providerEmpty": "没有匹配的供应商",
+    "providerClear": "清空选择"
   },
   "common": {
     "dragSortHint": "拖动左侧手柄调整顺序，松开后自动保存。",
@@ -3553,7 +3563,7 @@
         "modelAuto": "自动选择（按目录/探测）",
         "modelCustom": "自定义模型…",
         "modelLabel": "测试模型",
-        "modelCustomPlaceholder": "输入模型 ID，例如 gpt-4.1-mini",
+        "modelCustomPlaceholder": "输入模型 ID，例如 gpt-6.1-sol",
         "modelHint": "可选统一模型。留空则按各供应商目录或探测结果自动选择。"
       },
       "enableAndStart": "启动",
@@ -4050,7 +4060,8 @@
         "medium": "中",
         "high": "高",
         "xhigh": "超高",
-        "max": "最大"
+        "max": "最大",
+        "ultra": "极致"
       }
     },
     "sessionManager": {
@@ -5540,6 +5551,11 @@
       "description": "凭据已写入，但检测到此配置目录的 Codex CLI 后台服务仍在运行，可能继续使用原账号。",
       "restartHint": "请先结束正在运行的 CLI 任务，再在终端执行以下命令。重启会中断连接到该服务的会话。",
       "copyFailed": "复制失败，请选中上方命令手动复制。"
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "账号绑定已更改，保留当前设置"
+      }
     }
   },
   "codebuddy": {

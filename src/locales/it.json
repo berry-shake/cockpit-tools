@@ -22,7 +22,9 @@
       "storage": "Impossibile leggere o salvare la cronologia dei test.",
       "unsafePath": "Percorso del risultato non sicuro.",
       "historyMissing": "Test non trovato nella cronologia.",
-      "invalidId": "Identificativo del record non valido."
+      "invalidId": "Identificativo del record non valido.",
+      "providerUnavailable": "Il fornitore o la chiave API salvata non è disponibile.",
+      "providerChanged": "L’indirizzo o il protocollo è cambiato. Avvia un nuovo test."
     },
     "title": "Test del pellicano",
     "description": "Genera HTML in parallelo con la stessa richiesta. Confronta i risultati personalmente, senza valutazione automatica.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Pulire tutti i test Pelican?",
     "clearAllHelp": "Tutta la cronologia dei test e i file generati verranno eliminati definitivamente. L’operazione non può essere annullata.",
     "search": "Cerca account",
-    "viewError": "Visualizza errore"
+    "viewError": "Visualizza errore",
+    "providers": "Fornitori",
+    "providerDescription": "Confronta i fornitori generando un’animazione di un pellicano.",
+    "providerHelp": "Scegli fornitore, chiave salvata e modello. Le richieste usano un gateway temporaneo isolato; le credenziali vengono rilette a ogni nuovo tentativo.",
+    "providerRequired": "Seleziona fornitore, chiave API e modello validi.",
+    "providerModelMismatch": "Modello diverso: richiesto {{requested}}, ricevuto {{responded}}.",
+    "providerSearch": "Cerca fornitore o nome chiave",
+    "providerEmpty": "Nessun fornitore corrispondente",
+    "providerClear": "Azzera selezione"
   },
   "common": {
     "dragSortHint": "Trascina la maniglia a sinistra per riordinare. Le modifiche vengono salvate al rilascio.",
@@ -3147,7 +3157,8 @@
         "medium": "Medio",
         "high": "Alto",
         "xhigh": "Molto alto",
-        "max": "Massimo"
+        "max": "Massimo",
+        "ultra": "Estremo"
       },
       "scheduleQuotaResetHint": "Quando è attivo il risveglio dopo reset quota, l'aggiornamento automatico verrà impostato ogni 2 minuti.",
       "scheduleQuotaResetSummary": "Esegui dopo il reset della quota",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Auto (catalogo / rilevamento)",
         "modelCustom": "Modello personalizzato…",
         "modelLabel": "Modello di test",
-        "modelCustomPlaceholder": "ID modello, es. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID modello, es. gpt-6.1-sol",
         "modelHint": "Opzionale: modello comune. Vuoto = auto dal catalogo."
       },
       "enableAndStart": "Avvia",
@@ -5320,6 +5331,11 @@
       "description": "Le credenziali sono state salvate, ma il servizio Codex CLI di questo profilo è ancora attivo e potrebbe mantenere l’account precedente.",
       "restartHint": "Termina le attività CLI in corso, poi esegui questo comando nel terminale. Il riavvio interrompe le sessioni collegate a questo servizio.",
       "copyFailed": "Copia non riuscita. Seleziona il comando sopra e copialo manualmente."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "L'associazione è cambiata; è stata conservata l'impostazione attuale."
+      }
     }
   },
   "githubCopilot": {

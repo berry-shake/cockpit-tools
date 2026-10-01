@@ -307,9 +307,9 @@ pub(crate) fn managed_codex_model_ids() -> Vec<String> {
         .map(str::to_string)
         .collect::<Vec<_>>();
 
-    // 官方推荐集把 GPT-6 家族排在最前，顺序固定为 Astra → Sol → Luna；
+    // 官方推荐集把 GPT-6 家族排在最前，顺序固定为 6.1 Sol → Astra → Sol → Luna；
     // 只移动已存在的条目，不插入目录里没有的模型。
-    for (offset, model_id) in ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
+    for (offset, model_id) in ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
         .iter()
         .enumerate()
     {
@@ -728,6 +728,7 @@ fn display_name_for_model(model_id: &str) -> String {
         "gpt-5.4-mini" => "GPT-5.4 Mini".to_string(),
         "gpt-5.3-codex" => "GPT-5.3 Codex".to_string(),
         "gpt-5.3-codex-spark" => "GPT-5.3 Codex Spark".to_string(),
+        "gpt-6.1-sol" => "GPT-6.1 Sol".to_string(),
         "gpt-6-astra" => "GPT-6 Astra".to_string(),
         "gpt-6-sol" => "GPT-6 Sol".to_string(),
         "gpt-6-luna" => "GPT-6 Luna".to_string(),
@@ -2012,32 +2013,17 @@ mod tests {
     }
 
     #[test]
-    fn codex_spark_compatibility_model_is_visible_with_a_safe_catalog_fallback() {
-        let response = build_codex_client_models_response(&[
-            "gpt-5.3-codex".to_string(),
-            "gpt-5.3-codex-spark".to_string(),
-        ]);
-        let models = response
-            .get("models")
-            .and_then(Value::as_array)
-            .expect("models should be an array");
-        let spark = models
-            .iter()
-            .find(|model| model.get("slug").and_then(Value::as_str) == Some("gpt-5.3-codex-spark"))
-            .expect("Spark should be visible to Codex clients");
-
-        assert_eq!(
-            spark.get("display_name").and_then(Value::as_str),
-            Some("GPT-5.3-Codex-Spark")
-        );
-        assert_eq!(
-            spark.get("visibility").and_then(Value::as_str),
-            Some("list")
-        );
-        assert_eq!(
-            spark.get("supported_in_api").and_then(Value::as_bool),
-            Some(true)
-        );
+    fn codex_builtin_catalog_does_not_include_retired_templates() {
+        let catalog = codex_client_model_catalog();
+        let models = catalog["models"].as_array().unwrap();
+        assert!(models.iter().any(|model| model["slug"] == "gpt-6.1-sol"));
+        for model in models {
+            let slug = model["slug"].as_str().unwrap();
+            assert!(
+                !crate::modules::codex_wakeup::is_codex_model_before_5_5(slug),
+                "retired template {slug}"
+            );
+        }
     }
 
     #[test]
@@ -2045,6 +2031,7 @@ mod tests {
         assert_eq!(
             managed_codex_model_ids(),
             vec![
+                "gpt-6.1-sol",
                 "gpt-6-astra",
                 "gpt-6-sol",
                 "gpt-6-luna",
@@ -2174,6 +2161,24 @@ mod tests {
             model.get("use_responses_lite").and_then(Value::as_bool),
             Some(true)
         );
+    }
+
+    #[test]
+    fn gpt_6_1_sol_preserves_catalog_capabilities() {
+        let catalog = build_codex_client_models_response(&["gpt-6.1-sol".into()]);
+        let model = &catalog["models"][0];
+        assert_eq!(model["slug"], "gpt-6.1-sol");
+        assert_eq!(model["display_name"], "GPT-6.1 Sol");
+        assert_eq!(model["context_window"], 272000);
+        assert_eq!(model["max_context_window"], 872000);
+        assert_eq!(model["auto_compact_token_limit"], 244800);
+        assert_eq!(model["default_reasoning_level"], "low");
+        assert_eq!(model["input_modalities"], json!(["text", "image"]));
+        assert!(model["supported_reasoning_levels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|level| level["effort"] == "ultra"));
     }
 
     #[test]
@@ -2308,8 +2313,8 @@ mod tests {
             "gpt-5.6-terra",
             "gpt-5.6-luna",
             "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
+            "gpt-6.1-sol",
+            "gpt-6-astra",
         ]
         .map(str::to_string);
         let response = build_codex_client_models_response(&model_ids);
@@ -2323,7 +2328,7 @@ mod tests {
 
         assert_eq!(
             priorities,
-            vec![Some(4), Some(7), Some(8), Some(12), Some(16), Some(23)]
+            vec![Some(4), Some(7), Some(8), Some(12), Some(0), Some(1)]
         );
     }
 

@@ -46,6 +46,16 @@ export async function getCodexConfigTomlPath(): Promise<string> {
   return await invoke('get_codex_config_toml_path');
 }
 
+export interface CodexStoragePaths {
+  providerStorePath: string;
+  configPath: string;
+  authPath: string;
+}
+
+export async function getCodexStoragePaths(): Promise<CodexStoragePaths> {
+  return await invoke('get_codex_storage_paths');
+}
+
 /** 打开当前 Codex config.toml */
 export async function openCodexConfigToml(): Promise<void> {
   return await invoke('open_codex_config_toml');

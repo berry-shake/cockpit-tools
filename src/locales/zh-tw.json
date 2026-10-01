@@ -22,7 +22,9 @@
       "storage": "無法讀取或儲存測試紀錄",
       "unsafePath": "結果路徑不安全",
       "historyMissing": "找不到測試紀錄",
-      "invalidId": "紀錄識別碼無效"
+      "invalidId": "紀錄識別碼無效",
+      "providerUnavailable": "供應商或已儲存的 API Key 無法使用。",
+      "providerChanged": "供應商位址或協定已變更，請建立新測試。"
     },
     "title": "鵜鶘測智",
     "description": "以相同訊息並行產生 HTML，由你比較結果，不自動評分。",
@@ -83,7 +85,15 @@
     "confirmClearAll": "清理全部鵜鶘測智記錄？",
     "clearAllHelp": "將永久刪除所有測試記錄與產生的檔案，且無法復原。",
     "search": "搜尋帳號",
-    "viewError": "查看錯誤"
+    "viewError": "查看錯誤",
+    "providers": "供應商",
+    "providerDescription": "比較供應商產生鵜鶘動畫的效果。",
+    "providerHelp": "選擇供應商、已儲存的 Key 和模型。請求透過獨立臨時閘道傳送，重試時重新讀取已儲存的憑證。",
+    "providerRequired": "請選擇有效的供應商、API Key 和模型。",
+    "providerModelMismatch": "模型不一致：請求 {{requested}}，回傳 {{responded}}。",
+    "providerSearch": "搜尋供應商或 Key 名稱",
+    "providerEmpty": "沒有符合的供應商",
+    "providerClear": "清除選取"
   },
   "common": {
     "dragSortHint": "拖曳左側把手調整順序，放開後自動儲存。",
@@ -3278,7 +3288,8 @@
         "medium": "中",
         "high": "高",
         "xhigh": "超高",
-        "max": "最高"
+        "max": "最高",
+        "ultra": "極致"
       },
       "scheduleQuotaResetHint": "啟用配額重置後喚醒時，系統會將自動刷新調整為每 2 分鐘執行一次。",
       "scheduleQuotaResetSummary": "配額重置後觸發",
@@ -3863,7 +3874,7 @@
         "modelAuto": "自動選擇（依目錄/探測）",
         "modelCustom": "自訂模型…",
         "modelLabel": "測試模型",
-        "modelCustomPlaceholder": "輸入模型 ID，例如 gpt-4.1-mini",
+        "modelCustomPlaceholder": "輸入模型 ID，例如 gpt-6.1-sol",
         "modelHint": "可選統一模型。留空則依各供應商目錄或探測結果自動選擇。"
       },
       "enableAndStart": "啟動",
@@ -5320,6 +5331,11 @@
       "description": "憑證已儲存，但偵測到此設定目錄的 Codex CLI 背景服務仍在執行，可能繼續使用原帳號。",
       "restartHint": "請先結束正在執行的 CLI 工作，再於終端機執行下列指令。重新啟動會中斷連線至此服務的工作階段。",
       "copyFailed": "複製失敗，請選取上方指令手動複製。"
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "賬號綁定已更改，保留當前設置"
+      }
     }
   },
   "githubCopilot": {

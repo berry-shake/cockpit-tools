@@ -188,11 +188,7 @@ fn codex_profile_dirs() -> Vec<PathBuf> {
 
 fn one_time_sanitize_state_path() -> PathBuf {
     modules::account::get_data_dir()
-        .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".antigravity_cockpit")
-        })
+        .unwrap_or_else(|_| crate::modules::data_paths::fallback_data_dir())
         .join(ONE_TIME_MIGRATION_STATE_FILE)
 }
 

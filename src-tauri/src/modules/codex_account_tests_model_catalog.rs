@@ -102,7 +102,7 @@
         assert!(!super::account_wire_api_is_responses(&account));
     }
 
-    /// 历史遗留的 Codex/GPT 内置 id（例如 gpt-5.6-sol / gpt-5.6-terra）不能再作为 DeepSeek
+    /// 历史遗留的 Codex/GPT 内置 id（例如 gpt-5.4 / gpt-5.4-mini）不能再作为 DeepSeek
     /// 的客户端可见模型名：客户端会用内置 GPT 元数据生成工具定义，DeepSeek 上游只能把工具调用
     /// 写成文本标记（DSML）返回，链路无法解析，正文里就会直接出现原始标记。
     #[test]
@@ -120,15 +120,15 @@
         account.api_wire_api = Some("responses".to_string());
         account.api_model_mappings = vec![
             CodexApiModelMapping {
-                client_model: "gpt-5.6-sol".to_string(),
+                client_model: "gpt-5.4".to_string(),
                 upstream_model: "deepseek-v4-flash".to_string(),
             },
             CodexApiModelMapping {
-                client_model: "gpt-5.6-terra".to_string(),
+                client_model: "gpt-5.4-mini".to_string(),
                 upstream_model: "deepseek-v4-pro".to_string(),
             },
             CodexApiModelMapping {
-                client_model: "gpt-5.6-luna".to_string(),
+                client_model: "gpt-5.3-codex".to_string(),
                 upstream_model: "deepseek-v4-flash".to_string(),
             },
             CodexApiModelMapping {
@@ -144,7 +144,7 @@
             .iter()
             .map(|mapping| mapping.client_model.as_str())
             .collect();
-        for legacy in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+        for legacy in ["gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex"] {
             assert!(
                 !client_models
                     .iter()
@@ -160,8 +160,8 @@
         );
         for expected in [
             "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.4-mini",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
             "deepseek-flash",
             "deepseek-v4-flash",
             "deepseek-v4-pro",
@@ -180,8 +180,8 @@
             "deepseek-flash"
         );
         assert_eq!(
-            super::resolve_account_upstream_model(&account, "gpt-5.6-sol"),
-            "gpt-5.6-sol"
+            super::resolve_account_upstream_model(&account, "gpt-5.4"),
+            "gpt-5.4"
         );
     }
 
@@ -241,7 +241,7 @@
         );
         account.api_wire_api = Some("responses".to_string());
         account.api_model_mappings = vec![CodexApiModelMapping {
-            client_model: "gpt-5.4-mini".to_string(),
+            client_model: "gpt-5.6-terra".to_string(),
             upstream_model: "custom-vision".to_string(),
         }];
 
@@ -250,7 +250,7 @@
             account
                 .api_model_mappings
                 .iter()
-                .find(|mapping| mapping.client_model.eq_ignore_ascii_case("gpt-5.4-mini"))
+                .find(|mapping| mapping.client_model.eq_ignore_ascii_case("gpt-5.6-terra"))
                 .map(|mapping| mapping.upstream_model.as_str()),
             Some("custom-vision")
         );
@@ -1446,7 +1446,7 @@ model_catalog_json = "cockpit-local-access-model-catalog.json"
 
         let catalog = fs::read_to_string(&catalog_path).expect("read official catalog");
         assert!(catalog.contains("\"slug\": \"gpt-5.5\""));
-        assert!(catalog.contains("\"slug\": \"gpt-5.4\""));
+        assert!(catalog.contains("\"slug\": \"gpt-5.6-sol\""));
         assert!(catalog.contains("DeepSeek-V4-Flash"));
         assert!(catalog.contains("apply_patch_tool_type"));
         assert!(catalog.contains("shell_command"));
@@ -1477,7 +1477,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
         .expect("write leftover models.json");
         fs::write(
             instance_dir.join("models_cache.json"),
-            r#"{"models":[{"slug":"gpt-5.4"}]}"#,
+            r#"{"models":[{"slug":"gpt-5.6-sol"}]}"#,
         )
         .expect("write stale extra-instance model cache");
 
@@ -1539,7 +1539,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
             Some("freeform")
         );
         assert!(models.iter().any(|model| {
-            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.4")
+            model.get("slug").and_then(serde_json::Value::as_str) == Some("gpt-5.6-sol")
                 && model
                     .get("display_name")
                     .and_then(serde_json::Value::as_str)
@@ -1611,7 +1611,7 @@ model_catalog_json = "cockpit-provider-model-catalog.json"
         write_account_bundle_to_dir(&instance_dir, &account).expect("write gateway bundle");
 
         let config = fs::read_to_string(instance_dir.join("config.toml")).expect("read config");
-        assert!(config.contains("model = \"gpt-5.4\""));
+        assert!(config.contains("model = \"gpt-5.6-sol\""));
         assert!(config.contains("model_catalog_json"));
         assert!(instance_dir
             .join(super::CODEX_MANAGED_MODEL_CATALOG_FILE)

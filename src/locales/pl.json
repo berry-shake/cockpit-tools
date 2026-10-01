@@ -22,7 +22,9 @@
       "storage": "Nie można odczytać ani zapisać historii testów.",
       "unsafePath": "Niebezpieczna ścieżka wyniku.",
       "historyMissing": "Nie znaleziono wpisu testu.",
-      "invalidId": "Nieprawidłowy identyfikator wpisu."
+      "invalidId": "Nieprawidłowy identyfikator wpisu.",
+      "providerUnavailable": "Dostawca lub zapisany klucz API jest niedostępny.",
+      "providerChanged": "Adres lub protokół uległ zmianie. Rozpocznij nowy test."
     },
     "title": "Test z pelikanem",
     "description": "Generuj HTML równolegle z tym samym poleceniem. Porównuj wyniki samodzielnie, bez automatycznej oceny.",
@@ -83,7 +85,15 @@
     "confirmClearAll": "Wyczyścić wszystkie testy Pelican?",
     "clearAllHelp": "Cała historia testów i wygenerowane pliki zostaną trwale usunięte. Tej operacji nie można cofnąć.",
     "search": "Szukaj kont",
-    "viewError": "Pokaż błąd"
+    "viewError": "Pokaż błąd",
+    "providers": "Dostawcy",
+    "providerDescription": "Porównaj dostawców, generując animację pelikana.",
+    "providerHelp": "Wybierz dostawcę, zapisany klucz i model. Żądania korzystają z oddzielnej bramy tymczasowej; przy ponowieniu dane dostępowe są odczytywane ponownie.",
+    "providerRequired": "Wybierz prawidłowego dostawcę, klucz API i model.",
+    "providerModelMismatch": "Inny model: żądano {{requested}}, otrzymano {{responded}}.",
+    "providerSearch": "Szukaj dostawcy lub nazwy klucza",
+    "providerEmpty": "Brak pasujących dostawców",
+    "providerClear": "Wyczyść wybór"
   },
   "common": {
     "dragSortHint": "Przeciągnij lewy uchwyt, aby zmienić kolejność. Zmiany zapiszą się po puszczeniu.",
@@ -3147,7 +3157,8 @@
         "medium": "Średni",
         "high": "Wysoki",
         "xhigh": "Bardzo wysoki",
-        "max": "Maks."
+        "max": "Maks.",
+        "ultra": "Ekstremalny"
       },
       "scheduleQuotaResetHint": "Po włączeniu wybudzania po resecie limitu automatyczne odświeżanie zostanie ustawione co 2 minuty.",
       "scheduleQuotaResetSummary": "Uruchom po resecie limitu",
@@ -3863,7 +3874,7 @@
         "modelAuto": "Auto (katalog / wykrywanie)",
         "modelCustom": "Własny model…",
         "modelLabel": "Model testowy",
-        "modelCustomPlaceholder": "ID modelu, np. gpt-4.1-mini",
+        "modelCustomPlaceholder": "ID modelu, np. gpt-6.1-sol",
         "modelHint": "Opcjonalnie: wspólny model. Puste = auto z katalogu."
       },
       "enableAndStart": "Start​",
@@ -5320,6 +5331,11 @@
       "description": "Dane logowania zapisano, ale usługa Codex CLI tego profilu nadal działa i może używać poprzedniego konta.",
       "restartHint": "Zakończ aktywne zadania CLI, a następnie uruchom to polecenie w terminalu. Restart przerwie sesje połączone z tą usługą.",
       "copyFailed": "Kopiowanie nie powiodło się. Zaznacz powyższe polecenie i skopiuj je ręcznie."
+    },
+    "proxyQuality": {
+      "errors": {
+        "bindingChanged": "Powiązanie konta się zmieniło. Zachowano bieżące ustawienie."
+      }
     }
   },
   "githubCopilot": {

@@ -37,6 +37,7 @@ pub mod codex_official_app_server;
 pub mod codex_pelican;
 pub mod codex_pelican_preview;
 pub mod codex_protocol;
+pub(crate) mod codex_provider_protocol;
 pub mod codex_proxy_activity;
 pub mod codex_proxy_desktop_router;
 pub mod codex_proxy_engine;
@@ -65,6 +66,8 @@ pub mod config;
 pub mod cursor_account;
 pub mod cursor_instance;
 pub mod cursor_oauth;
+#[path = "../../../crates/cockpit-core/src/modules/data_paths.rs"]
+pub mod data_paths;
 pub mod db;
 pub mod deferred_account_rewrite;
 pub mod diagnostics;
