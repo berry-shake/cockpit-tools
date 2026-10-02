@@ -15,6 +15,7 @@ pub(crate) mod codex_instance_gateway_watchdog;
 mod codex_instance_gateway_watchdog_state;
 mod codex_instance_model_catalog;
 mod codex_instance_routing;
+mod codex_instance_start_runtime;
 pub mod codex_pelican;
 pub mod codex_proxy_engine;
 pub mod codex_unified_proxy;
