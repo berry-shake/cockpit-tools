@@ -1,3 +1,5 @@
+import { CodexRefreshPlanScopeControl } from './CodexRefreshPlanScopeControl';
+import { CodexRequestPayloadSetting } from './codex/CodexRequestPayloadSetting';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -80,6 +82,7 @@ interface GeneralConfig {
   ui_scale: number;
   auto_refresh_minutes: number;
   codex_auto_refresh_minutes: number;
+  codex_auto_refresh_plan_types?: string[];
   claude_auto_refresh_minutes: number;
   codex_sync_wsl: boolean;
   codex_app_ui_injection_enabled?: boolean;
@@ -146,6 +149,8 @@ interface GeneralConfig {
   openclaw_auth_overwrite_on_switch: boolean;
   hermes_auth_overwrite_on_switch?: boolean;
   codex_launch_on_switch: boolean;
+  codex_auto_restore_takeover_on_launch: boolean;
+  codex_preserve_verified_external_bridge: boolean;
   antigravity_launch_on_switch: boolean;
   codex_restart_specified_app_on_switch: boolean;
   codex_local_access_entry_visible: boolean;
@@ -1567,7 +1572,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <span>
-                      primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      {t('codex.thresholds.shortCycle')} {t('quickSettings.quotaAlert.threshold', '预警阈值')}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -1617,7 +1622,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                 <div className="qs-row">
                   <div className="qs-row-label">
                     <span>
-                      secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.quotaAlert.threshold', '预警阈值')}
+                      {t('codex.thresholds.weekly')} {t('quickSettings.quotaAlert.threshold', '预警阈值')}
                     </span>
                   </div>
                   <div className="qs-row-control">
@@ -1720,13 +1725,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
               {isCodexAlert && (
                 <>
                   <div>
-                    {t(
-                      'quickSettings.codexWindow.primaryWindowMeaning',
-                      'primary_window 一般指 5 小时配额；免费用户下 primary_window 可能对应周配额，不同订阅可能不同。'
-                    )}
+                    {t('codex.thresholds.windowHint')}
                   </div>
                   <div>
-                    {`primary_window <= ${codexQuotaAlertPrimaryThresholdValue}% OR secondary_window <= ${codexQuotaAlertSecondaryThresholdValue}%`}
+                    {t('codex.thresholds.rule', {
+                      shortCycle: codexQuotaAlertPrimaryThresholdValue,
+                      weekly: codexQuotaAlertSecondaryThresholdValue,
+                    })}
                   </div>
                 </>
               )}
@@ -1865,6 +1870,15 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                     </label>
                   </div>
                 </div>
+              </div>
+            )}
+            {type === 'codex' && config && (
+              <div className="qs-section">
+                <div className="qs-section-header">{t('codex.autoRefreshScope.label')}</div>
+                <p className="codex-refresh-scope-description">{t('codex.autoRefreshScope.description')}</p>
+                <CodexRefreshPlanScopeControl value={config.codex_auto_refresh_plan_types}
+                  onChange={(value) => void saveConfig({ codex_auto_refresh_plan_types: value })} />
+                <CodexRequestPayloadSetting />
               </div>
             )}
             {type === 'codex' && (
@@ -2309,6 +2323,28 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                         '切换账号后自动启动或重启 Codex App',
                       )}
                     </div>
+                    <div className="qs-row">
+                      <div className="qs-row-label"><span>{t('settings.general.codexAutoRestoreTakeoverOnLaunch')}</span></div>
+                      <div className="qs-row-control">
+                        <label className="qs-switch">
+                          <input type="checkbox" checked={config.codex_auto_restore_takeover_on_launch}
+                            onChange={(event) => saveConfig({ codex_auto_restore_takeover_on_launch: event.target.checked })} />
+                          <span className="qs-switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="qs-hint">{t('settings.general.codexAutoRestoreTakeoverOnLaunchDesc')}</div>
+                    <div className="qs-row">
+                      <div className="qs-row-label"><span>{t('settings.general.codexPreserveExternalBridge')}</span></div>
+                      <div className="qs-row-control">
+                        <label className="qs-switch">
+                          <input type="checkbox" checked={config.codex_preserve_verified_external_bridge}
+                            onChange={(event) => saveConfig({ codex_preserve_verified_external_bridge: event.target.checked })} />
+                          <span className="qs-switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                    <div className="qs-hint">{t('settings.general.codexPreserveExternalBridgeDesc')}</div>
                   </>
                 )}
                 {type === 'antigravity' && config && (
@@ -2798,7 +2834,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            primary_window ({t('codex.quota.hourly', '5小时配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            {t('codex.thresholds.shortCycle')} {t('quickSettings.autoSwitch.threshold', '切号阈值')}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2848,7 +2884,7 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                       <div className="qs-row">
                         <div className="qs-row-label">
                           <span>
-                            secondary_window ({t('codex.quota.weekly', '周配额')}) {t('quickSettings.autoSwitch.threshold', '切号阈值')}
+                            {t('codex.thresholds.weekly')} {t('quickSettings.autoSwitch.threshold', '切号阈值')}
                           </span>
                         </div>
                         <div className="qs-row-control">
@@ -2927,13 +2963,13 @@ export function QuickSettingsPopover({ type }: QuickSettingsPopoverProps) {
                           '当任意模型配额低于阈值时，自动切换到配额最高的账号。'
                         )}
                         <div>
-                          {t(
-                            'quickSettings.codexWindow.primaryWindowMeaning',
-                            'primary_window 一般指 5 小时配额；免费用户下 primary_window 可能对应周配额，不同订阅可能不同。'
-                          )}
+                          {t('codex.thresholds.windowHint')}
                         </div>
 	                        <div>
-	                          {`primary_window <= ${codexAutoSwitchPrimaryThresholdValue}% OR secondary_window <= ${codexAutoSwitchSecondaryThresholdValue}%`}
+                          {t('codex.thresholds.rule', {
+                            shortCycle: codexAutoSwitchPrimaryThresholdValue,
+                            weekly: codexAutoSwitchSecondaryThresholdValue,
+                          })}
 	                        </div>
 		                </div>
 	                    </div>

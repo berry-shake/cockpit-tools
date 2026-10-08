@@ -59,7 +59,11 @@ fn reimport_and_pending_edits_preserve_legacy_files_metadata_and_references() {
     let guard = DataDirGuard::new();
     let old = seed("legacy-uuid");
     // A second historical same-email account may still be referenced elsewhere.
-    let sibling = seed("other-legacy-uuid");
+    let mut sibling = seed("other-legacy-uuid");
+    // Ambiguous same-email imports prefer the most recently used account.
+    // Do not depend on both fixtures being created within the same clock second.
+    sibling.last_used = old.last_used.saturating_sub(1);
+    save_account(&sibling).unwrap();
     let sibling_path = get_accounts_dir()
         .unwrap()
         .join(format!("{}.json", sibling.id));
