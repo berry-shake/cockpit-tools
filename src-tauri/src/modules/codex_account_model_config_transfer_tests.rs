@@ -341,12 +341,122 @@ fn populated_profile(env: &ModelConfigTestEnvironment) -> PathBuf {
         service_path.starts_with(env.dir.join("data")),
         "Tests must not write real user data"
     );
-    fs::write(
-        service_path,
-        serde_json::to_string_pretty(&collection).unwrap(),
+    publish_model_config_service_fixture(&service_path, &collection);
+
+    profile
+}
+
+fn publish_model_config_service_fixture(path: &Path, collection: &CodexLocalAccessCollection) {
+    // Real collection writers publish atomically. Unrelated profile reads can
+    // inspect this global service file, so a truncate/write test fixture would
+    // expose a false corrupt file to their quarantine/recovery path.
+    crate::modules::atomic_write::write_secret_string_atomic(
+        path,
+        &serde_json::to_string_pretty(collection).unwrap(),
     )
     .unwrap();
-    profile
+}
+
+#[test]
+fn model_config_service_fixture_atomic_publication_survives_parallel_recovery_reader() {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    let _lock = crate::modules::test_support::env_lock()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let env = ModelConfigTestEnvironment::new();
+    let profile = populated_profile(&env);
+    let service_path =
+        crate::modules::codex_local_access::model_config_service_file_path().unwrap();
+    let collection: CodexLocalAccessCollection =
+        serde_json::from_str(&fs::read_to_string(&service_path).unwrap()).unwrap();
+    let raw = serde_json::to_string_pretty(&collection).unwrap();
+
+    // Reproduce truncate -> parse failure -> quarantine -> write to the renamed
+    // inode on a separate path. Deliberately malformed control data must never
+    // be exposed at the global service path to unrelated parallel tests.
+    let control_path = env.dir.join("negative-control-service.json");
+    fs::write(&control_path, &raw).unwrap();
+    let mut old_writer = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&control_path)
+        .unwrap();
+    let partial = fs::read_to_string(&control_path).unwrap();
+    assert!(serde_json::from_str::<CodexLocalAccessCollection>(&partial).is_err());
+    let quarantined = crate::modules::atomic_write::quarantine_file(&control_path, "invalid-json")
+        .unwrap()
+        .unwrap();
+    old_writer.write_all(raw.as_bytes()).unwrap();
+    drop(old_writer);
+    assert!(!control_path.exists());
+    assert!(
+        model_config_read_file(&control_path).unwrap().is_none(),
+        "Snapshot sees no service despite the writer completing"
+    );
+    assert_eq!(fs::read_to_string(&quarantined).unwrap(), raw);
+    let quarantine_count = || {
+        fs::read_dir(service_path.parent().unwrap())
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains("invalid-json")
+            })
+            .count()
+    };
+    assert_eq!(quarantine_count(), 0);
+
+    // The fixture now uses the same complete-file publication boundary as the
+    // application. Concurrent read/recovery must always retain the route.
+    publish_model_config_service_fixture(&service_path, &collection);
+    let stop = AtomicBool::new(false);
+    let reads = AtomicUsize::new(0);
+    let missing = AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        let (ready, started) = std::sync::mpsc::channel();
+        let (stop, reads, missing) = (&stop, &reads, &missing);
+        scope.spawn(move || {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            if !crate::modules::codex_local_access::collection_contains_account("transfer-account")
+            {
+                missing.fetch_add(1, Ordering::SeqCst);
+            }
+            reads.fetch_add(1, Ordering::SeqCst);
+            ready.send(()).unwrap();
+            while !stop.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+                if !crate::modules::codex_local_access::collection_contains_account(
+                    "transfer-account",
+                ) {
+                    missing.fetch_add(1, Ordering::SeqCst);
+                }
+                reads.fetch_add(1, Ordering::SeqCst);
+            }
+        });
+        started
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        for _ in 0..100 {
+            publish_model_config_service_fixture(&service_path, &collection);
+        }
+        stop.store(true, Ordering::SeqCst);
+    });
+    assert!(reads.load(Ordering::SeqCst) > 0);
+    assert_eq!(missing.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        quarantine_count(),
+        0,
+        "Atomic publication must not trigger new quarantine"
+    );
+    let exported: serde_json::Value =
+        serde_json::from_str(&export_model_config(&profile).unwrap()).unwrap();
+    assert_eq!(
+        exported["apiService"]["customRoutingRules"][0]["accountId"],
+        "transfer-account"
+    );
 }
 
 #[test]

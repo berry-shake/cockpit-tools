@@ -719,7 +719,7 @@ func (s *relayServer) handleResponsesWebsocket(c *gin.Context) {
 		return
 	}
 	if !spec.ResponsesWebsockets {
-		writeAPIError(c, http.StatusBadRequest, "responses websocket is disabled", "websocket_disabled")
+		writeAPIError(c, http.StatusUpgradeRequired, "responses websocket is disabled", "websocket_disabled")
 		return
 	}
 	if s.responsesWebsocket == nil {
@@ -780,7 +780,7 @@ func (s *relayServer) handleCodexAlphaSearch(c *gin.Context) {
 	if model != "" {
 		canonical := canonicalModelForClientModel(s.manifest, spec, model)
 		if !validateClientModelVisible(s.manifest, spec, model, canonical) {
-			writeAPIError(c, http.StatusNotFound, fmt.Sprintf("模型 %s 不在当前 API Key 的可用模型范围内", model), "model_not_available")
+			writeAPIError(c, http.StatusNotFound, s.manifest.modelUnavailableMessage(model), "model_not_available")
 			return
 		}
 		model = canonical

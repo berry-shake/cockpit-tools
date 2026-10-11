@@ -26,11 +26,12 @@ export function CodexRecycleBinModal({ onClose, onRestored, maskAccountText }: P
   const mounted = useRef(true);
   const busyRef = useRef(false);
   const sequence = useRef(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
   useModalScrollLock(true);
   useEscCloseTopmost(true, () => {
     if (confirmation && !busy) { setConfirmation(null); error.clear(); }
     else onClose();
-  });
+  }, dialogRef);
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; sequence.current += 1; };
@@ -104,7 +105,7 @@ export function CodexRecycleBinModal({ onClose, onRestored, maskAccountText }: P
   const name = (account: service.CodexRecycledAccount) => maskAccountText(account.account_name || account.email || account.account_id);
   return createPortal(
     <div className="modal-overlay codex-recycle-bin-overlay">
-      <div className="modal codex-recycle-bin-modal" role="dialog" aria-modal="true" aria-labelledby="codex-recycle-bin-title" aria-busy={busy || loading}>
+      <div ref={dialogRef} className="modal codex-recycle-bin-modal" role="dialog" aria-modal="true" aria-labelledby="codex-recycle-bin-title" aria-busy={busy || loading}>
         <div className="modal-header">
           <div className="codex-recycle-bin-heading"><span className="codex-recycle-bin-icon"><Trash2 size={19} /></span><h2 id="codex-recycle-bin-title">{t('common.recycleBin.title')}</h2></div>
           <button type="button" className="btn btn-secondary icon-only" onClick={onClose} aria-label={t('common.close')}><X size={18} /></button>

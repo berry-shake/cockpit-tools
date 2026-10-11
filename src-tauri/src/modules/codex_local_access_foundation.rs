@@ -25,6 +25,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessTestResult, CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts,
     CodexLocalAccessUsageEvent, CodexLocalAccessUsageEventPage, CodexLocalAccessUsageStats,
     CodexLocalAccessUsageTrendPoint, CodexTokenBreakdown, DEFAULT_CODEX_IMAGE_GENERATION_MODEL,
+    DEFAULT_MAX_ACCOUNT_CONCURRENCY,
 };
 use crate::models::{CodexInstanceApiRoute, CodexInstanceModelRouting};
 use crate::modules::atomic_write::{
@@ -654,6 +655,8 @@ struct GatewayRuntime {
     actual_port: Option<u16>,
     actual_bind_host: Option<String>,
     sidecar_config_fingerprint: Option<String>,
+    applied_collection: Option<CodexLocalAccessCollection>,
+    applied_account_signatures: HashMap<String, String>,
     last_error: Option<String>,
     shutdown_sender: Option<watch::Sender<bool>>,
     task: Option<tokio::task::JoinHandle<()>>,

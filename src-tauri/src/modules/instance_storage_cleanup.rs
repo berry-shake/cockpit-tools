@@ -54,6 +54,8 @@ struct Registry {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RegistryEntry {
+    #[serde(default)]
+    id: Option<String>,
     user_data_dir: String,
 }
 
@@ -209,7 +211,45 @@ pub fn can_delete_registered_instance_directory(path: &Path) -> Result<bool, Str
     if !is_registered_instance_directory_owned(path, &roots, &defaults)? {
         return Ok(false);
     }
-    has_only_one_registered_owner(path, &modules::account::get_data_dir()?, &roots, &defaults)
+    let data = modules::account::get_data_dir()?;
+    let Some(owner) = modules::instance_directory_ownership::owner(path)? else {
+        return Ok(false);
+    };
+    if !has_matching_registered_owner(path, &data, &owner)? {
+        return Ok(false);
+    }
+    has_only_one_registered_owner(path, &data, &roots, &defaults)
+}
+
+fn has_matching_registered_owner(path: &Path, data: &Path, owner: &str) -> Result<bool, String> {
+    let target = path_key(path);
+    let mut found = false;
+    for entry in fs::read_dir(data).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .ends_with("instances.json")
+        {
+            continue;
+        }
+        let registry: Registry =
+            serde_json::from_slice(&fs::read(entry.path()).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        for entry in registry.instances {
+            if path_key(Path::new(&entry.user_data_dir)) == target {
+                if entry.id.as_deref() != Some(owner) {
+                    return Ok(false);
+                }
+                found = true;
+            }
+        }
+    }
+    Ok(found)
+}
+
+pub(crate) fn path_has_link_ancestor(path: &Path) -> Result<bool, String> {
+    has_link_ancestor(path)
 }
 
 // The deleting record is still present. Allow its sole exact reference, but
@@ -283,6 +323,9 @@ fn is_registered_instance_directory_owned(
     }
     let metadata = fs::symlink_metadata(path).map_err(|error| error.to_string())?;
     if !metadata.is_dir() || is_link(&metadata) {
+        return Ok(false);
+    }
+    if modules::instance_directory_ownership::owner(path)?.is_none() {
         return Ok(false);
     }
     let key = path_key(path);
@@ -924,6 +967,81 @@ mod tests {
     }
 
     #[test]
+    fn stability_imported_managed_child_unregisters_and_created_owner_requires_matching_id() {
+        let _lock = modules::test_support::env_lock().lock().unwrap();
+        let fixture = Fixture::new();
+        let previous = std::env::var_os("COCKPIT_TOOLS_TEST_DATA_DIR");
+        std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", &fixture.0);
+        struct Restore(Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                match &self.0 {
+                    Some(v) => std::env::set_var("COCKPIT_TOOLS_TEST_DATA_DIR", v),
+                    None => std::env::remove_var("COCKPIT_TOOLS_TEST_DATA_DIR"),
+                }
+            }
+        }
+        let _restore = Restore(previous);
+        let path = fixture.root().root.join("imported");
+        fs::create_dir_all(&path).unwrap();
+        fs::write(path.join("keep.txt"), "user content").unwrap();
+        let params = crate::modules::instance_store::CreateInstanceParams {
+            name: "Imported".into(),
+            user_data_dir: path.to_string_lossy().into_owned(),
+            working_dir: None,
+            extra_args: String::new(),
+            bind_account_id: None,
+            copy_source_instance_id: None,
+            init_mode: Some("existing_dir".into()),
+        };
+        let imported = modules::instance::create_instance(params.clone()).unwrap();
+        assert!(modules::instance_directory_ownership::owner(&path)
+            .unwrap()
+            .is_none());
+        modules::instance::delete_instance(&imported.id).unwrap();
+        assert_eq!(fs::read(path.join("keep.txt")).unwrap(), b"user content");
+        assert!(modules::instance::load_instance_store()
+            .unwrap()
+            .instances
+            .is_empty());
+        let created_path = fixture.root().root.join("created");
+        let created = modules::instance::create_instance(
+            crate::modules::instance_store::CreateInstanceParams {
+                name: "Created".into(),
+                user_data_dir: created_path.to_string_lossy().into_owned(),
+                init_mode: Some("empty".into()),
+                ..params
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            modules::instance_directory_ownership::owner(&created_path)
+                .unwrap()
+                .as_deref(),
+            Some(created.id.as_str())
+        );
+        assert!(has_matching_registered_owner(&created_path, &fixture.0, &created.id).unwrap());
+        assert!(!has_matching_registered_owner(
+            &created_path,
+            &fixture.0,
+            &uuid::Uuid::new_v4().to_string()
+        )
+        .unwrap());
+        // Do not invoke the system trash even for an owned temporary directory.
+    }
+
+    #[test]
+    fn stability_unmarked_direct_child_import_is_not_owned() {
+        let fixture = Fixture::new();
+        let root = fixture.root();
+        let profile = root.root.join("imported");
+        fs::create_dir_all(&profile).unwrap();
+        fs::write(profile.join("keep.txt"), "user data").unwrap();
+        assert!(!is_registered_instance_directory_owned(&profile, &[root], &[]).unwrap());
+        assert_eq!(fs::read(profile.join("keep.txt")).unwrap(), b"user data");
+    }
+
+    #[test]
     fn registered_instance_deletion_only_owns_direct_managed_children() {
         let fixture = Fixture::new();
         let root = fixture.root();
@@ -936,6 +1054,7 @@ mod tests {
         }
         fs::write(external.join("keep.txt"), "user data").unwrap();
         let roots = [root];
+        modules::instance_directory_ownership::test_mark_created(&profile);
         assert!(is_registered_instance_directory_owned(&profile, &roots, &[]).unwrap());
         for path in [
             Path::new("/"),
@@ -1050,6 +1169,7 @@ mod tests {
             root: modules::data_paths::without_compatibility_alias(&alias.join("instances/codex")),
         };
         let roots = [root];
+        modules::instance_directory_ownership::test_mark_created(&legacy_root.join("profile"));
         assert!(is_registered_instance_directory_owned(
             &alias.join("instances/codex/profile"),
             &roots,

@@ -96,6 +96,8 @@
     "providerClear": "Azzera selezione"
   },
   "common": {
+    "status": "Stato",
+    "cliQuickLaunch": "Avvia CLI",
     "requestId": "ID richiesta",
     "failureTime": "Ora dell’errore",
     "clearRecord": "Cancella",
@@ -244,7 +246,8 @@
           "statusRunning": "Importazione in corso...",
           "statusSkipped": "Saltato",
           "statusPending": "In attesa di importazione"
-        }
+        },
+        "invalidJson": "JSON non valido. Controlla il file o il contenuto incollato."
       },
       "externalImport": {
         "bundleInvalidJson": "Il pacchetto di importazione non è un JSON valido",
@@ -426,7 +429,24 @@
     "show": "Mostra",
     "configSaveTimeout": "Tempo scaduto. Aggiorna per verificare il risultato prima di riprovare.",
     "clearAll": "Deseleziona tutto",
-    "clear": "Cancella"
+    "clear": "Cancella",
+    "outputSpeed": {
+      "label": "Velocità",
+      "pageAverage": "Velocità ponderata della pagina",
+      "pageSamples": "{{count}} campioni validi",
+      "hint": "Token di uscita al secondo approssimativi, dal primo frammento alla fine dell’esecuzione, esclusa l’attesa iniziale. Servono almeno 100 token di uscita e 100 ms. I token di ragionamento seguono l’uso di uscita del fornitore senza duplicazioni; l’ingresso in cache è escluso.",
+      "unavailableHint": "Nessuna misura valida: uso o tempo mancante, trasporto non supportato, vecchio registro, risposta breve, intervallo breve, errore o annullamento. Le sessioni normali senza tempi del gateway non sono misurate.",
+      "pageHint": "Solo questa pagina: somma dei token di uscita validi divisa per la somma dei tempi osservati. Le richieste simultanee sono misurate separatamente; non è la media di tutta la cronologia.",
+      "value": "≈ {{value}} tok/s",
+      "unavailableReasons": {
+        "canceled": "Richiesta annullata; velocità non misurata.",
+        "failed": "Richiesta fallita o incompleta; velocità non misurata.",
+        "missingUsage": "Nessun utilizzo di output valido registrato.",
+        "shortOutput": "Meno di 100 token di output; velocità non misurata.",
+        "missingTiming": "Nessun tempo di output valido registrato.",
+        "shortWindow": "La finestra di output osservata è inferiore a 100 ms."
+      }
+    }
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -561,7 +581,7 @@
       "startAll": "Avviare tutte le istanze fermate?",
       "restartAll": "Riavviare tutte le istanze in esecuzione?",
       "stopAll": "Chiudere tutte le istanze?",
-      "syncThreads": "Tutte le istanze Codex verranno analizzate e i thread mancanti saranno completati automaticamente. I thread esistenti non verranno riscritti e i file dell’istanza di destinazione verranno salvati prima di qualsiasi scrittura. Continuare?"
+      "syncThreads": "Aggiunge le sessioni mancanti in tutte le istanze e accoda nuovi contenuti solo se l’istanza di destinazione è arrestata e la sua cronologia corrisponde. I byte esistenti vengono conservati. Gli aggiornamenti di cronologie divergenti o destinazioni in esecuzione vengono rifiutati. I file di destinazione vengono salvati prima della scrittura. Continuare?"
     },
     "status": {
       "running": "In esecuzione",
@@ -848,6 +868,8 @@
       "data": "Gestione dati"
     },
     "general": {
+      "errorReporting": "Diagnostica",
+      "errorReportingDesc": "Se attivata, invia dati diagnostici di avvio e interfaccia dopo la rimozione dei dati sensibili. Disattivandola si interrompe l’invio.",
       "appearance": "Aspetto",
       "language": "Lingua",
       "languageDesc": "Seleziona la lingua dell'interfaccia",
@@ -1237,7 +1259,7 @@
       "backup": {
         "title": "Gestione backup",
         "desc": "Gestisci backup pianificati, cartella dei backup ed elenco dei file in un unico posto.",
-        "modalDesc": "Configura i backup automatici, sfoglia i file salvati nella cartella di backup del progetto e ripristinali o ripuliscili qui.",
+        "modalDesc": "Gestisci le regole dei backup automatici e la cartella selezionata, con possibilità di migrazione su un’altra unità. Consulta, ripristina, scarica o pulisci i backup locali in quella cartella.",
         "statusEnabled": "Backup automatico attivo",
         "statusDisabled": "Backup automatico disattivato",
         "lastRunLabel": "Ultimo backup: {{time}}",
@@ -1255,8 +1277,10 @@
         "retentionDesc": "I backup più vecchi verranno rimossi al controllo successivo.",
         "retentionUnit": "giorni",
         "directoryTitle": "Cartella backup",
-        "directoryDesc": "I backup vengono sempre salvati nella cartella backups del progetto.",
+        "directoryDesc": "I backup pianificati e le istantanee del comportamento di Cockpit vengono salvati nella cartella selezionata. Puoi migrare questi file su un’altra unità.",
         "changeDirectory": "Cambia cartella",
+        "sourceUnavailable": "I backup esistenti non possono essere letti o contati, quindi non è possibile migrarli. Puoi cambiare solo la cartella di backup; file precedenti, account e cartella dati dell’app restano invariati. Motivo: {{error}}",
+        "loadTimeout": "Tempo di caricamento dei backup scaduto. Riprova o scegli un’altra cartella.",
         "migrating": "Migrazione...",
         "migrationConfirm": "Spostare i backup esistenti da {{oldPath}} a {{newPath}}?\n\nAnnulla cambierà cartella senza spostare i file vecchi.",
         "usageTitle": "Spazio dei backup",
@@ -1384,6 +1408,8 @@
         "accountsOnlyFile": "Questo backup contiene solo dati account. Seleziona \"Dati account\" per importarlo",
         "selectedSectionsMissing": "Il tipo di dato selezionato non è presente in questo backup",
         "unsupportedLegacyFile": "Questo formato di backup account legacy non è riconosciuto",
+        "codexTopLayoutInvalid": "Il backup contiene una disposizione delle schede non valida. La configurazione non è stata importata.",
+        "codexTopLayoutImportFailed": "Le altre impostazioni sono state importate, ma non è stato possibile salvare la disposizione delle schede. Riprova l’importazione.",
         "unsupportedVersion": "Questa versione dell'app non supporta quella versione del pacchetto"
       }
     },
@@ -2107,6 +2133,10 @@
       "accountsHint": "Seleziona più account per il test.",
       "start": "Avvia test",
       "testing": "Test in corso..."
+    },
+    "confirmation": {
+      "description": "Conferma il risveglio «{{name}}» per {{count}} account. Annullando, chiudendo o lasciando scadere non verrà inviata alcuna richiesta.",
+      "expired": "Questa conferma è scaduta o terminata. Chiudi la finestra."
     }
   },
   "update_notification": {
@@ -2161,6 +2191,16 @@
     "other_group": "Altri modelli"
   },
   "codex": {
+    "instance": {
+      "errors": {
+        "threadSyncWorkerFailed": "Sincronizzazione delle sessioni non riuscita: {{error}}",
+        "threadSyncBusy": "La sincronizzazione delle sessioni Codex è in corso. Riprova tra poco.",
+        "threadSyncTargetRunning": "L’istanza Codex di destinazione è in esecuzione. Chiudila prima di aggiornare le sessioni esistenti.",
+        "threadSyncTargetChanged": "La sessione di destinazione è cambiata dopo l’anteprima. Sincronizza di nuovo; i nuovi contenuti sono stati conservati.",
+        "threadSyncTargetReplaced": "Il file della sessione di destinazione è stato sostituito. Visualizza di nuovo l’anteprima della sincronizzazione.",
+        "threadSyncFileBusy": "Un’altra sincronizzazione sta usando la sessione di destinazione. Riprova tra poco."
+      }
+    },
     "thresholds": {
       "shortCycle": "Quota breve",
       "weekly": "Quota settimanale",
@@ -2295,9 +2335,9 @@
         "autoDisabled": "Sincronizzazione automatica dei record di tutte le istanze disattivata",
         "autoEnabled": "Sincronizzazione automatica dei record di tutte le istanze attivata",
         "autoTooltip": "Sincronizza automaticamente i record di tutte le istanze",
-        "autoDesc": "Disattivata mantiene separati i record delle istanze multiple. Se attiva, l’avvio o la chiusura di un’istanza unisce automaticamente i record locali solo dopo l’arresto di tutte le istanze Codex.",
+        "autoDesc": "Se disattivata, le cronologie delle istanze restano separate. Se attivata, l’avvio o l’arresto di un’istanza sincronizza le sessioni mancanti e le aggiunte compatibili solo quando tutte le istanze Codex sono arrestate. I byte esistenti vengono conservati.",
         "closeFirst": "Chiudi tutte le istanze Codex prima di sincronizzare i record, per evitare che le istanze in esecuzione riscrivano record obsoleti.",
-        "confirmMessage": "I record delle sessioni locali verranno sincronizzati completamente tra tutte le istanze Codex. Le sessioni con lo stesso ID saranno unite a livello di evento e, prima della scrittura, verrà eseguito il backup dei file chiave di destinazione e dei vecchi file di sessione. Continuare?",
+        "confirmMessage": "Aggiunge le sessioni mancanti in tutte le istanze e accoda nuovi contenuti solo se l’istanza di destinazione è arrestata e la sua cronologia corrisponde. I byte esistenti vengono conservati. Gli aggiornamenti di cronologie divergenti o destinazioni in esecuzione vengono rifiutati. I file di destinazione vengono salvati prima della scrittura. Continuare?",
         "needTwo": "Servono almeno due istanze per sincronizzare i record",
         "settingsSection": "Impostazioni di sincronizzazione",
         "settingsSubtitle": "Gestisci la sincronizzazione dei record tra più istanze Codex",
@@ -2381,6 +2421,7 @@
     "switched": "Passato a {{email}}",
     "switchFailed": "Cambio non riuscito: {{error}}",
     "authError": {
+      "refreshFailed": "Aggiornamento del Token non riuscito: {{error}}",
       "badge": "Problema autorizzazione",
       "refreshTokenReused": "L’autorizzazione Codex non è valida: il refresh_token è già stato usato da un altro client o da un’altra istanza. Accedi di nuovo ed evita di aggiornare lo stesso account contemporaneamente da Codex ufficiale, altre istanze o strumenti esterni.",
       "refreshTokenExpired": "L’autorizzazione di accesso Codex è scaduta e non può essere aggiornata automaticamente. Accedi di nuovo all’account Codex.",
@@ -2566,7 +2607,8 @@
         "audioTooLarge": "Le richieste audio non devono superare 26 MiB.",
         "audioNotSupported": "Questo account OAuth supporta solo la trascrizione. Usa un fornitore con API Key per le altre operazioni audio.",
         "audioUnavailable": "L’inoltro audio non è disponibile.",
-        "audioUpstreamFailed": "La richiesta audio al fornitore non è riuscita."
+        "audioUpstreamFailed": "La richiesta audio al fornitore non è riuscita.",
+        "modelNotAvailable": "Il modello {{model}} non è disponibile per questa API Key."
       },
       "testRateLimited": "Il servizio è raggiungibile, ma l’upstream è limitato o la quota è esaurita: {{detail}}.",
       "testHttpFailed": "Il servizio è raggiungibile, ma la richiesta ha restituito HTTP {{status}}: {{detail}}.",
@@ -3259,7 +3301,7 @@
       "confirm": {
         "title": "Sposta nel cestino",
         "message": "Le sessioni selezionate verranno spostate nel cestino dalle rispettive istanze, così potranno essere ripristinate in seguito. Le istanze in esecuzione potrebbero richiedere un riavvio prima che la modifica sia visibile. Continuare?",
-        "syncMessage": "I thread mancanti e i relativi dati di sessione verranno sincronizzati in tutte le istanze. Il contenuto esistente non verrà riscritto e i file dell’istanza di destinazione verranno salvati prima di qualsiasi scrittura. Continuare?",
+        "syncMessage": "Aggiunge le sessioni mancanti in tutte le istanze e accoda nuovi contenuti solo se l’istanza di destinazione è arrestata e la sua cronologia corrisponde. I byte esistenti vengono conservati. Gli aggiornamenti di cronologie divergenti o destinazioni in esecuzione vengono rifiutati. I file di destinazione vengono salvati prima della scrittura. Continuare?",
         "repairVisibilityMessage": "Aggiorna i record della state DB ufficiale di Codex che controllano la barra laterale delle sessioni. I file state DB vengono salvati prima della scrittura."
       },
       "empty": {
@@ -3340,7 +3382,7 @@
           "pruneBackups": "Pulizia vecchi backup...",
           "done": "Riparazione completata",
           "writeSqliteProvider": "Scrittura visibilità SQLite per {{instance}}...",
-          "writeRolloutFiles": "Scrittura dei vecchi file di sessione...",
+          "writeRolloutFiles": "Correzione degli orari dei file di sessione per {{instance}}...",
           "writeSqliteTimestamps": "Correzione tempi SQLite per {{instance}}...",
           "writeSessionIndex": "Scrittura di session_index..."
         },
@@ -3351,9 +3393,9 @@
         "providerLoadFailed": "Impossibile caricare i provider: {{error}}",
         "modeTitle": "Modalità riparazione",
         "modeQuick": "Riparazione rapida",
-        "modeQuickDesc": "Corregge lo state DB ufficiale e la prima riga dei metadati della sessione. Ideale dopo normali cambi account.",
+        "modeQuickDesc": "Normalizza i provider nel database ufficiale e negli indici delle sessioni. Conserva i file rollout. Per i normali cambi di account.",
         "modeDeep": "Riparazione completa",
-        "modeDeepDesc": "Migra tutti i dati storici del provider e ripara cataloghi, spazi di lavoro e indici dei sottoagenti. Chiudi prima l’istanza di destinazione.",
+        "modeDeepDesc": "Ripara provider storici, cataloghi, spazi di lavoro e indici dei sottoagenti. Conserva i file rollout. Chiudi prima l’istanza di destinazione.",
         "scopeTitle": "Ambito sessioni",
         "scopeAll": "Tutte le sessioni",
         "scopeAllDesc": "Ripara {{count}} sessione/i nell’elenco corrente.",
@@ -3385,7 +3427,7 @@
         "previewFailedWithError": "Anteprima della riparazione sessioni non riuscita: {{error}}",
         "confirmRepair": "Conferma riparazione",
         "title": "Ripara cronologia",
-        "description": "Migra le sessioni storiche al provider corrente dell’istanza di destinazione e ripara file di sessione, indici SQLite, catalogo locale e stato degli spazi di lavoro. Prima viene creato un backup locale.",
+        "description": "Normalizza i provider negli indici SQLite, nel catalogo delle sessioni e negli spazi di lavoro. I file rollout mantengono tutti i byte originali; vengono corretti solo gli orari. Prima viene creato un backup locale.",
         "stopInstanceHint": "Chiudi completamente l’istanza Codex App/ChatGPT selezionata prima della riparazione completa. Puoi comunque visualizzare prima l’anteprima.",
         "encryptedContentWarning": "È stata rilevata cronologia cifrata da un altro provider o account. I metadati possono essere migrati, ma continuare o compattare tali sessioni potrebbe non riuscire; torna al provider/account originale o avvia una nuova sessione."
       },
@@ -4224,9 +4266,12 @@
       "standard": "Normale",
       "standardDesc": "Velocità predefinita, uso normale",
       "fast": "Rapida",
-      "fastDesc": "Velocità 1,5x, uso maggiore",
+      "fastDesc": "Più rapido, costi maggiori",
       "saveSuccess": "Velocità aggiornata",
-      "saveFailed": "Impossibile salvare la velocità: {{error}}"
+      "saveFailed": "Impossibile salvare la velocità: {{error}}",
+      "loadFailed": "Caricamento della velocità non riuscito: {{error}}",
+      "apiHint": "Usato se la richiesta API non indica un livello; il livello esplicito del client ha priorità. Rapido aumenta consumo o costo secondo modello e fornitore.",
+      "launchHint": "Salvato al cambio account e all’avvio da Cockpit. Riavvia il client attivo. Le nuove chat usano questo valore; modifica nel client la velocità delle chat esistenti."
     },
     "apiService": {
       "inspection": {
@@ -4410,7 +4455,25 @@
         "reasoningEffortValue": "Rag. {{effort}}",
         "serviceTier": "Livello di servizio",
         "serviceTierValue": "Livello {{tier}}",
-        "upstreamModel": "Modello inviato"
+        "upstreamModel": "Modello inviato",
+        "columns": {
+          "time": "Ora",
+          "model": "Modello",
+          "result": "Esito",
+          "source": "Origine",
+          "account": "Account",
+          "tokens": "Token",
+          "cost": "Valore stimato",
+          "performance": "Prestazioni",
+          "proxy": "Proxy",
+          "requestId": "ID richiesta",
+          "actions": "Azioni"
+        },
+        "columnSettings": "Colonne",
+        "tokenInput": "Ingresso",
+        "tokenOutput": "Uscita",
+        "tokenCache": "Cache",
+        "tokenTotal": "Totale"
       },
       "timeouts": {
         "entryLabel": "Avanzate",
@@ -4490,6 +4553,11 @@
         "duplicate": "I modelli di richiesta devono essere unici",
         "saveSuccess": "Mapping modelli dell'account salvati",
         "cardCount": "{{count}} mappati"
+      },
+      "recovery": {
+        "progress": "Ripristino della configurazione degli account ({{attempt}}/{{total}})",
+        "partialUnavailable": "Alcuni account non sono disponibili. Gli altri possono ancora gestire le richieste. Verifica gli account associati alle Key.",
+        "unavailable": "La configurazione degli account va ripristinata. Verifica gli account associati alle Key e riprova."
       }
     },
     "apiKey": {
@@ -4717,6 +4785,12 @@
       "restartFailed": "Riavvio del gateway non riuscito: {{error}}"
     },
     "proxy": {
+      "legacyBoundHint": "Il proxy dell’account collegato in precedenza resta attivo. Salvando di nuovo si applica la modalità selezionata.",
+      "boundAccountUnavailable": "L’account collegato non è disponibile. Scegli di nuovo un proxy.",
+      "boundProxyUnavailable": "L’account collegato non ha un proxy disponibile. Scegline uno di nuovo.",
+      "sourceUnavailable": "La sorgente del proxy o il nodo non è disponibile. Selezionalo di nuovo.",
+      "operationTimeout": "L’operazione del proxy è scaduta. Riprova.",
+      "cardScopeHint": "Il client desktop Codex avviato usa il proxy di questa scheda. Le connessioni dei gateway dei modelli ai fornitori mantengono i propri percorsi.",
       "display": {
         "title": "Vista proxy",
         "compact": "Compatta",
@@ -4832,7 +4906,7 @@
         "followYes": "Sì",
         "followNo": "Non segue",
         "empty": "Nessun account può usare un proxy di uscita",
-        "emptyHint": "Aggiungi prima un account OAuth normale, poi configura qui la sua uscita.",
+        "emptyHint": "Aggiungi un account OAuth o API, oppure attiva la scheda del servizio API, quindi configura il percorso qui.",
         "loadFailed": "Impossibile caricare i dati di uscita",
         "loadFailedHint": "Lettura delle risorse proxy locali non riuscita; riprova quando vuoi. I collegamenti indipendenti degli account continuano a funzionare."
       },
@@ -4958,7 +5032,7 @@
       "disableAction": "Rimuovi proxy",
       "setIndependent": "Proxy dedicato",
       "disabledHint": "Ignora i proxy individuali e condivisi e tenta connessioni dirette.",
-      "disabledWarning": "L’accesso diretto potrebbe non riuscire. La modifica vale per le nuove connessioni dei client con inoltro locale; gli altri client aperti richiedono un riavvio. Le connessioni esistenti possono mantenere il percorso precedente.",
+      "disabledWarning": "La connessione diretta potrebbe non raggiungere il servizio. Riavvia Codex per desktop per collegarti direttamente senza il relay locale di Cockpit. Fino ad allora, i client inoltrati tentano l’accesso diretto solo per le nuove connessioni; quelle esistenti possono mantenere il percorso precedente.",
       "exitIp": "IP di uscita",
       "sessionHistory": "Attività",
       "sessionHistoryHint": "Controlla lo stato ogni 5 secondi. Conserva solo lo stato iniziale e le variazioni di questa anteprima, fino a 20 voci, eliminate alla chiusura. Non è un registro storico completo.",
@@ -5017,16 +5091,16 @@
       "modeDefaultHint": "Questo account non usa un proxy e mantiene l'uscita predefinita.",
       "modeStaleHint": "La sorgente o il nodo associato non è più disponibile. Selezionalo di nuovo.",
       "management": "Gestione proxy",
-      "managementHint": "Uscita dedicata agli account OAuth. Il proxy di sistema resta invariato.",
+      "managementHint": "Imposta proxy per le schede degli account OAuth, API e del servizio API senza modificare il proxy di sistema. Nelle schede API si applica al client desktop avviato; i gateway dei modelli mantengono i propri percorsi.",
       "emptyTitle": "Una connessione dedicata al tuo account",
-      "emptyDescription": "Nessun account OAuth compatibile. Aggiungine uno dalla panoramica degli account, poi torna qui per associare un proxy e verificarne l’uscita.",
+      "emptyDescription": "Nessuna scheda account supportata disponibile. Aggiungi un account OAuth o API, oppure attiva la scheda del servizio API, quindi scegli un proxy qui.",
       "search": "Cerca account",
       "filter": "Associazione",
       "filter_all": "Tutti",
       "filter_bound": "Associati",
       "filter_unbound": "Non associati",
       "noMatches": "Nessun account corrispondente",
-      "oauthOnly": "Account OAuth",
+      "oauthOnly": "Scheda account",
       "saved": "Salvato",
       "hiddenSummary": "Credenziali nascoste",
       "inputMode": "Metodo di inserimento",
@@ -5057,7 +5131,7 @@
       "action": "Server proxy",
       "boundHint": "Associato; connessione non verificata",
       "unboundHint": "Nessun proxy configurato per l’account",
-      "unsupportedAccount": "Disponibile solo per account OAuth normali",
+      "unsupportedAccount": "Questa impostazione supporta le schede degli account OAuth ordinari, API e del servizio API.",
       "invalidUrl": "Indirizzo proxy non valido",
       "unsupportedProtocol": "Questo protocollo proxy non è ancora supportato",
       "saveFailed": "Impossibile salvare il proxy",
@@ -5168,14 +5242,17 @@
         "chooseMember": "Scegli membro del gruppo",
         "chooseAccount": "Scegli account",
         "bind": "Collega account",
-        "noAccounts": "Aggiungi un account OAuth normale per collegarlo. Puoi già testare l’uscita.",
+        "noAccounts": "Aggiungi un account OAuth o API, oppure attiva la scheda del servizio API per assegnare un proxy. Puoi già testare un percorso.",
         "autoGroupHint": "Usa tutto il gruppo senza fissare un nodo. Sceglie in base alla latenza; l’uscita può cambiare.",
         "policyGroupHint": "Usa tutto il gruppo senza fissare un nodo. La sua regola seleziona l’uscita, che può cambiare.",
         "selectGroupHint": "Scegli un membro del gruppo oppure direttamente un nodo per mantenerlo fisso.",
         "chooseResource": "Scegli risorsa",
         "unsupported": "Non supportato",
         "invalidInput": "Inserisci un nome e un URL, link di nodo o configurazione proxy validi.",
-        "downloadFailed": "Impossibile scaricare l’abbonamento. Controlla indirizzo e connessione; i reindirizzamenti tra origini non sono supportati.",
+        "downloadFailed": "Download dell’abbonamento non riuscito. Controlla la rete e le impostazioni del proxy, poi riprova.",
+        "downloadRedirect": "Download interrotto per un reindirizzamento verso un’altra origine o troppi reindirizzamenti.",
+        "downloadDenied": "Il server dell’abbonamento ha negato l’accesso (HTTP 401/403). Controlla il link e la sua validità.",
+        "downloadTls": "Negoziazione TLS o verifica del certificato dell’abbonamento non riuscita. Controlla la rete e le impostazioni del proxy.",
         "timeout": "Tempo scaduto. Aggiorna per verificare il risultato prima di riprovare.",
         "tooLarge": "Il contenuto o il numero di risorse supera il limite. Riduci l’abbonamento.",
         "busy": "Un’attività è in corso o viene salvata. Aggiorna tra poco.",
@@ -5313,7 +5390,7 @@
         "assign": "Assegna proxy",
         "specific": "Account selezionati",
         "shared": "Proxy condiviso",
-        "sharedHint": "Gli account Codex OAuth senza proxy proprio usano questo proxy, inclusi gli account compatibili aggiunti in seguito. Le impostazioni individuali esistenti restano attive. Sono esclusi gli account impostati esplicitamente su «Senza proxy».",
+        "sharedHint": "Le schede supportate senza proxy proprio usano questo proxy, incluse quelle nuove. Le impostazioni individuali e Nessun proxy hanno la precedenza. Le schede API lo usano per il client desktop; i gateway dei modelli mantengono i propri percorsi.",
         "apply": "Assegna"
       },
       "managerResources": {
@@ -5340,7 +5417,7 @@
         "follow": "Usa condiviso",
         "followHint": "Usa il proxy condiviso o la rete predefinita del client se il proxy è disattivato.",
         "independentHint": "Modifica solo questo account, con priorità sull’impostazione condivisa.",
-        "scope": "Disponibile per gli account Codex OAuth compatibili. Gli account con chiave API e i fornitori personalizzati non sono supportati.",
+        "scope": "Account OAuth, API e servizio API",
         "followConfirm": "Rimuovi i proxy individuali da {{count}} account. Useranno il proxy condiviso se attivo, altrimenti la rete predefinita del client."
       },
       "managerUnified": {
@@ -5386,6 +5463,8 @@
       "noChanges": "Nessuna modifica da salvare",
       "topLayoutTitle": "Layout superiore",
       "topLayoutDesc": "Trascina gli elementi o usa le frecce per riordinarli. I primi cinque appaiono in alto, gli altri nello stesso ordine in Altro.",
+      "topLayoutSaveFailed": "La disposizione delle schede non è stata salvata. Il tuo ordine è attivo per ora. Riprova; riavviando potrebbe tornare l’ordine precedente.",
+      "topLayoutReadFailed": "Impossibile leggere la disposizione salvata delle schede. L’ordine attuale resta disponibile. Riprova a caricarla o modifica la disposizione per salvarla.",
       "locationTop": "In alto",
       "locationMore": "Altro",
       "topLayoutHint": "Il pulsante «Altro» resta fisso a destra e non può essere spostato o nascosto.",

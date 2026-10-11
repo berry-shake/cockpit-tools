@@ -128,6 +128,18 @@ fn quarantine_local_access_logs_db(
     Ok(backup_path)
 }
 
+fn request_logs_output_generation_select(conn: &Connection) -> Result<&'static str, String> {
+    request_logs_has_column(conn, "output_generation_ms")
+        .map(|present| {
+            if present {
+                "output_generation_ms"
+            } else {
+                "NULL AS output_generation_ms"
+            }
+        })
+        .map_err(|error| format!("检查输出计时列失败: {error}"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RequestLogsSchemaState {
     MissingTable,
@@ -173,6 +185,7 @@ fn create_request_logs_table(
             error_message TEXT NOT NULL DEFAULT '',
             latency_ms INTEGER NOT NULL DEFAULT 0,
             first_response_ms INTEGER,
+            output_generation_ms INTEGER,
             input_tokens INTEGER NOT NULL DEFAULT 0,
             output_tokens INTEGER NOT NULL DEFAULT 0,
             total_tokens INTEGER NOT NULL DEFAULT 0,
@@ -276,6 +289,11 @@ fn open_local_access_logs_db_once(
     )?;
     ensure_request_logs_column(&conn, "latency_ms", "latency_ms INTEGER NOT NULL DEFAULT 0")?;
     ensure_request_logs_column(&conn, "first_response_ms", "first_response_ms INTEGER")?;
+    ensure_request_logs_column(
+        &conn,
+        "output_generation_ms",
+        "output_generation_ms INTEGER",
+    )?;
     ensure_request_logs_column(
         &conn,
         "input_tokens",
@@ -814,6 +832,12 @@ fn insert_local_access_usage_event(
         )
         .map_err(|e| format!("写入 API 服务请求日志官方账号 ID 失败: {}", e))?;
     }
+    ensure_request_logs_column(conn, "output_generation_ms", "output_generation_ms INTEGER")
+        .map_err(|error| format!("添加输出计时列失败: {error}"))?;
+    conn.execute(
+        "UPDATE request_logs SET output_generation_ms=COALESCE(?1,output_generation_ms) WHERE event_key=?2",
+        params![event.output_generation_ms.map(|value| value.min(i64::MAX as u64) as i64),local_access_log_event_key(event)],
+    ).map_err(|error| format!("保存输出计时失败: {error}"))?;
     ensure_request_logs_column(conn, "first_response_ms", "first_response_ms INTEGER")
         .map_err(|error| format!("添加请求首响列失败: {error}"))?;
     let first_response_ms = event
@@ -1654,6 +1678,11 @@ fn usage_event_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CodexLocalA
             .ok()
             .flatten()
             .and_then(|value| u64::try_from(value).ok()),
+        output_generation_ms: row
+            .get::<_, Option<i64>>("output_generation_ms")
+            .ok()
+            .flatten()
+            .and_then(|value| u64::try_from(value).ok()),
         input_tokens: read_u64("input_tokens")?,
         output_tokens: read_u64("output_tokens")?,
         total_tokens: read_u64("total_tokens")?,
@@ -1700,6 +1729,7 @@ where
     };
     let proxy_route_select = request_logs_proxy_route_select(conn)?;
     let first_response_select = request_logs_first_response_select(conn)?;
+    let output_generation_select = request_logs_output_generation_select(conn)?;
     let load_sql = format!(
         r#"
             SELECT
@@ -1718,7 +1748,7 @@ where
                 {service_tier_select},
                 {reasoning_effort_select},
                 {proxy_route_select},
-            {first_response_select},
+            {first_response_select}, {output_generation_select},
                 turn_state_length,
                 turn_state_class,
                 success,
@@ -2112,6 +2142,7 @@ fn query_local_access_usage_events_blocking(
     };
     let proxy_route_select = request_logs_proxy_route_select(&conn)?;
     let first_response_select = request_logs_first_response_select(&conn)?;
+    let output_generation_select = request_logs_output_generation_select(&conn)?;
     let list_sql = format!(
         r#"
         SELECT
@@ -2130,7 +2161,7 @@ fn query_local_access_usage_events_blocking(
             {service_tier_select},
             {reasoning_effort_select},
             {proxy_route_select},
-            {first_response_select},
+            {first_response_select}, {output_generation_select},
             turn_state_length,
             turn_state_class,
             success,
@@ -2256,10 +2287,11 @@ fn query_local_access_stats_window_blocking(
     };
     let proxy_route_select = request_logs_proxy_route_select(&conn)?;
     let first_response_select = request_logs_first_response_select(&conn)?;
+    let output_generation_select = request_logs_output_generation_select(&conn)?;
     let sql = format!(
         r#"SELECT timestamp, request_id, account_id, email, api_key_id, api_key_label,
                   client_instance_id, model_id, requested_model, upstream_model, gateway_mode, request_kind, {service_tier_select}, {reasoning_effort_select}, {proxy_route_select},
-            {first_response_select}, turn_state_length, turn_state_class, success,
+            {first_response_select}, {output_generation_select}, turn_state_length, turn_state_class, success,
                   http_status, error_category, error_message, latency_ms, input_tokens,
                   output_tokens, total_tokens, cached_tokens, reasoning_tokens, token_breakdown_json,
                   estimated_cost_usd, model_pricing_version, input_usd_per_million,
@@ -2677,6 +2709,7 @@ fn append_usage_event_with_meta(
         error_message: error_message.unwrap_or_default().trim().to_string(),
         latency_ms,
         first_response_ms: cached_request_first_response(request_id),
+        output_generation_ms: None,
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
         total_tokens: usage.total_tokens,

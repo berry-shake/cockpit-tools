@@ -293,6 +293,8 @@ export interface CodexLocalAccessUsageEvent {
   latencyMs: number;
   /** Time to the first upstream response fragment; absent on older records. */
   firstResponseMs?: number | null;
+  /** Observed streaming window for this successful upstream attempt; never inferred for older logs. */
+  outputGenerationMs?: number | null;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -471,6 +473,9 @@ export interface CodexLocalAccessState {
   preparing: boolean;
   preparationTotal: number;
   preparationCompleted: number;
+  recovering?: boolean;
+  recoveryAttempt?: number;
+  recoveryTotal?: number;
   refreshingAccounts: boolean;
   accountRefreshTotal: number;
   accountRefreshCompleted: number;

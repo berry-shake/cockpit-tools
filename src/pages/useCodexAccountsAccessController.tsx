@@ -46,6 +46,7 @@ import { CODEX_BATCH_IMPORT_SESSION_STORAGE_KEY, DEFAULT_CODEX_API_BASE_URL, DEF
 import { useCodexApiKeyUsageFormatting } from "./codexApiKeyUsageFormatting";
 import { renderCodexApiKeyUsagePanel } from "./codexApiKeyUsagePanel";
 import type { CodexAccountsAccessControllerContext } from "./codexAccountsAccessControllerContract";
+import { DEFAULT_OAUTH_QUOTA_RESERVE_PERCENT, resolveOAuthBindingQuotaReserve } from "./codexAccountsControllerModel";
 
 /** 封装 useCodexAccountsPageController 的 useCodexAccountsAccessController 业务域状态与动作。 */
 export function useCodexAccountsAccessController(context: CodexAccountsAccessControllerContext) {
@@ -319,22 +320,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
   
     const openLocalAccessOAuthBindingModal = useCallback(
       (options?: { autoSwitch?: boolean }) => {
-        const persistedQuotaReserve =
-          localAccessCollection?.boundOauthQuotaReserve ?? null;
-        const hourlyPercent = persistedQuotaReserve
-          ? parseOAuthQuotaReservePercent(
-              String(persistedQuotaReserve.hourlyPercent),
-            )
-          : null;
-        const weeklyPercent = persistedQuotaReserve
-          ? parseOAuthQuotaReservePercent(
-              String(persistedQuotaReserve.weeklyPercent),
-            )
-          : null;
-        const quotaReserve =
-          hourlyPercent !== null && weeklyPercent !== null
-            ? { hourlyPercent, weeklyPercent }
-            : null;
+        const quotaReserve = resolveOAuthBindingQuotaReserve(localAccessCollection);
         setOauthBindingTargetKind("local_access");
         setOauthBindingAccountId(null);
         setOauthBindingSelectedAccountId(
@@ -353,6 +339,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       },
       [
         boundLocalAccessOAuthAccount,
+        localAccessCollection?.boundOauthAccountId,
         localAccessCollection?.boundOauthQuotaReserve,
         setOauthBindingError,
       ],
@@ -362,12 +349,12 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       setOauthBindingHourlyReserveDraft(
         oauthBindingQuotaReserve
           ? String(oauthBindingQuotaReserve.hourlyPercent)
-          : "",
+          : String(DEFAULT_OAUTH_QUOTA_RESERVE_PERCENT),
       );
       setOauthBindingWeeklyReserveDraft(
         oauthBindingQuotaReserve
           ? String(oauthBindingQuotaReserve.weeklyPercent)
-          : "",
+          : String(DEFAULT_OAUTH_QUOTA_RESERVE_PERCENT),
       );
       setOauthBindingQuotaReserveFieldErrors({});
       setOauthBindingQuotaReserveEditorOpen(true);
@@ -763,6 +750,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           await codexInstanceStore.updateInstance({
             instanceId: launchPreviewInstanceId,
             bindAccountId,
+            appSpeed: launchAccount.app_speed ?? "standard",
             deferBindAccountApplication: true,
           });
           if (launchAfterSwitch) {

@@ -65,23 +65,10 @@ async fn disabling_proxy_preserves_entry_and_live_connection_but_new_connections
             .unwrap();
         assert!(saved.egress_proxy_disabled);
         assert!(saved.egress_proxy_url.is_none());
-        assert!(
-            codex_account::load_account(&account.id)
-                .unwrap()
-                .egress_proxy_disabled
-        );
-        assert_eq!(ensure(&account.id).await.unwrap(), Some(entry.clone()));
-        assert_eq!(
-            codex_proxy_runtime::status(&account.id)
-                .await
-                .unwrap()
-                .proxy_source,
-            "disabled"
-        );
-        assert!(codex_proxy_runtime::desktop_target(&account.id)
-            .await
-            .unwrap()
-            .is_none());
+        assert!(codex_account::load_account(&account.id).unwrap().egress_proxy_disabled);
+        assert!(ensure(&account.id).await.unwrap().is_none(), "new launches leave the old local entry behind");
+        assert_eq!(codex_proxy_runtime::status(&account.id).await.unwrap().proxy_source, "disabled");
+        assert!(codex_proxy_runtime::desktop_target(&account.id).await.unwrap().is_none());
         existing.write_all(b"after!").await.unwrap();
         existing.read_exact(&mut bytes).await.unwrap();
         assert_eq!(&bytes, b"after!", "existing connection retains its route");
@@ -128,19 +115,9 @@ async fn disabled_mode_can_be_saved_and_started_with_unreadable_shared_config() 
         .await
         .unwrap();
     assert!(saved.egress_proxy_disabled);
-    assert!(ensure(&account.id).await.unwrap().is_some());
-    assert!(codex_proxy_runtime::save_binding_with_mode(
-        account.id.clone(),
-        Some("http://127.0.0.1:9".into()),
-        true
-    )
-    .await
-    .is_err());
-    assert!(
-        codex_account::load_account(&account.id)
-            .unwrap()
-            .egress_proxy_disabled
-    );
+    assert!(ensure(&account.id).await.unwrap().is_none());
+    assert!(codex_proxy_runtime::save_binding_with_mode(account.id.clone(), Some("http://127.0.0.1:9".into()), true).await.is_err());
+    assert!(codex_account::load_account(&account.id).unwrap().egress_proxy_disabled);
 }
 
 #[tokio::test]

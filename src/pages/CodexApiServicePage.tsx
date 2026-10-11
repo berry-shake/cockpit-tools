@@ -28,6 +28,7 @@ import {
   reconcileCodexApiKeyScopeAccountIds,
 } from "../utils/codexApiKeyAccountScope";
 import { resolveCodexApiServiceCompatibilityBaseUrls } from "../utils/codexApiServiceCompatibility";
+import { clearRecoveredCodexGatewayError } from "../utils/codexGatewayKeyRecovery";
 import * as codexLocalAccessService from "../services/codexLocalAccessService";
 import * as codexInstanceService from "../services/codexInstanceService";
 import {
@@ -718,6 +719,9 @@ export function useCodexApiServicePageController() {
   const [sidecarRestarting, setSidecarRestarting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (state) setError((current) => clearRecoveredCodexGatewayError(current, state));
+  }, [state]);
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const [keyVisible, setKeyVisible] = useState(false);
   const [portInput, setPortInput] = useState("");
@@ -774,7 +778,7 @@ export function useCodexApiServicePageController() {
   const [maxConcurrentImageRequestsDraft, setMaxConcurrentImageRequestsDraft] =
     useState("1");
   const [maxAccountConcurrencyDraft, setMaxAccountConcurrencyDraft] =
-    useState("0");
+    useState("2");
   const [accountConcurrencyWaitDraft, setAccountConcurrencyWaitDraft] =
     useState("120");
   const [requestLogPage, setRequestLogPage] = useState(1);
@@ -1539,7 +1543,7 @@ export function useCodexApiServicePageController() {
       String(collection?.maxConcurrentImageRequests ?? 1),
     );
     setMaxAccountConcurrencyDraft(
-      String(collection?.maxAccountConcurrency ?? 0),
+      String(collection?.maxAccountConcurrency ?? 2),
     );
     setAccountConcurrencyWaitDraft(
       formatSeconds(collection?.accountConcurrencyWaitMs ?? 120 * 1000),
@@ -1753,7 +1757,7 @@ export function useCodexApiServicePageController() {
       await fetchCurrentAccount();
       await refreshApiServiceCurrent();
       setNotice(
-        t("codex.localAccess.activateSuccess", "已切换到 API 服务"),
+        next.recovering ? "" : t("codex.localAccess.activateSuccess", "已切换到 API 服务"),
       );
     } catch (err) {
       if (!mountedRef.current) return;
@@ -1984,7 +1988,7 @@ export function useCodexApiServicePageController() {
         await codexLocalAccessService.restartCodexLocalAccessSidecar();
       setState(next);
       setNotice(
-        t("codex.localAccess.restartSuccess", "API 服务 Sidecar 已重启"),
+        next.recovering ? "" : t("codex.localAccess.restartSuccess", "API 服务 Sidecar 已重启"),
       );
     } catch (err) {
       if (
@@ -3786,6 +3790,7 @@ export function useCodexApiServicePageController() {
     requestLogInstanceQuery,
     requestLogKindFilter,
     requestLogKindOptions,
+    requestLogLoaded: requestLogResult !== null,
     requestLogLoading,
     statsDetailsRefreshing,
     requestLogModelQuery,

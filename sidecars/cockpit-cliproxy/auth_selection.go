@@ -1474,11 +1474,11 @@ func usageServiceTier(record coreusage.Record, fallback string) string {
 	return normalizedUsageServiceTier(fallback)
 }
 
-// normalizedRequestedUsageServiceTier 归一化客户端请求的档位。空值、"auto" 和
-// "default" 都表示客户端没有指定档位，此时实际上游使用的是注入的默认档位。
+// normalizedRequestedUsageServiceTier 归一化客户端请求的档位。空值和 "auto"
+// 表示未提供确定档位，此时回退注入的默认档位；显式 "default" 属于标准档。
 func normalizedRequestedUsageServiceTier(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "auto", "default":
+	case "", "auto":
 		return ""
 	default:
 		return normalizedUsageServiceTier(value)
@@ -1557,6 +1557,10 @@ func (p *usagePlugin) HandleUsage(ctx context.Context, record coreusage.Record) 
 			TokenBreakdown:  record.Detail.TokenBreakdown,
 		},
 		RequestedAtMS: record.RequestedAt.UnixMilli(),
+	}
+	if observer := requestDiagnosticsFromContext(ctx); observer != nil {
+		payload.OutputGenerationMS = observer.outputGenerationMS(ctx, record)
+		payload.outputComplete = observer.completedOutput(ctx)
 	}
 	// 上游响应头的旁路观测：只带出长度与分类，state 原文不落库。
 	if observation, ok := helps.TakeTurnStateObservation(payload.RequestID); ok {

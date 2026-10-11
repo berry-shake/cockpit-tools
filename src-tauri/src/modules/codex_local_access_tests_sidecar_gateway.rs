@@ -530,6 +530,22 @@
     }
 
     #[test]
+    fn model_scope_error_translations_preserve_model_placeholder_for_all_locales() {
+        let value = super::sidecar_localized_messages(
+            "codex.localAccess.gatewayErrors.modelNotAvailable",
+        );
+        let messages = value.as_object().expect("localized error messages");
+        assert_eq!(messages.len(), 18);
+        for (locale, message) in messages {
+            let message = message.as_str().expect("message text");
+            assert_eq!(message.matches("{{model}}").count(), 1, "{locale}");
+            if locale != "en" && locale != "en-us" {
+                assert_ne!(Some(message), messages["en"].as_str(), "{locale}");
+            }
+        }
+    }
+
+    #[test]
     fn calendar_stats_windows_start_at_local_day_week_and_month() {
         use chrono::{Datelike, TimeZone, Timelike};
 
@@ -839,6 +855,7 @@
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     use tokio_tungstenite::tungstenite::Message;
     use toml_edit::{value, Document};
+    include!("codex_local_access_tests_env_ordering.rs");
 
     #[tokio::test]
     async fn read_http_request_rejects_declared_request_above_limit() {
@@ -1078,6 +1095,7 @@
             immediate_sse_response: false,
             max_concurrent_image_requests: 1,
             max_account_concurrency: 0,
+            account_concurrency_default_migrated: true,
             account_concurrency_wait_ms: DEFAULT_ACCOUNT_CONCURRENCY_WAIT_MS,
             bound_oauth_account_id: None,
             bound_oauth_quota_reserve: None,

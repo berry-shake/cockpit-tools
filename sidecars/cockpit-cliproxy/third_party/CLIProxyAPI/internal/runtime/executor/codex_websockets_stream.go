@@ -11,6 +11,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
+	codexresponses "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/codex/openai/responses"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
@@ -74,6 +75,11 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 		return nil, errReplay
 	}
 
+	if helps.IsCodexOAuthAuth(auth) && !helps.APIKeyModelIsCompat(req) {
+		lite := !useFullResponses && (codexResponsesLiteEnabled(opts.Headers) || isCodexResponsesLiteRequest(body, opts.Headers))
+		body = codexresponses.EnsureCodexWebSearchHistoryTool(body, lite)
+	}
+
 	httpURL := strings.TrimSuffix(baseURL, "/") + "/responses"
 	wsURL, err := buildCodexResponsesWebsocketURL(httpURL)
 	if err != nil {
@@ -89,6 +95,15 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 	upstreamBody, identityState := applyCodexIdentityConfuseBody(e.cfg, auth, originalPayloadSource, body)
 	reporter.SetTranslatedReasoningEffort(clientBody, to.String())
 	wsHeaders = applyCodexWebsocketHeaders(ctx, wsHeaders, auth, apiKey, e.cfg, opts.Headers)
+	// The Lite declaration shape must match the mode actually sent on the socket.
+	if !useFullResponses && helps.IsCodexOAuthAuth(auth) {
+		if codexResponsesLiteEnabled(opts.Headers) {
+			wsHeaders.Set(codexResponsesLiteHeaderName, headerValueCaseInsensitive(opts.Headers, codexResponsesLiteHeaderName))
+		} else if isCodexResponsesLiteRequest(body, opts.Headers) {
+			wsHeaders.Set(codexResponsesLiteHeaderName, "true")
+		}
+	}
+
 	applyCodexRoutingHint(wsHeaders, auth, baseModel, upstreamBody)
 	applyModelHeaderOverrides(wsHeaders, baseModel)
 	removeCodexResponsesLiteHeaderForFullResponse(wsHeaders, useFullResponses)
@@ -307,15 +322,6 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 
 	if buffering {
 		for {
-			if ctx != nil && ctx.Err() != nil {
-				if sess != nil {
-					sess.clearActive(conn, readCh)
-					unlockStreamSession()
-				} else {
-					_ = closer.Close()
-				}
-				return nil, ctx.Err()
-			}
 			msgType, payload, errRead := readCodexWebsocketMessage(ctx, sess, conn, readCh)
 			if errRead != nil {
 				mappedErr := mapCodexWebsocketReadError(errRead)
@@ -351,6 +357,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 
 			payload = bytes.TrimSpace(payload)
 			if len(payload) == 0 {
+				continue
+			}
+			if ctx.Err() != nil && !helps.CodexWebsocketFailureCandidate(payload) {
 				continue
 			}
 			observeCodexTokenEvent(reporter, payload)
@@ -414,6 +423,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				break
 			}
 
+			if ctx.Err() != nil {
+				continue
+			}
 			eventType := gjson.GetBytes(payload, "type").String()
 			if helps.HasMeaningfulCodexOutputDelta(payload) {
 				sawOutputDelta = true
@@ -436,6 +448,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					cacheCodexReasoningReplayFromCompleted(replayScope, completedPayload)
 				}
 				if detail, ok := helps.ParseCodexUsage(completedPayload); ok {
+					helps.ObserveCodexCompletionUsage(ctx, completedPayload)
 					reporter.Publish(ctx, detail)
 				} else {
 					reporter.EnsurePublished(ctx)
@@ -481,10 +494,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 		}
 	}
 
-	chanCapacity := len(bufferedChunks) + len(initialChunks)
-	if bootstrapTerminalErr != nil {
-		chanCapacity++
-	}
+	// One reserved terminal-error slot prevents cancellation from dropping an
+	// upstream-confirmed failure when nobody consumes ordinary output anymore.
+	chanCapacity := len(bufferedChunks) + len(initialChunks) + 1
 	out := make(chan cliproxyexecutor.StreamChunk, chanCapacity)
 	for _, chunk := range bufferedChunks {
 		out <- cliproxyexecutor.StreamChunk{Payload: chunk}
@@ -531,25 +543,11 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 		}()
 
 		send := func(chunk cliproxyexecutor.StreamChunk) bool {
-			if ctx == nil {
-				out <- chunk
-				return true
-			}
-			select {
-			case out <- chunk:
-				return true
-			case <-ctx.Done():
-				return false
-			}
+			return helps.SendCodexWebsocketChunk(ctx, out, chunk)
 		}
 
+	readLoop:
 		for {
-			if ctx != nil && ctx.Err() != nil {
-				terminateReason = "context_done"
-				terminateErr = ctx.Err()
-				_ = send(cliproxyexecutor.StreamChunk{Err: ctx.Err()})
-				return
-			}
 			msgType, payload, errRead := readCodexWebsocketMessage(ctx, sess, conn, readCh)
 			if errRead != nil {
 				if sess != nil && ctx != nil && ctx.Err() != nil {
@@ -586,6 +584,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 			if len(payload) == 0 {
 				continue
 			}
+			if ctx.Err() != nil && !helps.CodexWebsocketFailureCandidate(payload) {
+				continue
+			}
 			observeCodexTokenEvent(reporter, payload)
 			payload = applyCodexIdentityConfuseResponsePayload(payload, identityState)
 			helps.AppendCodexAPIWebsocketResponse(ctx, e.cfg, payload)
@@ -596,7 +597,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				terminateReason = "upstream_error"
 				terminateErr = wsErr
 				if sess != nil {
-					e.invalidateUpstreamConn(sess, conn, "upstream_error", wsErr)
+					e.invalidateUpstreamConnWithoutDisconnectNotify(sess, conn, "upstream_error", wsErr)
+					// Deliver the failure before the downstream notification cancels its context.
+					defer sess.notifyUpstreamDisconnect(wsErr)
 				}
 				if errClearReplay := clearCodexReasoningReplayOnWebsocketError(ctx, replayScope, payload); errClearReplay != nil {
 					terminateErr = errClearReplay
@@ -615,7 +618,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				terminateErr = streamErr
 				if sess != nil {
 					unlockStreamSession()
-					e.invalidateUpstreamConn(sess, conn, "terminal_failure", streamErr)
+					e.invalidateUpstreamConnWithoutDisconnectNotify(sess, conn, "terminal_failure", streamErr)
+					// Deliver the failure before the downstream notification cancels its context.
+					defer sess.notifyUpstreamDisconnect(streamErr)
 				}
 				if errClearReplay := clearCodexReasoningReplayOnInvalidSignature(ctx, replayScope, streamErr.StatusCode(), terminalBody); errClearReplay != nil {
 					terminateErr = errClearReplay
@@ -630,6 +635,9 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				return
 			}
 
+			if ctx.Err() != nil {
+				continue
+			}
 			eventType := gjson.GetBytes(payload, "type").String()
 			if helps.HasMeaningfulCodexOutputDelta(payload) {
 				sawOutputDelta = true
@@ -652,6 +660,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 					cacheCodexReasoningReplayFromCompleted(replayScope, completedPayload)
 				}
 				if detail, ok := helps.ParseCodexUsage(completedPayload); ok {
+					helps.ObserveCodexCompletionUsage(ctx, completedPayload)
 					reporter.Publish(ctx, detail)
 				} else {
 					reporter.EnsurePublished(ctx)
@@ -667,7 +676,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				if !send(cliproxyexecutor.StreamChunk{Payload: downstreamPayload}) {
 					terminateReason = "context_done"
 					terminateErr = ctx.Err()
-					return
+					continue readLoop
 				}
 				if isTerminalEvent {
 					return
@@ -687,7 +696,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 				if !send(cliproxyexecutor.StreamChunk{Payload: chunks[i]}) {
 					terminateReason = "context_done"
 					terminateErr = ctx.Err()
-					return
+					continue readLoop
 				}
 			}
 			if isTerminalEvent || eventType == "response.completed" || eventType == "response.done" || eventType == "response.incomplete" {

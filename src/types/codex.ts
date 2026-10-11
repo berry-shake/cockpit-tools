@@ -83,6 +83,9 @@ export interface CodexAppSpeedConfig {
 
 /** Codex 账号数据 */
 export interface CodexAccount {
+  /** Fixed error code on a safe proxy target projection; never a credential URL. */
+  egress_proxy_error?: string | null;
+  egress_proxy_legacy_bound?: boolean;
   usage_updated_at?: number | null;
   id: string;
   email: string;

@@ -53,7 +53,6 @@ func TestUsageServiceTierFallsBackToInjectedDefault(t *testing.T) {
 	for _, record := range []coreusage.Record{
 		{},
 		{ServiceTier: "auto"},
-		{ServiceTier: "default"},
 		{RequestServiceTier: "auto"},
 	} {
 		if got := usageServiceTier(record, "priority"); got != "priority" {
@@ -66,6 +65,11 @@ func TestUsageServiceTierFallsBackToInjectedDefault(t *testing.T) {
 }
 
 func TestUsageServiceTierUsesClientRequestedTier(t *testing.T) {
+	for _, record := range []coreusage.Record{{ServiceTier: "default"}, {RequestServiceTier: "default"}} {
+		if got := usageServiceTier(record, "priority"); got != "standard" {
+			t.Fatalf("explicit default tier = %q, want standard", got)
+		}
+	}
 	if got := usageServiceTier(coreusage.Record{ServiceTier: "priority"}, ""); got != "priority" {
 		t.Fatalf("client priority tier = %q, want priority", got)
 	}

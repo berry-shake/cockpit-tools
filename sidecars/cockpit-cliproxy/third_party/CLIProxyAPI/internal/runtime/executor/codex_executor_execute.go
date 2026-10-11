@@ -11,6 +11,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
+	codexresponses "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/codex/openai/responses"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
@@ -83,6 +84,10 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	if errReplay != nil {
 		return resp, errReplay
 	}
+	if helps.IsCodexOAuthAuth(auth) && !helps.APIKeyModelIsCompat(req) {
+		lite := !useFullResponses && (codexResponsesLiteEnabled(opts.Headers) || isCodexResponsesLiteRequest(body, opts.Headers))
+		body = codexresponses.EnsureCodexWebSearchHistoryTool(body, lite)
+	}
 	reporter.SetTranslatedReasoningEffort(body, to.String())
 
 	url := strings.TrimSuffix(baseURL, "/") + "/responses"
@@ -113,12 +118,22 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	if !useFullResponses && liteHeaderValue != "" {
 		httpReq.Header[codexResponsesLiteHeaderName] = []string{liteHeaderValue}
 	}
+	// Desktop can carry the Lite hint only in client_metadata. Keep the
+	// outgoing wire mode aligned with the final additional_tools placement.
+	if helps.IsCodexOAuthAuth(auth) && !useFullResponses && isCodexResponsesLiteRequest(body, opts.Headers) && !codexResponsesLiteEnabled(httpReq.Header) {
+		httpReq.Header.Set(codexResponsesLiteHeaderName, "true")
+	}
 	removeCodexResponsesLiteHeaderForAPIKey(httpReq.Header, auth)
 	var authID, authLabel, authType, authValue string
 	if auth != nil {
 		authID = auth.ID
 		authLabel = auth.Label
 		authType, authValue = auth.AccountInfo()
+	}
+	recovery := helps.NewCodexHTTPEncryptedRecovery(auth, helps.APIKeyModelIsCompat(req), httpReq, upstreamBody)
+	upstreamBody, err = recovery.PrepareRequest(httpReq, upstreamBody)
+	if err != nil {
+		return resp, err
 	}
 	helps.RecordAPIRequest(ctx, e.cfg, helps.UpstreamRequestLog{
 		URL:       url,
@@ -133,7 +148,13 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	})
 	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
 	httpClient = reporter.TrackHTTPClient(httpClient)
-	httpResp, err := httpClient.Do(httpReq)
+	httpResp, upstreamBody, err := recovery.Do(ctx, e.cfg, httpClient, httpReq, upstreamBody, func(status int, errorBody []byte) error {
+		if errClearReplay := clearCodexReasoningReplayOnInvalidSignature(ctx, replayScope, status, errorBody); errClearReplay != nil {
+			return errClearReplay
+		}
+		reporter.ResumeResponseTTFTAfterRetry()
+		return nil
+	})
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		return resp, err
@@ -306,6 +327,11 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 		authLabel = auth.Label
 		authType, authValue = auth.AccountInfo()
 	}
+	recovery := helps.NewCodexHTTPEncryptedRecovery(auth, helps.APIKeyModelIsCompat(req), httpReq, upstreamBody)
+	upstreamBody, err = recovery.PrepareRequest(httpReq, upstreamBody)
+	if err != nil {
+		return resp, err
+	}
 	helps.RecordAPIRequest(ctx, e.cfg, helps.UpstreamRequestLog{
 		URL:       url,
 		Method:    http.MethodPost,
@@ -319,7 +345,10 @@ func (e *CodexExecutor) executeCompact(ctx context.Context, auth *cliproxyauth.A
 	})
 	httpClient := helps.NewUtlsHTTPClient(ctx, e.cfg, auth, 0)
 	httpClient = reporter.TrackHTTPClient(httpClient)
-	httpResp, err := httpClient.Do(httpReq)
+	httpResp, upstreamBody, err := recovery.Do(ctx, e.cfg, httpClient, httpReq, upstreamBody, func(int, []byte) error {
+		reporter.ResumeResponseTTFTAfterRetry()
+		return nil
+	})
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		return resp, err

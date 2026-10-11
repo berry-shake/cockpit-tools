@@ -18,6 +18,7 @@ include!("codex_local_access_pool_diagnostics.rs");
 include!("codex_local_access_collection.rs");
 include!("codex_local_access_model_config_transfer.rs");
 include!("codex_local_access_account_references.rs");
+include!("codex_local_access_key_recovery.rs");
 include!("codex_local_access_gateway_runtime.rs");
 include!("codex_local_access_provider_gateway.rs");
 include!("codex_local_access_provider_auth_sync.rs");
@@ -72,9 +73,11 @@ mod tests {
     include!("codex_local_access_tests_provider_admission.rs");
     include!("codex_local_access_tests_image_main_model.rs");
     include!("codex_local_access_tests_inbound_key_recovery.rs");
+    include!("codex_local_access_tests_key_recovery.rs");
     include!("codex_local_access_tests_service_transitions.rs");
     include!("codex_local_access_tests_provider_activation.rs");
     include!("codex_local_access_tests_account_references.rs");
     include!("codex_local_access_tests_request_diagnostics.rs");
+    include!("codex_local_access_tests_output_speed.rs");
     include!("codex_local_access_tests_request_diagnostics_poll.rs");
 }

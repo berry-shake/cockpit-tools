@@ -24,14 +24,15 @@ import { CodexOAuthBindingModal } from "./CodexOAuthBindingModal";
 import { CodexAccountsOverviewPanel } from "./CodexAccountsOverviewPanel";
 import { CodexTopLayoutPage } from "../components/codex/CodexTopLayoutPage";
 import { CodexEgressProxyPage } from "../components/codex/CodexEgressProxyPage";
+import { CODEX_API_SERVICE_PROXY_TARGET, apiServiceProxyAccount } from "../services/codexProxyTargetService";
 import { CodexAccountProxyPreview } from "../components/codex/CodexAccountProxyPreview";
 import { CODEX_OPEN_PROXY_EVENT, canUseCodexAccountProxy } from "../utils/codexAccountProxy";
 import {
   normalizeCodexTopLayout,
-  readCodexTopLayoutPreference,
-  writeCodexTopLayoutPreference,
 } from "../utils/codexTopLayoutPreferences";
 
+
+import { useCodexTopLayoutPreference } from "../hooks/useCodexTopLayoutPreference";
 
 import { codexPageRegistry } from '../components/codex/codexPageRegistry';
 
@@ -129,7 +130,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     updateCodexCliWorkingDir,
     wakeupPresetManagerSignal,
   } = props;
-  const [savedTopLayout, setTopLayout] = useState(readCodexTopLayoutPreference);
+  const { layout: savedTopLayout, changeLayout: setTopLayout, storageError, retry } = useCodexTopLayoutPreference();
   const pageRegistry = useMemo(() => codexPageRegistry(t), [t]);
   const topLayout = useMemo(() => normalizeCodexTopLayout(savedTopLayout, pageRegistry.map(page => page.id)), [savedTopLayout, pageRegistry]);
   useEffect(() => {
@@ -146,14 +147,14 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
   const [proxyAccountId, setProxyAccountId] = useState<string | null>(null);
   const [proxyPreviewId, setProxyPreviewId] = useState<string | null>(null);
   // The shortcut opens a read-only summary; only its explicit action leaves for the page.
-  const proxyPreviewAccount = accounts.find(
+  const proxyPreviewAccount = proxyPreviewId === CODEX_API_SERVICE_PROXY_TARGET ? apiServiceProxyAccount(t("codex.localAccess.title")) : accounts.find(
     (account) => account.id === proxyPreviewId && canUseCodexAccountProxy(account),
   );
   useEffect(() => {
     const openProxy = (event: Event) => {
       const accountId: unknown = (event as CustomEvent).detail;
-      if (typeof accountId !== 'string' || !accounts.some((account) =>
-        account.id === accountId && canUseCodexAccountProxy(account))) return;
+      if (typeof accountId !== 'string' || (accountId !== CODEX_API_SERVICE_PROXY_TARGET && !accounts.some((account) =>
+        account.id === accountId && canUseCodexAccountProxy(account)))) return;
       // Card and table shortcuts open the account's proxy preview without leaving the list.
       setProxyPreviewId(accountId);
     };
@@ -161,9 +162,6 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
     return () => window.removeEventListener(CODEX_OPEN_PROXY_EVENT, openProxy);
   }, [accounts]);
 
-  useEffect(() => {
-    writeCodexTopLayoutPreference(savedTopLayout);
-  }, [savedTopLayout]);
 
   /** 启动预览里的 OAuth 绑定信息（仅 API Key 账号展示）。 */
   const launchPreviewOAuthBindingAccount =
@@ -230,6 +228,14 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
         tabs={topLayout.order}
         tabPlacement={topLayout.placement}
       />
+
+      {storageError && (
+        <div className="codex-top-layout-save-error" role="alert">
+          <CircleAlert size={16} />
+          <span>{t(`codex.more.topLayout${storageError === "read" ? "Read" : "Save"}Failed`)}</span>
+          <button type="button" className="btn btn-secondary compact" onClick={retry}>{t("common.retry")}</button>
+        </div>
+      )}
 
       {activeTab === "top-layout" && <CodexTopLayoutPage
         pages={pageRegistry}
@@ -1055,7 +1061,7 @@ export function CodexAccountsView(props: CodexAccountsViewProps) {
         <CodexAccountProxyPreview
           key={`${proxyPreviewAccount.id}:${JSON.stringify(proxyPreviewAccount.egress_proxy)}`}
           account={proxyPreviewAccount}
-          displayName={maskAccountText(
+          displayName={proxyPreviewAccount.id === CODEX_API_SERVICE_PROXY_TARGET ? t("codex.localAccess.title") : maskAccountText(
             proxyPreviewAccount.account_name ||
               proxyPreviewAccount.email ||
               proxyPreviewAccount.id,

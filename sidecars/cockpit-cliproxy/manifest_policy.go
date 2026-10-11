@@ -436,30 +436,32 @@ type customRoutingRule struct {
 }
 
 type usagePayload struct {
-	ProxyRoute *coreusage.ProxyRoute `json:"proxyRoute,omitempty"`
-	Type       string                `json:"type"`
-	RequestID  string                `json:"requestId,omitempty"`
-	Provider   string                `json:"provider,omitempty"`
-	Model      string                `json:"model,omitempty"`
-	Alias      string                `json:"alias,omitempty"`
+	outputComplete bool
+	ProxyRoute     *coreusage.ProxyRoute `json:"proxyRoute,omitempty"`
+	Type           string                `json:"type"`
+	RequestID      string                `json:"requestId,omitempty"`
+	Provider       string                `json:"provider,omitempty"`
+	Model          string                `json:"model,omitempty"`
+	Alias          string                `json:"alias,omitempty"`
 	// RequestedModel keeps the client-requested model (route namespace intact)
 	// while Model/UpstreamModel carry the model that actually reached upstream.
-	RequestedModel   string `json:"requestedModel,omitempty"`
-	UpstreamModel    string `json:"upstreamModel,omitempty"`
-	AccountID        string `json:"accountId,omitempty"`
-	AccountEmail     string `json:"accountEmail,omitempty"`
-	AuthID           string `json:"authId,omitempty"`
-	APIKeyID         string `json:"apiKeyId,omitempty"`
-	APIKeyLabel      string `json:"apiKeyLabel,omitempty"`
-	ClientInstanceID string `json:"clientInstanceId,omitempty"`
-	RequestKind      string `json:"requestKind,omitempty"`
-	ServiceTier      string `json:"serviceTier,omitempty"`
-	ReasoningEffort  string `json:"reasoningEffort,omitempty"`
-	Success          bool   `json:"success"`
-	Status           int    `json:"status,omitempty"`
-	ErrorCategory    string `json:"errorCategory,omitempty"`
-	ErrorMessage     string `json:"errorMessage,omitempty"`
-	LatencyMS        int64  `json:"latencyMs,omitempty"`
+	RequestedModel     string `json:"requestedModel,omitempty"`
+	UpstreamModel      string `json:"upstreamModel,omitempty"`
+	AccountID          string `json:"accountId,omitempty"`
+	AccountEmail       string `json:"accountEmail,omitempty"`
+	AuthID             string `json:"authId,omitempty"`
+	APIKeyID           string `json:"apiKeyId,omitempty"`
+	APIKeyLabel        string `json:"apiKeyLabel,omitempty"`
+	ClientInstanceID   string `json:"clientInstanceId,omitempty"`
+	RequestKind        string `json:"requestKind,omitempty"`
+	ServiceTier        string `json:"serviceTier,omitempty"`
+	ReasoningEffort    string `json:"reasoningEffort,omitempty"`
+	Success            bool   `json:"success"`
+	Status             int    `json:"status,omitempty"`
+	ErrorCategory      string `json:"errorCategory,omitempty"`
+	ErrorMessage       string `json:"errorMessage,omitempty"`
+	LatencyMS          int64  `json:"latencyMs,omitempty"`
+	OutputGenerationMS *int64 `json:"outputGenerationMs,omitempty"`
 	// TurnStateLength/TurnStateClass 来自上游响应头的旁路观测；state 原文不保存。
 	TurnStateLength *int         `json:"turnStateLength,omitempty"`
 	TurnStateClass  string       `json:"turnStateClass,omitempty"`
@@ -563,13 +565,14 @@ func effectiveUsageTotalTokens(usage usageDetails) int64 {
 }
 
 type usageFinalizeInput struct {
-	spec          *apiKeySpec
-	requestKind   string
-	model         string
-	status        int
-	latencyMS     int64
-	completedAtMS int64
-	errorMessage  string
+	spec                *apiKeySpec
+	requestKind         string
+	model               string
+	status              int
+	latencyMS           int64
+	completedAtMS       int64
+	errorMessage        string
+	suppressOutputSpeed bool
 }
 
 type selectedAccountRecord struct {
@@ -930,6 +933,9 @@ func (t *requestUsageTracker) finalize(requestID string, input usageFinalizeInpu
 	}
 
 	finalHTTPFailed := input.status >= http.StatusBadRequest
+	if finalHTTPFailed || (input.suppressOutputSpeed && !payload.outputComplete) || !payload.Success {
+		payload.OutputGenerationMS = nil
+	}
 	if finalHTTPFailed {
 		payload.Success = false
 		if strings.TrimSpace(payload.ErrorCategory) == "" {
@@ -1554,13 +1560,14 @@ func (p *requestPolicy) emitRequestCompleted(c *gin.Context, requestID string, s
 		return
 	}
 	if payload, ok := p.tracker.finalize(requestID, usageFinalizeInput{
-		spec:          spec,
-		requestKind:   requestKind,
-		model:         model,
-		status:        status,
-		latencyMS:     latencyMS,
-		completedAtMS: completedAtMS,
-		errorMessage:  strings.TrimSpace(c.Errors.String()),
+		spec:                spec,
+		requestKind:         requestKind,
+		model:               model,
+		status:              status,
+		latencyMS:           latencyMS,
+		completedAtMS:       completedAtMS,
+		errorMessage:        strings.TrimSpace(c.Errors.String()),
+		suppressOutputSpeed: c.Request.Context().Err() != nil,
 	}); ok {
 		p.tokenLimiter.addUsage(spec, effectiveUsageTotalTokens(payload.Usage))
 		p.emitter.emit(payload)
@@ -2408,7 +2415,7 @@ func rewriteBodyModel(m *manifest, spec *apiKeySpec, requestKind string, body []
 	}
 	if spec != nil && spec.ModelRouting != nil && spec.ModelRouting.Automatic {
 		if !automaticClientModelVisible(m, spec, model) {
-			return nil, model, fmt.Errorf("model %s is not available for this API key", model)
+			return nil, model, fmt.Errorf("%s", m.modelUnavailableMessage(model))
 		}
 		// Preserve client aliases for candidate lookup; canonicalization belongs
 		// to the selected native executor or provider route.
@@ -2416,13 +2423,13 @@ func rewriteBodyModel(m *manifest, spec *apiKeySpec, requestKind string, body []
 	}
 	if _, _, status := resolveModelRouting(spec, model); status != "none" {
 		if !routedClientModelAllowed(m, spec, model) {
-			return nil, model, fmt.Errorf("model %s is not available for this API key", model)
+			return nil, model, fmt.Errorf("%s", m.modelUnavailableMessage(model))
 		}
 		return nil, model, nil
 	}
 	canonical := canonicalModelForClientModel(m, spec, model)
 	if !validateClientModelVisible(m, spec, model, canonical) {
-		return nil, model, fmt.Errorf("模型 %s 不在当前 API Key 的可用模型范围内", model)
+		return nil, model, fmt.Errorf("%s", m.modelUnavailableMessage(model))
 	}
 	if canonical == model {
 		return nil, model, nil

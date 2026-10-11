@@ -39,7 +39,8 @@ fn new_local_access_collection() -> Result<CodexLocalAccessCollection, String> {
         request_payload_logging: false,
         immediate_sse_response: false,
         max_concurrent_image_requests: 1,
-        max_account_concurrency: 0,
+        max_account_concurrency: DEFAULT_MAX_ACCOUNT_CONCURRENCY,
+        account_concurrency_default_migrated: true,
         account_concurrency_wait_ms: DEFAULT_ACCOUNT_CONCURRENCY_WAIT_MS,
         bound_oauth_account_id: None,
         bound_oauth_quota_reserve: None,
@@ -625,6 +626,7 @@ pub async fn update_local_access_routing_options(
     collection.max_concurrent_image_requests =
         max_concurrent_image_requests.clamp(1, MAX_CONCURRENT_IMAGE_REQUESTS_PER_ACCOUNT);
     collection.max_account_concurrency = max_account_concurrency.min(MAX_ACCOUNT_CONCURRENCY_LIMIT);
+    collection.account_concurrency_default_migrated = true;
     collection.account_concurrency_wait_ms = account_concurrency_wait_ms.clamp(
         ACCOUNT_CONCURRENCY_WAIT_MIN_MS,
         ACCOUNT_CONCURRENCY_WAIT_MAX_MS,
@@ -1101,7 +1103,7 @@ pub async fn remove_local_access_accounts(
 }
 
 pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    ensure_runtime_loaded_without_start().await?;
 
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
@@ -1149,7 +1151,7 @@ pub async fn rotate_local_access_api_key() -> Result<CodexLocalAccessState, Stri
 pub async fn create_local_access_api_key(
     label: Option<String>,
 ) -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    ensure_runtime_loaded_without_start().await?;
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
@@ -1176,7 +1178,7 @@ pub async fn set_local_access_api_key_account_priority(
     account_id: String,
     pinned: bool,
 ) -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    ensure_runtime_loaded_without_start().await?;
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
@@ -1246,7 +1248,7 @@ pub async fn update_local_access_api_key(
     account_ids: Option<Vec<String>>,
     inherit_account_pool: Option<bool>,
 ) -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    ensure_runtime_loaded_without_start().await?;
     let (maybe_collection, historical_token_used) = {
         let runtime = gateway_runtime().lock().await;
         let historical_token_used = runtime
@@ -1328,7 +1330,7 @@ pub async fn update_local_access_api_key(
 pub async fn rotate_local_access_named_api_key(
     api_key_id: String,
 ) -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    ensure_runtime_loaded_without_start().await?;
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()
@@ -1362,7 +1364,7 @@ pub async fn rotate_local_access_named_api_key(
 pub async fn delete_local_access_api_key(
     api_key_id: String,
 ) -> Result<CodexLocalAccessState, String> {
-    ensure_runtime_loaded().await?;
+    ensure_runtime_loaded_without_start().await?;
     let maybe_collection = {
         let runtime = gateway_runtime().lock().await;
         runtime.collection.clone()

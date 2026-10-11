@@ -257,7 +257,7 @@ func (s *relayServer) handleImagesRelayRequest(c *gin.Context, imageReq imageRel
 		requestedModel = defaultImagesToolModel
 	}
 	if !validateClientModelVisible(s.manifest, spec, requestedModel, defaultImagesToolModel) {
-		writeAPIError(c, http.StatusNotFound, fmt.Sprintf("模型 %s 不在当前 API Key 的可用模型范围内", requestedModel), "model_not_available")
+		writeAPIError(c, http.StatusNotFound, s.manifest.modelUnavailableMessage(requestedModel), "model_not_available")
 		return
 	}
 	model := configuredImagesMainModel(s.manifest)

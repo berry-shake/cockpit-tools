@@ -1,4 +1,5 @@
 import { CodexApiRequestLogs } from "./CodexApiRequestLogs";
+import { CodexSpeedControl } from "../components/codex/CodexSpeedControl";
 import { Activity, BadgeDollarSign, ChevronDown, Check, CircleAlert, Copy, Eye, EyeOff, FolderPlus, Gauge, Image, Pin, PinOff, Play, Plus, Power, RefreshCw, Route, Send, ShieldCheck, SlidersHorizontal, Trash2, Undo2, Wrench, X } from "lucide-react";
 import { CodexIcon } from "../components/icons/CodexIcon";
 import { ManualHelpIconButton } from "../components/ManualHelpIconButton";
@@ -17,6 +18,7 @@ import { CodexStatsRangePicker } from "../components/CodexStatsRangePicker";
 import { CodexUsageTrend } from "../components/codex/CodexUsageTrend";
 import { requestCodexOpenAddAccount } from "../utils/codexAddAccountRequest";
 import { codexApiKeyInspectionCardId } from "../hooks/useCodexApiKeyInspection";
+import { isCodexGatewayKeyRecoveryError } from "../utils/codexGatewayKeyRecovery";
 import type {
   CodexLocalAccessCustomRoutingRule,
   CodexLocalAccessScope,
@@ -248,6 +250,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
     updateTimeoutDraft,
   } = props;
   const localAccessStatus = resolveCodexLocalAccessRuntimeStatus(collection, state);
+  const keyRecoveryRequired = isCodexGatewayKeyRecoveryError(state?.lastError);
   return (
     <div className="codex-api-service-page">
       <div className="page-top-strip">
@@ -308,7 +311,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                   <span
                     className={`codex-api-service-status ${localAccessStatus}`}
                   >
-                    {collection?.enabled && state?.preparing
+                    {!state?.running && collection?.enabled && (state?.preparing || state?.recovering)
                       ? t("instances.status.starting", "启动中")
                       : t(CODEX_LOCAL_ACCESS_STATUS_KEYS[localAccessStatus])}
                   </span>
@@ -410,9 +413,13 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                 : t("codex.localAccess.enableService", "启用服务")}
             </button>
           </div>
+          <div className="codex-api-service-hero-speed">
+            <CodexSpeedControl scope="api" disabled={busy || activating || sidecarRestarting}
+              onError={(message) => props.setError(message ?? "")} showHint />
+          </div>
         </section>
 
-        {(error || notice || inspectionNoticeKey || state?.lastError || pricingRepriceActive) && (
+        {(error || notice || inspectionNoticeKey || state?.lastError || state?.recovering || pricingRepriceActive) && (
           <div className="codex-api-service-message-stack">
             {inspectionNoticeKey && (
               <div className="codex-api-service-message warning" role="status">
@@ -424,7 +431,16 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                 </button>
               </div>
             )}
-            {error && (
+            {state?.recovering && (
+              <div className="codex-api-service-message info" role="status">
+                <RefreshCw size={15} className="loading-spinner" />
+                <span>{t("codex.apiService.recovery.progress", {
+                  attempt: state.recoveryAttempt ?? 0,
+                  total: state.recoveryTotal ?? 5,
+                })}</span>
+              </div>
+            )}
+            {error && error !== state?.lastError && (
               <div className="codex-api-service-message error">
                 <CircleAlert size={15} />
                 <span>{error}</span>
@@ -440,10 +456,18 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
               </div>
             )}
             {state?.lastError && (
-              <div className="codex-api-service-message error">
+              <div className={`codex-api-service-message ${keyRecoveryRequired ? "warning" : "error"}`}>
                 <CircleAlert size={15} />
-                <span>{state.lastError}</span>
-                <button
+                <span>{keyRecoveryRequired
+                  ? t(state.running ? "codex.apiService.recovery.partialUnavailable" : "codex.apiService.recovery.unavailable")
+                  : state.lastError}</span>
+                <button type="button" className="btn btn-secondary btn-sm"
+                  onClick={() => void handleRestartSidecar()}
+                  disabled={busy || sidecarRestarting || state.preparing}>
+                  <RefreshCw size={13} />
+                  {t("common.retry")}
+                </button>
+                {!keyRecoveryRequired && <button
                   type="button"
                   className="btn btn-secondary btn-sm"
                   onClick={() => void handleKillPort()}
@@ -451,7 +475,7 @@ export function CodexApiServiceView(props: CodexApiServiceViewProps) {
                 >
                   <Wrench size={13} />
                   {t("codex.localAccess.killPortAction", "清理端口")}
-                </button>
+                </button>}
               </div>
             )}
             {notice && (

@@ -1220,11 +1220,26 @@ fn remove_unsupported_responses_fields(obj: &mut Map<String, Value>) -> bool {
         changed |= obj.remove(key).is_some();
     }
 
-    if obj.get("service_tier").is_some()
-        && obj.get("service_tier").and_then(Value::as_str) != Some("priority")
-    {
-        obj.remove("service_tier");
-        changed = true;
+    if let Some(tier) = obj.get("service_tier") {
+        let normalized = tier.as_str().and_then(|tier| match tier.trim().to_ascii_lowercase().as_str() {
+            "fast" | "priority" => Some("priority"),
+            "standard" | "default" => Some("default"),
+            "flex" => Some("flex"),
+            "auto" => Some("auto"),
+            "ultrafast" => Some("ultrafast"),
+            _ => None,
+        });
+        // Preserve explicit standard/other tiers until routing has selected the
+        // provider. Dropping them here lets a later Fast default replace them.
+        if let Some(normalized) = normalized {
+            if tier.as_str() != Some(normalized) {
+                obj.insert("service_tier".to_string(), Value::String(normalized.to_string()));
+                changed = true;
+            }
+        } else {
+            obj.remove("service_tier");
+            changed = true;
+        }
     }
 
     changed

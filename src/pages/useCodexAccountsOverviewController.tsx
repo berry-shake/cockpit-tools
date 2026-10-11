@@ -716,7 +716,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
         },
         {
           id: "cli",
-          label: t("codex.cli.quickLaunch", "CLI 快速启动"),
+          label: t("common.cliQuickLaunch", "CLI 快速启动"),
           description: `${accountName} · ${t("instances.defaultName", "默认实例")}`,
           actionLabel: t("common.open", "打开"),
           disabled: cliLaunchingAccountId === account.id,
@@ -979,7 +979,7 @@ export function useCodexAccountsOverviewController(context: Pick<ReturnType<type
           },
           {
             id: "cli",
-            label: t("codex.cli.quickLaunch", "CLI 快速启动"),
+            label: t("common.cliQuickLaunch", "CLI 快速启动"),
             description: `${t("codex.localAccess.title", "API 服务")} · ${baseUrl}`,
             actionLabel: t("common.open", "打开"),
             disabled: cliLaunchingAccountId === CODEX_API_SERVICE_BIND_ID,

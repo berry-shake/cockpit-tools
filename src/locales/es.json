@@ -96,6 +96,8 @@
     "providerClear": "Borrar selección"
   },
   "common": {
+    "status": "Estado",
+    "cliQuickLaunch": "Iniciar CLI",
     "requestId": "ID de solicitud",
     "failureTime": "Hora del fallo",
     "clearRecord": "Borrar registro",
@@ -244,7 +246,8 @@
           "statusRunning": "Importando...",
           "statusSkipped": "Omitido",
           "statusPending": "Pendiente de importación"
-        }
+        },
+        "invalidJson": "JSON no válido. Revisa el archivo o el contenido pegado."
       },
       "externalImport": {
         "bundleInvalidJson": "El paquete de importación no es JSON válido",
@@ -426,7 +429,24 @@
     "show": "Mostrar",
     "configSaveTimeout": "Se agotó el tiempo. Actualiza para comprobar el resultado antes de reintentar.",
     "clearAll": "Deseleccionar",
-    "clear": "Limpiar"
+    "clear": "Limpiar",
+    "outputSpeed": {
+      "label": "Velocidad",
+      "pageAverage": "Velocidad ponderada de página",
+      "pageSamples": "{{count}} muestras válidas",
+      "hint": "Tokens de salida por segundo aproximados, del primer fragmento al fin de la ejecución, sin la espera inicial. Requiere al menos 100 tokens de salida y 100 ms. El razonamiento sigue el uso de salida del proveedor sin sumarse dos veces; se excluye la entrada en caché.",
+      "unavailableHint": "Sin medición válida: falta uso o tiempo, transporte no compatible, registro antiguo, respuesta corta, intervalo breve, fallo o cancelación. No se miden sesiones normales sin tiempos de la pasarela.",
+      "pageHint": "Solo esta página: suma de tokens de salida válidos dividida por la suma de tiempos observados. Las solicitudes simultáneas se miden por separado; no es el promedio de todo el historial.",
+      "value": "≈ {{value}} tok/s",
+      "unavailableReasons": {
+        "canceled": "Solicitud cancelada; velocidad no medida.",
+        "failed": "Solicitud fallida o incompleta; velocidad no medida.",
+        "missingUsage": "No se registró un uso de salida válido.",
+        "shortOutput": "Menos de 100 tokens de salida; velocidad no medida.",
+        "missingTiming": "No se registró un tiempo de salida válido.",
+        "shortWindow": "La ventana de salida observada es inferior a 100 ms."
+      }
+    }
   },
   "nav": {
     "overview": "Antigravity IDE​",
@@ -561,7 +581,7 @@
       "startAll": "¿Iniciar todas las instancias detenidas?",
       "restartAll": "¿Reiniciar todas las instancias en ejecución?",
       "stopAll": "¿Cerrar todas las instancias?",
-      "syncThreads": "Se analizarán todas las instancias de Codex y se completarán automáticamente los hilos faltantes. Los hilos existentes no se volverán a escribir y los archivos de la instancia de destino se respaldarán antes de cualquier escritura. ¿Continuar?"
+      "syncThreads": "Añade las sesiones faltantes en todas las instancias y agrega contenido nuevo solo si la instancia de destino está detenida y su historial coincide. Se conservan los bytes existentes. Se rechazan las actualizaciones de historiales divergentes o destinos en ejecución. Los archivos de destino se respaldan antes de escribir. ¿Continuar?"
     },
     "status": {
       "running": "En ejecución",
@@ -848,6 +868,8 @@
       "data": "Gestión de datos"
     },
     "general": {
+      "errorReporting": "Diagnóstico",
+      "errorReportingDesc": "Al activarlo, envía diagnósticos de inicio e interfaz tras depurar los datos. Al desactivarlo, deja de enviarlos.",
       "appearance": "Apariencia",
       "language": "Idioma",
       "languageDesc": "Selecciona el idioma de la interfaz",
@@ -1237,7 +1259,7 @@
       "backup": {
         "title": "Gestor de copias",
         "desc": "Gestiona las copias programadas, la carpeta de copias y la lista de archivos desde un solo lugar.",
-        "modalDesc": "Configura las copias automáticas, revisa los archivos guardados en la carpeta de copias del proyecto y restáuralos o límpialos aquí.",
+        "modalDesc": "Gestiona las reglas de copia automática y la carpeta seleccionada, con opción de migrar a otra unidad. Consulta, restaura, descarga o limpia las copias locales de esa carpeta.",
         "statusEnabled": "La copia automática está activada",
         "statusDisabled": "La copia automática está desactivada",
         "lastRunLabel": "Última copia: {{time}}",
@@ -1255,8 +1277,10 @@
         "retentionDesc": "Las copias más antiguas se eliminarán en la siguiente revisión.",
         "retentionUnit": "días",
         "directoryTitle": "Carpeta de copias",
-        "directoryDesc": "Las copias siempre se guardan en la carpeta backups del proyecto.",
+        "directoryDesc": "Las copias programadas y las instantáneas del comportamiento de Cockpit se guardan en la carpeta seleccionada. Puedes migrar estos archivos a otra unidad.",
         "changeDirectory": "Cambiar carpeta",
+        "sourceUnavailable": "No se pueden leer ni contar las copias existentes, por lo que no se pueden migrar. Puede cambiar la carpeta de copias; los archivos anteriores, las cuentas y la carpeta de datos de la aplicación se mantienen. Motivo: {{error}}",
+        "loadTimeout": "Se agotó el tiempo de carga de las copias. Reintente o elija otra carpeta.",
         "migrating": "Migrando...",
         "migrationConfirm": "¿Mover las copias existentes de {{oldPath}} a {{newPath}}?\n\nCancelar cambiará la carpeta sin mover los archivos antiguos.",
         "usageTitle": "Espacio de copias",
@@ -1384,6 +1408,8 @@
         "accountsOnlyFile": "Esta copia solo contiene datos de cuentas. Selecciona \"Datos de cuentas\" para importarla",
         "selectedSectionsMissing": "El tipo de datos seleccionado no está presente en esta copia",
         "unsupportedLegacyFile": "No se reconoce este formato heredado de copia de cuentas",
+        "codexTopLayoutInvalid": "La copia contiene una disposición de pestañas no válida. No se importó la configuración.",
+        "codexTopLayoutImportFailed": "Se importaron los demás ajustes, pero no se pudo guardar la disposición de las pestañas. Reintenta la importación.",
         "unsupportedVersion": "Esta versión de la app no admite esa versión del paquete"
       }
     },
@@ -2107,6 +2133,10 @@
       "accountsHint": "Selecciona varias cuentas para probar.",
       "start": "Iniciar prueba",
       "testing": "Probando..."
+    },
+    "confirmation": {
+      "description": "Confirma la activación «{{name}}» para {{count}} cuentas. No se enviará si cancelas, cierras o dejas que caduque.",
+      "expired": "Esta confirmación caducó o terminó. Cierra el diálogo."
     }
   },
   "update_notification": {
@@ -2161,6 +2191,16 @@
     "other_group": "Otros modelos"
   },
   "codex": {
+    "instance": {
+      "errors": {
+        "threadSyncWorkerFailed": "Falló la tarea de sincronización de sesiones: {{error}}",
+        "threadSyncBusy": "La sincronización de sesiones de Codex está en curso. Inténtalo de nuevo en breve.",
+        "threadSyncTargetRunning": "La instancia de Codex de destino está en ejecución. Ciérrala antes de actualizar sesiones existentes.",
+        "threadSyncTargetChanged": "La sesión de destino cambió después de la vista previa. Sincroniza de nuevo; el contenido nuevo se ha conservado.",
+        "threadSyncTargetReplaced": "Se reemplazó el archivo de la sesión de destino. Revisa de nuevo la vista previa de sincronización.",
+        "threadSyncFileBusy": "Otra sincronización está usando la sesión de destino. Inténtalo de nuevo en breve."
+      }
+    },
     "thresholds": {
       "shortCycle": "Cuota corta",
       "weekly": "Cuota semanal",
@@ -2295,9 +2335,9 @@
         "autoDisabled": "La sincronización automática de registros de todas las instancias está desactivada",
         "autoEnabled": "La sincronización automática de registros de todas las instancias está activada",
         "autoTooltip": "Sincronizar automáticamente registros de todas las instancias",
-        "autoDesc": "Desactivado mantiene aislados los registros de varias instancias. Al activarlo, iniciar o cerrar una instancia fusiona automáticamente los registros locales solo después de que todas las instancias de Codex se hayan detenido.",
+        "autoDesc": "Al desactivarlo, los historiales de las instancias permanecen separados. Al activarlo, iniciar o detener una instancia sincroniza las sesiones faltantes y las adiciones de historial coincidentes solo cuando todas las instancias de Codex están detenidas. Se conservan los bytes existentes.",
         "closeFirst": "Cierra todas las instancias de Codex antes de sincronizar registros para evitar que las instancias en ejecución vuelvan a escribir registros antiguos.",
-        "confirmMessage": "Se sincronizarán por completo los registros locales de sesión en todas las instancias de Codex. Las sesiones con el mismo ID se fusionarán por evento, y se hará copia de seguridad de los archivos clave del destino y de los archivos de sesión antiguos antes de escribir. ¿Continuar?",
+        "confirmMessage": "Añade las sesiones faltantes en todas las instancias y agrega contenido nuevo solo si la instancia de destino está detenida y su historial coincide. Se conservan los bytes existentes. Se rechazan las actualizaciones de historiales divergentes o destinos en ejecución. Los archivos de destino se respaldan antes de escribir. ¿Continuar?",
         "needTwo": "Se necesitan al menos dos instancias para sincronizar registros",
         "settingsSection": "Ajustes de sincronización",
         "settingsSubtitle": "Gestiona cómo se sincronizan los registros entre varias instancias de Codex",
@@ -2381,6 +2421,7 @@
     "switched": "Cambiado a {{email}}",
     "switchFailed": "Error al cambiar: {{error}}",
     "authError": {
+      "refreshFailed": "Error al renovar el Token: {{error}}",
       "badge": "Problema de autorización",
       "refreshTokenReused": "La autorización de Codex no es válida: otro cliente o instancia ya usó el refresh_token. Inicia sesión de nuevo y evita actualizar la misma cuenta al mismo tiempo desde Codex oficial, otras instancias o herramientas externas.",
       "refreshTokenExpired": "La autorización de inicio de sesión de Codex caducó y no puede renovarse automáticamente. Inicia sesión de nuevo en la cuenta de Codex.",
@@ -2566,7 +2607,8 @@
         "audioTooLarge": "Las solicitudes de audio no pueden superar 26 MiB.",
         "audioNotSupported": "Esta cuenta OAuth solo admite transcripción. Usa un proveedor con API Key para otras operaciones de audio.",
         "audioUnavailable": "El reenvío de audio no está disponible.",
-        "audioUpstreamFailed": "La solicitud de audio al proveedor falló."
+        "audioUpstreamFailed": "La solicitud de audio al proveedor falló.",
+        "modelNotAvailable": "El modelo {{model}} no está disponible para esta API Key."
       },
       "testRateLimited": "El servicio responde, pero el ascendente tiene límite de velocidad o cuota agotada: {{detail}}.",
       "testHttpFailed": "El servicio responde, pero la solicitud devolvió HTTP {{status}}: {{detail}}.",
@@ -3259,7 +3301,7 @@
       "confirm": {
         "title": "Mover a la papelera",
         "message": "Las sesiones seleccionadas se moverán a la papelera desde sus instancias para que puedan restaurarse más tarde. Es posible que las instancias en ejecución necesiten reiniciarse antes de que aparezcan los cambios. ¿Continuar?",
-        "syncMessage": "Los hilos faltantes y sus datos de sesión se sincronizarán con todas las instancias. El contenido existente no se volverá a escribir y los archivos de la instancia de destino se respaldarán antes de cualquier escritura. ¿Continuar?",
+        "syncMessage": "Añade las sesiones faltantes en todas las instancias y agrega contenido nuevo solo si la instancia de destino está detenida y su historial coincide. Se conservan los bytes existentes. Se rechazan las actualizaciones de historiales divergentes o destinos en ejecución. Los archivos de destino se respaldan antes de escribir. ¿Continuar?",
         "repairVisibilityMessage": "Actualiza los registros de la state DB oficial de Codex que controlan la lista lateral de sesiones. Los archivos state DB se respaldan antes de escribir."
       },
       "empty": {
@@ -3340,7 +3382,7 @@
           "pruneBackups": "Limpiando respaldos antiguos...",
           "done": "Reparación completada",
           "writeSqliteProvider": "Escribiendo visibilidad SQLite de {{instance}}...",
-          "writeRolloutFiles": "Escribiendo archivos de sesión antiguos...",
+          "writeRolloutFiles": "Corrigiendo fechas de los archivos de sesión de {{instance}}...",
           "writeSqliteTimestamps": "Corrigiendo tiempos SQLite de {{instance}}...",
           "writeSessionIndex": "Escribiendo session_index..."
         },
@@ -3351,9 +3393,9 @@
         "providerLoadFailed": "No se pudieron cargar providers: {{error}}",
         "modeTitle": "Modo de reparación",
         "modeQuick": "Reparación rápida",
-        "modeQuickDesc": "Corrige la state DB oficial y la primera línea de metadatos de la sesión. Ideal tras cambios habituales de cuenta.",
+        "modeQuickDesc": "Normaliza proveedores en la base oficial y los índices de sesiones. Conserva los archivos rollout. Para cambios habituales de cuenta.",
         "modeDeep": "Reparación completa",
-        "modeDeepDesc": "Migra todos los datos históricos del proveedor y repara catálogos, espacios de trabajo e índices de subagentes. Cierra primero la instancia de destino.",
+        "modeDeepDesc": "Repara proveedores históricos, catálogos, espacios de trabajo e índices de subagentes. Conserva los archivos rollout. Cierra primero la instancia de destino.",
         "scopeTitle": "Alcance de sesiones",
         "scopeAll": "Todas las sesiones",
         "scopeAllDesc": "Repara {{count}} sesión(es) de la lista actual.",
@@ -3385,7 +3427,7 @@
         "previewFailedWithError": "Error al previsualizar la reparación de sesiones: {{error}}",
         "confirmRepair": "Confirmar reparación",
         "title": "Reparar historial",
-        "description": "Migra las sesiones históricas al proveedor actual de la instancia de destino y repara los archivos de sesión, índices SQLite, catálogo local y estado de espacios de trabajo. Primero se crea una copia local.",
+        "description": "Normaliza los proveedores en los índices SQLite, el catálogo de sesiones y los espacios de trabajo. Los archivos rollout conservan todos sus bytes; solo se corrigen las fechas. Primero se crea una copia de seguridad local.",
         "stopInstanceHint": "Cierra por completo la instancia seleccionada de Codex App/ChatGPT antes de la reparación completa. Aún puedes previsualizar los cambios.",
         "encryptedContentWarning": "Se detectó historial cifrado por otro proveedor o cuenta. Los metadatos se pueden migrar, pero continuar o compactar esas sesiones puede fallar; vuelve al proveedor/cuenta original o inicia una sesión nueva."
       },
@@ -4224,9 +4266,12 @@
       "standard": "Estándar",
       "standardDesc": "Velocidad predeterminada, uso normal",
       "fast": "Rápida",
-      "fastDesc": "1,5 veces más rápida, mayor uso",
+      "fastDesc": "Más rápido, mayor consumo/coste",
       "saveSuccess": "Velocidad actualizada",
-      "saveFailed": "No se pudo guardar la velocidad: {{error}}"
+      "saveFailed": "No se pudo guardar la velocidad: {{error}}",
+      "loadFailed": "No se pudo cargar la velocidad: {{error}}",
+      "apiHint": "Se usa si la solicitud API omite el nivel; el nivel explícito del cliente tiene prioridad. Rápido aumenta el consumo o el coste según el modelo y proveedor.",
+      "launchHint": "Se guarda al cambiar de cuenta y al iniciar con Cockpit. Reinicia el cliente activo. Los chats nuevos usan este valor; ajusta la velocidad propia de los chats existentes en el cliente."
     },
     "apiService": {
       "inspection": {
@@ -4410,7 +4455,25 @@
         "reasoningEffortValue": "Raz. {{effort}}",
         "serviceTier": "Nivel de servicio",
         "serviceTierValue": "Nivel {{tier}}",
-        "upstreamModel": "Modelo enviado"
+        "upstreamModel": "Modelo enviado",
+        "columns": {
+          "time": "Hora",
+          "model": "Modelo",
+          "result": "Resultado",
+          "source": "Origen",
+          "account": "Cuenta",
+          "tokens": "Tokens",
+          "cost": "Valor estimado",
+          "performance": "Rendimiento",
+          "proxy": "Proxy",
+          "requestId": "ID solicitud",
+          "actions": "Acciones"
+        },
+        "columnSettings": "Columnas",
+        "tokenInput": "Entrada",
+        "tokenOutput": "Salida",
+        "tokenCache": "Caché",
+        "tokenTotal": "Total"
       },
       "timeouts": {
         "entryLabel": "Avanzado",
@@ -4490,6 +4553,11 @@
         "duplicate": "Los modelos de solicitud deben ser únicos",
         "saveSuccess": "Asignaciones de modelos de cuenta guardadas",
         "cardCount": "{{count}} asignados"
+      },
+      "recovery": {
+        "progress": "Restaurando la configuración de cuentas ({{attempt}}/{{total}})",
+        "partialUnavailable": "Algunas cuentas no están disponibles. Las demás pueden seguir atendiendo solicitudes. Revisa las cuentas vinculadas a cada Key.",
+        "unavailable": "Es necesario recuperar la configuración de las cuentas. Revisa las cuentas vinculadas a cada Key y vuelve a intentarlo."
       }
     },
     "apiKey": {
@@ -4717,6 +4785,12 @@
       "restartFailed": "No se pudo reiniciar la puerta de enlace: {{error}}"
     },
     "proxy": {
+      "legacyBoundHint": "El proxy de la cuenta vinculada anteriormente sigue activo. Al guardar de nuevo se aplica el modo elegido.",
+      "boundAccountUnavailable": "La cuenta vinculada no está disponible. Vuelve a elegir un proxy.",
+      "boundProxyUnavailable": "La cuenta vinculada no tiene un proxy disponible. Vuelve a elegir uno.",
+      "sourceUnavailable": "La fuente del proxy o el nodo no está disponible. Vuelve a elegirlo.",
+      "operationTimeout": "La operación del proxy agotó el tiempo de espera. Inténtalo de nuevo.",
+      "cardScopeHint": "El cliente de escritorio Codex que se inicia usa el proxy de esta tarjeta. Las conexiones de las pasarelas de modelos con sus proveedores mantienen sus propias rutas.",
       "display": {
         "title": "Vista del proxy",
         "compact": "Breve",
@@ -4832,7 +4906,7 @@
         "followYes": "Sí",
         "followNo": "No sigue",
         "empty": "Ninguna cuenta puede usar un proxy de salida",
-        "emptyHint": "Añade primero una cuenta OAuth normal y luego configura aquí su salida.",
+        "emptyHint": "Añade una cuenta OAuth o API, o activa la tarjeta del servicio API, y configura su ruta aquí.",
         "loadFailed": "No se pudieron cargar los datos de salida",
         "loadFailedHint": "No se pudieron leer los recursos de proxy locales; reinténtalo cuando quieras. Las vinculaciones independientes siguen funcionando."
       },
@@ -4958,7 +5032,7 @@
       "disableAction": "Quitar proxy",
       "setIndependent": "Proxy individual",
       "disabledHint": "Omitir los proxies individuales y compartidos e intentar conexiones directas.",
-      "disabledWarning": "El acceso directo puede fallar. El cambio se aplica a las nuevas conexiones de los clientes con retransmisión local; los demás clientes abiertos necesitan reiniciarse. Las conexiones existentes pueden conservar la ruta anterior.",
+      "disabledWarning": "La conexión directa puede no llegar al servicio. Reinicia Codex de escritorio para conectarte directamente sin el relé local de Cockpit. Hasta entonces, los clientes con relé intentan el acceso directo en las conexiones nuevas; las existentes pueden mantener su ruta anterior.",
       "exitIp": "IP de salida",
       "sessionHistory": "Actividad",
       "sessionHistoryHint": "Consulta el estado cada 5 segundos. Solo conserva el estado inicial y los cambios de esta vista, hasta 20 registros. Se borran al cerrar; no es un historial completo.",
@@ -5017,16 +5091,16 @@
       "modeDefaultHint": "Esta cuenta no usa proxy y mantiene su salida predeterminada anterior.",
       "modeStaleHint": "El origen o nodo vinculado ya no está disponible. Vuelve a elegirlo.",
       "management": "Gestión de proxies",
-      "managementHint": "Salida independiente para cuentas OAuth. No cambia el proxy del sistema.",
+      "managementHint": "Configura proxies para tarjetas de cuentas OAuth, API y servicio API sin cambiar el proxy del sistema. En tarjetas API se aplica al cliente de escritorio iniciado; las pasarelas de modelos mantienen sus propias rutas.",
       "emptyTitle": "Una conexión propia para tu cuenta",
-      "emptyDescription": "Aún no hay cuentas OAuth compatibles. Añade una desde la vista de cuentas y vuelve aquí para vincular un proxy y comprobar su salida.",
+      "emptyDescription": "No hay tarjetas de cuentas compatibles. Añade una cuenta OAuth o API, o activa la tarjeta del servicio API, y elige un proxy aquí.",
       "search": "Buscar cuentas",
       "filter": "Vinculación",
       "filter_all": "Todas",
       "filter_bound": "Vinculadas",
       "filter_unbound": "Sin vincular",
       "noMatches": "No hay cuentas coincidentes",
-      "oauthOnly": "Cuenta OAuth",
+      "oauthOnly": "Tarjeta de cuenta",
       "saved": "Guardado",
       "hiddenSummary": "Credenciales ocultas",
       "inputMode": "Método de entrada",
@@ -5057,7 +5131,7 @@
       "action": "Servidor proxy",
       "boundHint": "Asignado; conexión sin verificar",
       "unboundHint": "Sin proxy configurado para la cuenta",
-      "unsupportedAccount": "Solo disponible para cuentas OAuth normales",
+      "unsupportedAccount": "Este ajuste admite tarjetas de cuentas OAuth normales, cuentas API y servicio API.",
       "invalidUrl": "Dirección del proxy no válida",
       "unsupportedProtocol": "Este protocolo de proxy aún no es compatible",
       "saveFailed": "No se pudo guardar el proxy",
@@ -5168,14 +5242,17 @@
         "chooseMember": "Elegir miembro del grupo",
         "chooseAccount": "Elegir cuenta",
         "bind": "Vincular cuenta",
-        "noAccounts": "Añade una cuenta OAuth normal para vincularla. Ya puedes probar la salida.",
+        "noAccounts": "Añade una cuenta OAuth o API, o activa la tarjeta del servicio API para asignar un proxy. Ya puedes probar una ruta.",
         "autoGroupHint": "Usa todo el grupo sin fijar un nodo. Selecciona según la latencia; la salida puede cambiar.",
         "policyGroupHint": "Usa todo el grupo sin fijar un nodo. Su regla selecciona la salida, que puede cambiar.",
         "selectGroupHint": "Elige un miembro del grupo o selecciona un nodo directamente para fijarlo.",
         "chooseResource": "Elegir recurso",
         "unsupported": "No compatible",
         "invalidInput": "Introduce un nombre y una URL, enlace de nodo o configuración proxy válidos.",
-        "downloadFailed": "No se pudo obtener la suscripción. Revisa la dirección y conexión; no se admiten redirecciones entre orígenes.",
+        "downloadFailed": "No se pudo descargar la suscripción. Revisa la red y la configuración del proxy e inténtalo de nuevo.",
+        "downloadRedirect": "Descarga detenida por una redirección a otro origen o demasiadas redirecciones.",
+        "downloadDenied": "El servidor de suscripción denegó el acceso (HTTP 401/403). Revisa el enlace y su vigencia.",
+        "downloadTls": "Falló la negociación TLS o la verificación del certificado de la suscripción. Revisa la red y la configuración del proxy.",
         "timeout": "Se agotó el tiempo. Actualiza para comprobar el resultado antes de reintentar.",
         "tooLarge": "El contenido o número de recursos supera el límite. Reduce la suscripción.",
         "busy": "Hay una tarea en curso o guardándose. Actualiza en un momento.",
@@ -5313,7 +5390,7 @@
         "assign": "Asignar proxy",
         "specific": "Cuentas elegidas",
         "shared": "Proxy compartido",
-        "sharedHint": "Las cuentas Codex OAuth sin proxy propio usarán este, incluidas las cuentas compatibles que añadas después. Los ajustes individuales existentes seguirán vigentes. Se excluyen las cuentas configuradas expresamente como «Sin proxy».",
+        "sharedHint": "Las tarjetas compatibles sin proxy propio siguen este proxy, incluidas las nuevas. Los ajustes individuales y Sin proxy tienen prioridad. Las tarjetas API lo usan para el cliente de escritorio; las pasarelas de modelos mantienen sus propias rutas.",
         "apply": "Asignar"
       },
       "managerResources": {
@@ -5340,7 +5417,7 @@
         "follow": "Usar compartido",
         "followHint": "Usa el proxy compartido o la red predeterminada del cliente si está desactivado.",
         "independentHint": "Cambia solo esta cuenta; tiene prioridad sobre el ajuste compartido.",
-        "scope": "Disponible para cuentas Codex OAuth compatibles. No admite cuentas con claves API ni proveedores personalizados.",
+        "scope": "Cuentas OAuth, API y servicio API",
         "followConfirm": "Se eliminarán los proxies individuales de {{count}} cuentas. Usarán el proxy compartido si está activado o la red predeterminada del cliente en caso contrario."
       },
       "managerUnified": {
@@ -5386,6 +5463,8 @@
       "noChanges": "No hay cambios pendientes",
       "topLayoutTitle": "Diseño superior",
       "topLayoutDesc": "Arrastra los elementos o usa las flechas para ordenarlos. Los cinco primeros aparecen arriba; el resto, en el mismo orden en Más.",
+      "topLayoutSaveFailed": "No se pudo guardar la disposición de las pestañas. Tu orden está activo por ahora. Reintenta; al reiniciar podría volver el orden anterior.",
+      "topLayoutReadFailed": "No se pudo leer la disposición guardada de las pestañas. El orden actual sigue disponible. Reintenta la carga o cambia la disposición para guardarla.",
       "locationTop": "Arriba",
       "locationMore": "Más",
       "topLayoutHint": "El botón «Más» permanece fijo a la derecha y no se puede mover ni ocultar.",

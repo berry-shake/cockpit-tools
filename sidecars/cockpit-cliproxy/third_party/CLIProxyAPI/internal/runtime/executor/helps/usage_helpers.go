@@ -46,6 +46,7 @@ type UsageReporter struct {
 	firstPacketDuration time.Duration
 	firstPacketSet      bool
 	ttftStart           time.Time
+	ttftFirstStart      time.Time
 	ttftSet             bool
 	once                sync.Once
 	proxyRouteMu        sync.RWMutex
@@ -216,8 +217,32 @@ func (r *UsageReporter) StartResponseTTFT() {
 	r.ttftMu.Lock()
 	if !r.ttftSet && r.ttftStart.IsZero() {
 		r.ttftStart = time.Now()
+		if r.ttftFirstStart.IsZero() {
+			r.ttftFirstStart = r.ttftStart
+		}
 	}
 	r.ttftMu.Unlock()
+}
+
+// ResumeResponseTTFTAfterRetry excludes a discarded rejection body from the
+// effective TTFT while retaining both the original start and first-packet fallback.
+// Call only when a retry has been selected, never for ordinary error responses.
+func (r *UsageReporter) ResumeResponseTTFTAfterRetry() {
+	if r == nil {
+		return
+	}
+	r.ttftMu.Lock()
+	defer r.ttftMu.Unlock()
+	if !r.ttftSet || r.ttftFirstStart.IsZero() {
+		return
+	}
+	if !r.firstPacketSet {
+		r.firstPacketDuration = r.ttft
+		r.firstPacketSet = true
+	}
+	r.ttft = 0
+	r.ttftSet = false
+	r.ttftStart = r.ttftFirstStart
 }
 
 func (r *UsageReporter) IsTTFTSet() bool {

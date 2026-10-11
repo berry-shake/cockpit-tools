@@ -1643,6 +1643,12 @@ fn sanitize_collection_structure(
         collection.max_retry_interval_ms = normalized_max_retry_interval_ms;
         changed = true;
     }
+    if !collection.account_concurrency_default_migrated {
+        // A saved zero is an explicit unlimited limit, not a missing default.
+        // Missing fields already receive the new default during deserialization.
+        collection.account_concurrency_default_migrated = true;
+        changed = true;
+    }
     let normalized_max_account_concurrency = collection
         .max_account_concurrency
         .min(MAX_ACCOUNT_CONCURRENCY_LIMIT);
@@ -1693,8 +1699,22 @@ fn sanitize_collection_with_accounts(
         .map(|account| account.id.clone())
         .collect();
 
+    let known_account_ids: HashSet<&str> = accounts.iter().map(|account| account.id.as_str()).collect();
+    // Account enumeration can be partial during credential rewrites or storage failures.
+    // Only a known ineligible account or an explicit deletion revokes membership.
+    let explicitly_deleted_ids: HashSet<String> = effective_sidecar_account_ids(collection)
+        .into_iter()
+        .chain(collection.bound_oauth_account_id.iter().cloned())
+        .filter(|id| matches!(codex_account::account_storage_status(id),
+            Ok(codex_account::CodexAccountStorageStatus::Deleted)))
+        .collect();
+    let keep_reference = |id: &str, valid_ids: &HashSet<String>| {
+        !explicitly_deleted_ids.contains(id)
+            && (!known_account_ids.contains(id) || valid_ids.contains(id))
+    };
+
     if let Some(bound_id) = collection.bound_oauth_account_id.as_deref() {
-        if !valid_bound_oauth_account_ids.contains(bound_id) {
+        if !keep_reference(bound_id, &valid_bound_oauth_account_ids) {
             collection.bound_oauth_account_id = None;
             changed = true;
             changed |= normalize_bound_oauth_quota_reserve(
@@ -1707,7 +1727,7 @@ fn sanitize_collection_with_accounts(
     let mut deduped = Vec::new();
     let mut seen = HashSet::new();
     for account_id in &collection.account_ids {
-        if !valid_account_ids.contains(account_id) {
+        if !keep_reference(account_id, &valid_account_ids) {
             changed = true;
             continue;
         }
@@ -1724,10 +1744,10 @@ fn sanitize_collection_with_accounts(
 
     // 成员移除后同步清理策略，避免旧账号策略影响后续重新加入的账号。
     let before_image_policies = collection.image_generation_account_policies.clone();
-    let known_account_ids: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
+    let pool_account_ids: HashSet<&str> = collection.account_ids.iter().map(String::as_str).collect();
     collection
         .image_generation_account_policies
-        .retain(|account_id, _| known_account_ids.contains(account_id.as_str()));
+        .retain(|account_id, _| pool_account_ids.contains(account_id.as_str()));
     if collection.image_generation_account_policies != before_image_policies {
         changed = true;
     }
@@ -1736,7 +1756,7 @@ fn sanitize_collection_with_accounts(
     let before_image_accounts = collection.image_generation_account_ids.clone();
     let mut deduped_image_accounts: Vec<String> = Vec::new();
     for account_id in &collection.image_generation_account_ids {
-        if !valid_bound_oauth_account_ids.contains(account_id) {
+        if !keep_reference(account_id, &valid_bound_oauth_account_ids) {
             changed = true;
             continue;
         }
@@ -1753,7 +1773,6 @@ fn sanitize_collection_with_accounts(
 
     // A missing/unreadable account is not an explicit deletion. Keep its declared
     // key scope; routing still checks actual credentials and explicit removals clean references.
-    let known_account_ids: HashSet<&str> = accounts.iter().map(|account| account.id.as_str()).collect();
     for api_key in &mut collection.api_keys {
         let before = api_key.account_ids.clone();
         let valid_scope_account_ids = if api_key.provider_gateway.is_some() {
@@ -1762,8 +1781,7 @@ fn sanitize_collection_with_accounts(
             &valid_account_ids
         };
         api_key.account_ids.retain(|account_id| {
-            !known_account_ids.contains(account_id.as_str())
-                || valid_scope_account_ids.contains(account_id)
+            keep_reference(account_id, valid_scope_account_ids)
         });
         if api_key.account_ids != before {
             changed = true;
@@ -1867,7 +1885,8 @@ async fn ensure_runtime_loaded_without_start_with_profile_restore(
         request_payload_logging: false,
                 immediate_sse_response: false,
                 max_concurrent_image_requests: 1,
-                max_account_concurrency: 0,
+                max_account_concurrency: DEFAULT_MAX_ACCOUNT_CONCURRENCY,
+                account_concurrency_default_migrated: true,
                 account_concurrency_wait_ms: DEFAULT_ACCOUNT_CONCURRENCY_WAIT_MS,
                 bound_oauth_account_id: None,
                 bound_oauth_quota_reserve: None,
@@ -2033,10 +2052,12 @@ async fn ensure_runtime_loaded_for_app_startup() -> Result<(), String> {
 }
 
 async fn ensure_gateway_matches_runtime() -> Result<(), String> {
-    let result = {
+    let (result, generation) = {
         let _lifecycle_guard = gateway_lifecycle_lock().lock().await;
-        ensure_gateway_matches_runtime_locked().await
+        let generation = current_gateway_lifecycle_generation();
+        (ensure_gateway_matches_runtime_locked().await, generation)
     };
+    let result = defer_gateway_key_preparation_error(result, generation).await;
     if result.is_ok() && GATEWAY_STOP_REQUESTS.load(Ordering::SeqCst) == 0 {
         let collection = {
             let runtime = gateway_runtime().lock().await;
@@ -2060,7 +2081,7 @@ where
         match reload.await {
             Ok(()) => {
                 let mut runtime = gateway_runtime().lock().await;
-                runtime.last_error = None;
+                if !gateway_key_recovery_snapshot().0 { runtime.last_error = None; }
                 logger::log_codex_api_info(&format!(
                     "[CodexLocalAccess] 后台网关重载完成: {}",
                     reason

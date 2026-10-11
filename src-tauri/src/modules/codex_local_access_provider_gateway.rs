@@ -1580,6 +1580,7 @@ fn apply_provider_gateway_template_settings(
     collection.max_retry_credentials = template.max_retry_credentials;
     collection.max_retry_interval_ms = template.max_retry_interval_ms;
     collection.max_account_concurrency = template.max_account_concurrency;
+    collection.account_concurrency_default_migrated = template.account_concurrency_default_migrated;
     collection.account_concurrency_wait_ms = template.account_concurrency_wait_ms;
     collection.timeouts = template.timeouts.clone();
     collection.active_timeout_preset_id = template.active_timeout_preset_id.clone();

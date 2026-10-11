@@ -6,9 +6,10 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { useModalFocusTrap } from "../../hooks/useModalFocusTrap";
 import { useEscCloseTopmost } from "../../hooks/useEscClose";
 import { usePagination } from "../../hooks/usePagination";
 import { MultiSelectFilterDropdown } from "../MultiSelectFilterDropdown";
@@ -66,6 +67,8 @@ export function CodexImageAccountPickerModal({
   onConfirm,
 }: CodexImageAccountPickerModalProps) {
   const { t } = useTranslation();
+  const dialog = useRef<HTMLDivElement>(null);
+  useModalFocusTrap(dialog, true);
   const [query, setQuery] = useState("");
   const [planFilters, setPlanFilters] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortField>("last_used");
@@ -73,7 +76,7 @@ export function CodexImageAccountPickerModal({
   const [draftIds, setDraftIds] = useState<string[]>(selectedIds);
 
   // 该弹框会叠加在启动预览 / API 服务弹框之上，ESC 只关闭最上层，避免连带关闭底层弹框。
-  useEscCloseTopmost(!saving, onCancel);
+  useEscCloseTopmost(!saving, onCancel, dialog);
 
   const candidates = useMemo(
     () => accounts.filter((account) => isImageGenerationEligibleAccount(account)),
@@ -154,6 +157,7 @@ export function CodexImageAccountPickerModal({
   return (
     <div className="modal-overlay" role="presentation">
       <div
+        ref={dialog} tabIndex={-1}
         className="modal-content codex-add-modal codex-oauth-binding-modal codex-image-account-picker"
         role="dialog"
         aria-modal="true"
