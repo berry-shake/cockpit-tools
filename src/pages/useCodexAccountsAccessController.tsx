@@ -1,3 +1,4 @@
+import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { listenSafely as listen } from "../utils/tauriEventListener";
 import { useState, useEffect, useMemo, useCallback, useRef, type ReactElement } from "react";
 import { RefreshCw, CircleAlert, Eye, EyeOff, Link2 } from "lucide-react";
@@ -511,7 +512,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           if (showSuccessMessage) {
             setMessage({
               text: t("codex.switched", {
-                email: maskAccountText(account.email),
+                email: maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))),
               }),
             });
           }
@@ -724,6 +725,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
             launchOptions.deepSeekAccessMode,
             null,
             launchOptions.imageGenerationAccountIds ?? [],
+            launchOptions.imageGenerationAccountModels ?? {},
           );
         }
         if (launchPreviewCliIntent) {
@@ -1535,7 +1537,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       page.setAddMessage(
         t("codex.import.successMsg", "导入成功: {{email}}").replace(
           "{{email}}",
-          maskAccountText(account.email),
+          maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))),
         ),
       );
       setTimeout(() => {
@@ -2773,7 +2775,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
         page.setAddMessage(
           `${t("codex.import.successMsg", "导入成功: {{email}}").replace(
             "{{email}}",
-            maskAccountText(account.email),
+            maskAccountText(resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"))),
           )}${
             Object.keys(parsedWindows.windows).length > 0 ||
             apiSyncModelCatalogToCodex
@@ -2785,7 +2787,7 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
           }`,
         );
         setApiKeyInput("");
-        setApiBaseUrlInput(DEFAULT_CODEX_API_BASE_URL);
+        setApiBaseUrlInput("");
         setApiProviderPresetId(defaultApiProviderPresetId);
         setManagedProviderId("");
         setManagedProviderApiKeyId("");
@@ -2963,9 +2965,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
       inlineRenameDiscardRef.current = false;
       setEditingApiKeyNameId(account.id);
       setEditingApiKeyNameValue(
-        (account.account_name || account.email || "").trim(),
+        resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
       );
-    }, []);
+    }, [t]);
   
     const handleSubmitInlineRename = useCallback(
       async (account: CodexAccount) => {
@@ -2978,9 +2980,9 @@ export function useCodexAccountsAccessController(context: CodexAccountsAccessCon
   
         const nextName = editingApiKeyNameValue.trim();
         const currentName = (account.account_name || "").trim();
-        const fallbackName = (account.email || "").trim();
+        const fallbackName = resolveCodexAccountDisplayName(account, t("common.apiKeyAccount"));
         const unchanged =
-          nextName === currentName || (!currentName && nextName === fallbackName);
+          nextName === currentName || nextName === fallbackName;
         if (unchanged) {
           clearInlineRename();
           return;

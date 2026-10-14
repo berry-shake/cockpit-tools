@@ -230,6 +230,8 @@ pub(crate) fn ensure_codex_reserve_fallback(catalog: &mut Value) {
     models.push(reserve);
 }
 
+pub(crate) const CODEX_REASONING_EFFORT_ORDER: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+
 fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[String]) {
     let levels = object
         .get("supported_reasoning_levels")
@@ -243,7 +245,7 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
                 .cloned()
         })
         .unwrap_or_default();
-    let selected = efforts
+    let mut selected = efforts
         .iter()
         .filter_map(|effort| {
             levels
@@ -255,28 +257,30 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
     if selected.is_empty() {
         return;
     }
-    object.insert(
-        "supported_reasoning_levels".to_string(),
-        Value::Array(selected.clone()),
-    );
+    // Capture the old input-order fallback before canonicalizing the output.
     let current_default = object
         .get("default_reasoning_level")
         .and_then(Value::as_str)
-        .unwrap_or_default();
-    if !selected
-        .iter()
-        .any(|level| level.get("effort").and_then(Value::as_str) == Some(current_default))
-    {
-        if let Some(first) = selected
-            .first()
-            .and_then(|level| level.get("effort"))
-            .and_then(Value::as_str)
-        {
-            object.insert(
-                "default_reasoning_level".to_string(),
-                Value::String(first.to_string()),
-            );
-        }
+        .filter(|default| {
+            selected
+                .iter()
+                .any(|level| level["effort"].as_str() == Some(default))
+        })
+        .map(str::to_owned)
+        .or_else(|| selected.first()?.get("effort")?.as_str().map(str::to_owned));
+    selected.sort_by_key(|level| {
+        CODEX_REASONING_EFFORT_ORDER
+            .iter()
+            .position(|effort| level["effort"].as_str() == Some(effort))
+            .unwrap_or(usize::MAX)
+    });
+    selected.dedup_by(|a, b| a["effort"] == b["effort"]);
+    object.insert(
+        "supported_reasoning_levels".to_string(),
+        Value::Array(selected),
+    );
+    if let Some(default) = current_default {
+        object.insert("default_reasoning_level".to_string(), Value::String(default));
     }
 }
 
@@ -2294,11 +2298,40 @@ mod tests {
             .iter()
             .filter_map(|level| level.get("effort").and_then(Value::as_str))
             .collect::<Vec<_>>();
-        assert_eq!(efforts, vec!["low", "ultra", "max"]);
+        assert_eq!(efforts, vec!["low", "max", "ultra"]);
         assert_eq!(
             model.get("default_reasoning_level").and_then(Value::as_str),
             Some("low")
         );
+    }
+
+    #[test]
+    fn reasoning_override_sorts_and_deduplicates_without_changing_default_selection() {
+        for (previous_default, expected_default) in [
+            (Some("high"), "high"),
+            (Some("medium"), "ultra"),
+            (None, "ultra"),
+        ] {
+            let mut model = json!({
+                "supported_reasoning_levels": [
+                    { "effort": "low" },
+                    { "effort": "high" },
+                    { "effort": "ultra" }
+                ]
+            });
+            if let Some(default) = previous_default {
+                model["default_reasoning_level"] = json!(default);
+            }
+            apply_reasoning_effort_override(
+                model.as_object_mut().unwrap(),
+                &["ultra".into(), "low".into(), "high".into(), "ultra".into()],
+            );
+            assert_eq!(
+                model["supported_reasoning_levels"],
+                json!([{ "effort": "low" }, { "effort": "high" }, { "effort": "ultra" }])
+            );
+            assert_eq!(model["default_reasoning_level"], json!(expected_default));
+        }
     }
 
     #[test]
