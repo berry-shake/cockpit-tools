@@ -89,9 +89,16 @@ func TestResponsesInterruptInFlight(t *testing.T) {
 				}
 				close(interruptForwarded)
 				if testCase.disconnect {
-					_, _, errRead := c.ReadMessage()
+					_, payload, errRead := c.ReadMessage()
+					// The client sends two identical controls. If the first write
+					// finishes before the second is queued, one duplicate can already
+					// be on the wire when the client closes. Consume only that exact
+					// copy, then still require closure within the read deadline.
+					if errRead == nil && bytes.Equal(payload, interrupt) {
+						_, payload, errRead = c.ReadMessage()
+					}
 					if !websocket.IsUnexpectedCloseError(errRead) && !websocket.IsCloseError(errRead, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-						t.Errorf("upstream socket was not closed after client disconnect: %v", errRead)
+						t.Errorf("upstream socket was not closed after client disconnect: %v, payload: %s", errRead, payload)
 					}
 					return
 				}

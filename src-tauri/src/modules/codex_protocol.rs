@@ -9,7 +9,7 @@ const CODEX_RESERVE_MODEL_ID: &str = "gpt-reserve";
 const CODEX_RESERVE_TEMPLATE_MODEL_ID: &str = "gpt-5.6-luna";
 /// 额度兜底模型对客户端展示的名称（跟随官方 5.6 命名）。
 pub(crate) const CODEX_RESERVE_DISPLAY_NAME: &str = "GPT-5.6 Reserve";
-const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.5";
+const CODEX_MODEL_CATALOG_TEMPLATE_SLUG: &str = "gpt-5.6-sol";
 const CODEX_INPUT_ITEM_ID_LIMIT: usize = 64;
 /// Codex 客户端模型目录统一的压缩格式哈希（comp_hash）。
 ///
@@ -230,7 +230,8 @@ pub(crate) fn ensure_codex_reserve_fallback(catalog: &mut Value) {
     models.push(reserve);
 }
 
-pub(crate) const CODEX_REASONING_EFFORT_ORDER: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultra"];
+pub(crate) const CODEX_REASONING_EFFORT_ORDER: &[&str] =
+    &["low", "medium", "high", "xhigh", "max", "ultra"];
 
 fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[String]) {
     let levels = object
@@ -280,22 +281,45 @@ fn apply_reasoning_effort_override(object: &mut Map<String, Value>, efforts: &[S
         Value::Array(selected),
     );
     if let Some(default) = current_default {
-        object.insert("default_reasoning_level".to_string(), Value::String(default));
+        object.insert(
+            "default_reasoning_level".to_string(),
+            Value::String(default),
+        );
     }
 }
 
 pub(crate) fn managed_codex_model_ids() -> Vec<String> {
-    let catalog = codex_client_model_catalog();
-    let overrides = catalog.get("model_overrides").and_then(Value::as_array);
-    let models = overrides
-        .filter(|models| !models.is_empty())
-        .or_else(|| catalog.get("models").and_then(Value::as_array));
+    managed_codex_model_ids_from_catalog(codex_client_model_catalog())
+}
+
+fn managed_codex_model_ids_from_catalog(catalog: &Value) -> Vec<String> {
+    // Provider metadata shares the client template catalog but is not part of
+    // the official Codex account's default model entitlement.
+    let is_codex_model = |model: &&Value| {
+        model.get("slug").and_then(Value::as_str).is_some_and(|slug| {
+            let slug = slug.trim().to_ascii_lowercase();
+            slug.starts_with("gpt-") || slug.starts_with("codex-")
+        })
+    };
+    let overrides = catalog
+        .get("model_overrides")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(is_codex_model)
+        .collect::<Vec<_>>();
+    let uses_overrides = !overrides.is_empty();
+    let models = if uses_overrides {
+        overrides
+    } else {
+        catalog.get("models").and_then(Value::as_array)
+            .into_iter().flatten().filter(is_codex_model).collect()
+    };
 
     let mut model_ids = models
         .into_iter()
-        .flatten()
         .filter(|model| {
-            overrides.is_some_and(|overrides| !overrides.is_empty())
+            uses_overrides
                 || (model
                     .get("use_responses_lite")
                     .and_then(Value::as_bool)
@@ -307,7 +331,9 @@ pub(crate) fn managed_codex_model_ids() -> Vec<String> {
         })
         .filter_map(|model| model.get("slug").and_then(Value::as_str))
         .map(str::trim)
-        .filter(|model| !model.is_empty())
+        .filter(|model| {
+            !model.is_empty() && !crate::modules::codex_account::is_retired_gpt55_model(model)
+        })
         .map(str::to_string)
         .collect::<Vec<_>>();
 
@@ -550,6 +576,22 @@ fn build_codex_client_model(model_id: &str, index: usize) -> Value {
         object.insert("visibility".to_string(), json!("list"));
     }
     if !is_catalog_model {
+        // An unknown provider must not inherit new Sol-only execution modes.
+        object.insert("multi_agent_version".into(), Value::Null);
+        object.insert("minimal_client_version".into(), json!("0.124.0"));
+        object.insert("tool_mode".into(), Value::Null);
+        object.insert("use_responses_lite".into(), json!(false));
+        object.insert("include_skills".into(), json!(true));
+        object.insert("default_reasoning_level".into(), json!("medium"));
+        object.insert(
+            "supported_reasoning_levels".into(),
+            json!([
+                {"effort":"low","description":"Low"},
+                {"effort":"medium","description":"Medium"},
+                {"effort":"high","description":"High"},
+                {"effort":"xhigh","description":"Extra high"}
+            ]),
+        );
         let display_name = display_name_for_model(model_id);
         object.insert(
             "display_name".to_string(),
@@ -637,6 +679,12 @@ fn codex_client_model_catalog() -> &'static Value {
     })
 }
 
+/// Returns only a known model's metadata, never the client bootstrap fallback.
+pub(crate) fn known_codex_model_template(model_id: &str) -> Option<Value> {
+    let (template, known) = codex_client_model_template(model_id);
+    known.then_some(template)
+}
+
 fn inherit_routed_gpt_capabilities(object: &mut Map<String, Value>, model_id: &str) {
     let Some((namespace, upstream)) = model_id.split_once('/') else {
         return;
@@ -705,7 +753,7 @@ fn codex_client_model_template(model_id: &str) -> (Value, bool) {
             model.get("slug").and_then(Value::as_str) == Some(CODEX_MODEL_CATALOG_TEMPLATE_SLUG)
         })
         .cloned()
-        .expect("Codex client model templates should include gpt-5.5");
+        .expect("Codex client model templates should include gpt-5.6-sol");
     let Some(model_override) = payload
         .get("model_overrides")
         .and_then(Value::as_array)
@@ -1225,19 +1273,24 @@ fn remove_unsupported_responses_fields(obj: &mut Map<String, Value>) -> bool {
     }
 
     if let Some(tier) = obj.get("service_tier") {
-        let normalized = tier.as_str().and_then(|tier| match tier.trim().to_ascii_lowercase().as_str() {
-            "fast" | "priority" => Some("priority"),
-            "standard" | "default" => Some("default"),
-            "flex" => Some("flex"),
-            "auto" => Some("auto"),
-            "ultrafast" => Some("ultrafast"),
-            _ => None,
-        });
+        let normalized =
+            tier.as_str()
+                .and_then(|tier| match tier.trim().to_ascii_lowercase().as_str() {
+                    "fast" | "priority" => Some("priority"),
+                    "standard" | "default" => Some("default"),
+                    "flex" => Some("flex"),
+                    "auto" => Some("auto"),
+                    "ultrafast" => Some("ultrafast"),
+                    _ => None,
+                });
         // Preserve explicit standard/other tiers until routing has selected the
         // provider. Dropping them here lets a later Fast default replace them.
         if let Some(normalized) = normalized {
             if tier.as_str() != Some(normalized) {
-                obj.insert("service_tier".to_string(), Value::String(normalized.to_string()));
+                obj.insert(
+                    "service_tier".to_string(),
+                    Value::String(normalized.to_string()),
+                );
                 changed = true;
             }
         } else {
@@ -1283,13 +1336,14 @@ mod tests {
     #[test]
     fn grok_models_declare_multi_agent_capability() {
         let catalog = build_codex_client_models_response(&[
+            "grok-4.7".into(),
             "grok-4.6".into(),
             "grok-4.5".into(),
             "grok-4.3".into(),
             "unknown-third-party".into(),
         ]);
         let models = catalog["models"].as_array().expect("models");
-        for slug in ["grok-4.6", "grok-4.5", "grok-4.3"] {
+        for slug in ["grok-4.7", "grok-4.6", "grok-4.5", "grok-4.3"] {
             let model = models
                 .iter()
                 .find(|model| model["slug"] == json!(slug))
@@ -1304,6 +1358,24 @@ mod tests {
             .expect("unknown model");
         assert_eq!(unknown["multi_agent_version"], Value::Null);
         assert_eq!(unknown["minimal_client_version"], json!("0.124.0"));
+    }
+
+    #[test]
+    fn grok_47_has_known_context_and_reasoning_without_gpt_execution_modes() {
+        for slug in ["grok-4.7", "grok-4.7-latest"] {
+            let model = build_codex_client_model(slug, 0);
+            assert!(known_codex_model_template(slug).is_some());
+            assert_eq!(model["context_window"], 500_000);
+            assert_eq!(model["max_context_window"], 500_000);
+            assert_eq!(model["auto_compact_token_limit"], 450_000);
+            assert_eq!(model["default_reasoning_level"], "high");
+            assert_eq!(model["input_modalities"], json!(["text", "image"]));
+            let efforts = model["supported_reasoning_levels"].as_array().unwrap()
+                .iter().map(|level| level["effort"].as_str().unwrap()).collect::<Vec<_>>();
+            assert_eq!(efforts, ["low", "medium", "high", "xhigh"]);
+            assert_eq!(model["tool_mode"], Value::Null);
+            assert_eq!(model["use_responses_lite"], false);
+        }
     }
 
     #[test]
@@ -2064,7 +2136,8 @@ mod tests {
         for model in models {
             let slug = model["slug"].as_str().unwrap();
             assert!(
-                !crate::modules::codex_wakeup::is_codex_model_before_5_5(slug),
+                !crate::modules::codex_wakeup::is_codex_model_before_5_5(slug)
+                    && !crate::modules::codex_account::is_retired_gpt55_model(slug),
                 "retired template {slug}"
             );
         }
@@ -2147,6 +2220,23 @@ mod tests {
                 Some("freeform")
             );
         }
+    }
+
+    #[test]
+    fn provider_metadata_overrides_do_not_replace_official_codex_defaults() {
+        let mut catalog = json!({
+            "models": [
+                {"slug":"gpt-5.6-sol","use_responses_lite":true,"visibility":"list"},
+                {"slug":"gpt-6.1-sol","use_responses_lite":true,"visibility":"list"},
+                {"slug":"codex-auto-review","use_responses_lite":true,"visibility":"hide"},
+                {"slug":"grok-4.7","use_responses_lite":true,"visibility":"list"}
+            ],
+            "model_overrides": [{"slug":"grok-4.7"}, {"slug":"grok-4.7-latest"}]
+        });
+        assert_eq!(managed_codex_model_ids_from_catalog(&catalog), ["gpt-6.1-sol", "gpt-5.6-sol"]);
+        catalog["model_overrides"].as_array_mut().unwrap().push(json!({"slug":"gpt-5.6-luna"}));
+        assert_eq!(managed_codex_model_ids_from_catalog(&catalog), ["gpt-5.6-luna"]);
+        assert!(known_codex_model_template("grok-4.7").is_some());
     }
 
     #[test]
@@ -2372,8 +2462,13 @@ mod tests {
         assert_eq!(custom["max_context_window"], 272_000);
         assert_eq!(custom["auto_compact_token_limit"], 244_800);
         assert_eq!(
-            custom["supported_reasoning_levels"],
-            base["supported_reasoning_levels"]
+            custom["supported_reasoning_levels"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|level| level["effort"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["low", "medium", "high", "xhigh"]
         );
         assert_eq!(custom["input_modalities"], base["input_modalities"]);
         assert_eq!(custom["visibility"], "list");
@@ -2385,7 +2480,6 @@ mod tests {
             "gpt-5.6-sol",
             "gpt-5.6-terra",
             "gpt-5.6-luna",
-            "gpt-5.5",
             "gpt-6.1-sol",
             "gpt-6-astra",
         ]
@@ -2401,7 +2495,7 @@ mod tests {
 
         assert_eq!(
             priorities,
-            vec![Some(4), Some(7), Some(8), Some(12), Some(0), Some(1)]
+            vec![Some(4), Some(7), Some(8), Some(0), Some(1)]
         );
     }
 
