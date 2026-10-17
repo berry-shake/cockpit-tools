@@ -5,6 +5,48 @@ The bundled source under `third_party/CLIProxyAPI` is synchronized to the
 sidecar module declares the same upstream version and continues to use the local
 `replace` target.
 
+## Collaboration plaintext markers
+
+The SDK continuation observer also retains complete `response.output_item.done`
+items per upstream attempt. A genuine successful terminal with missing or empty
+output is normalized from those contiguous, nonconflicting items before the
+shared store validates and persists it. Nonempty terminal output remains
+authoritative; EOF, cancellation, partial items and failed terminals do not
+authorize reconstruction. Original wire logs, ciphertext and public output
+handling remain unchanged. Keep the SDK, HTTP/WS and real-worker regressions
+when updating upstream response handling.
+
+New plaintext collaboration calls carry `encrypted_function_args: []` for the
+official client's plaintext delivery path. Codex response marking is derived
+from the final transmitted tool declarations, independently of namespace
+optimization. Existing encryption and signatures are preserved; unknown or
+conflicting declarations do not authorize plaintext. New continuity events
+receive the same markers before persistence while raw wire logs stay intact.
+Chat-to-Responses conversion marks its known plaintext calls at the conversion
+boundary. This patch does not repair or rewrite legacy history.
+
+## Conversation request sizes
+
+The local continuity client does not cap prepare/bind envelopes or their returned
+request bodies at 64 MiB. The Rust control listener follows the same policy, so
+the bridge does not impose a smaller limit than the public conversation endpoint.
+Authorization, operation deadlines and concurrent state/cache protections remain
+in force. The shared 256 MiB copy-accounting budget does not reject a lone active
+large conversation; additional requests still respect the aggregate budget.
+Completed or cancelled tickets release their reservations, and idempotent retries
+retain the same scope checks.
+
+Accepted complete histories are stored in the shared identity database as
+caller-scoped, losslessly compressed wire items and ordered response manifests.
+The 8 MiB / 64 MiB / 128-entry hot cache is optional; its size and eviction no
+longer determine whether an accepted response can be continued after restart or
+an engine change. Shared history items are deduplicated, including opaque tool
+arguments and ciphertext without modification. Only verified complete responses
+publish durable history; incomplete WebSocket anchors remain connection-local
+and pinned to their original caller/account/owner/mapped identities. The current
+WebSocket replay anchor is not discarded at 16 MiB. This storage grows with
+accepted history and does not reconstruct checkpoints lost by older versions.
+
 ## Codex sync scope
 
 - Upstream repository: `https://github.com/router-for-me/CLIProxyAPI`

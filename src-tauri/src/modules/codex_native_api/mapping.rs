@@ -196,7 +196,7 @@ async fn prepare_excluding_inner(
                     &body_copy,
                 )?;
             }
-            let plan = plan.filter(|plan| plan.body.to_string().len() <= max_body_bytes);
+            let plan = plan.filter(|plan| max_body_bytes == usize::MAX || plan.body.to_string().len() <= max_body_bytes);
             if enabled && plan.is_none() {
                 identity.protect_unrebuildable(&mut context)?;
             }
@@ -288,7 +288,7 @@ async fn prepare_excluding_inner(
             } else {
                 identity.configure_rebuild(&mut context, &original_headers, &normalized, enabled)?
             };
-            if plan.as_ref().map_or(&normalized, |plan| &plan.body).to_string().len() > max_body_bytes {
+            if max_body_bytes != usize::MAX && plan.as_ref().map_or(&normalized, |plan| &plan.body).to_string().len() > max_body_bytes {
                 return Err(ServiceError::new(413, "continuation_history_too_large",
                     "Expanded conversation exceeds the request size limit; existing history was preserved"));
             }

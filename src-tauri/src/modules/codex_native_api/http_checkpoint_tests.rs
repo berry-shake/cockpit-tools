@@ -209,6 +209,7 @@ impl Fixture {
         let source = Arc::new(Upstream::default());
         let app = Router::new()
             .route("/responses", post(upstream).get(websocket))
+            .layer(axum::extract::DefaultBodyLimit::disable())
             .with_state(source.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let host = Arc::new(TestHost {
@@ -309,6 +310,176 @@ fn checkpoint(path: &Path, id: &str) -> Value {
 }
 
 #[tokio::test]
+async fn large_http_delta_replays_complete_history_on_same_and_replacement_accounts() {
+    const LARGE: usize = 17 * 1024 * 1024;
+    for replacement in [false, true] {
+        let mut fixture = Fixture::new(true).await;
+        let first = fixture.complete(&initial()).await;
+        fixture.host.removed_a.store(replacement, Ordering::SeqCst);
+        let next = delta(first["id"].as_str().unwrap(), &"x".repeat(LARGE));
+        let second = fixture.complete(&next).await;
+        let sent = fixture.sent();
+        assert_eq!(sent.len(), 2);
+        let expected = append(
+            append(history(), first["output"].as_array().unwrap().clone()),
+            next["input"].as_array().unwrap().clone(),
+        );
+        assert_eq!(sent[1].1["input"], expected, "replacement={replacement}");
+        assert!(sent[1].1.get("previous_response_id").is_none());
+        let owner = if replacement { "b" } else { "a" };
+        assert_eq!(fixture.generation().0, owner);
+        for header in ["session-id", "thread-id"] {
+            assert_eq!(sent[0].0.get(header) != sent[1].0.get(header), replacement);
+        }
+        assert!(checkpoint(&fixture.path(), first["id"].as_str().unwrap()).is_array());
+        // The large checkpoint is not admitted to the 8 MiB hot cache. A new
+        // process must still accept a pure-ID delta and inherit exact history.
+        fixture.stop_native().await;
+        fixture.start(Options::default()).await;
+        let third = fixture
+            .complete(&delta(second["id"].as_str().unwrap(), "after restart"))
+            .await;
+        let expected = append(
+            append(expected, second["output"].as_array().unwrap().clone()),
+            [message("user", "after restart")],
+        );
+        assert_eq!(fixture.sent().last().unwrap().1["input"], expected);
+        assert_eq!(fixture.generation().0, owner);
+        // The other engine reads the same durable record without requiring the
+        // client to resend the large prefix; its result is readable by Rust.
+        fixture.stop_native().await;
+        let bridge = fixture.bridge();
+        let source = delta(third["id"].as_str().unwrap(), "large native to Go");
+        let prepared = bridge_prepare(&bridge, "large-checkpoint-handoff", source.clone()).await;
+        let bound: BindResponse = bridge_call(
+            &bridge,
+            "bind",
+            &BindRequest {
+                ticket: prepared.ticket.clone(),
+                attempt_id: "attempt".into(),
+                account_id: owner.into(),
+                owner_id: Some(format!("owner-{owner}")),
+                expand_http_previous: true,
+                headers: prepared.headers.clone(),
+                body: source,
+            },
+        )
+        .await;
+        let expected = append(
+            append(expected, third["output"].as_array().unwrap().clone()),
+            [message("user", "large native to Go")],
+        );
+        assert_eq!(bound.body["input"], expected);
+        assert_eq!(bound.body["tools"], initial()["tools"]);
+        bridge_complete(&bridge, &prepared, completion("large-go-result")).await;
+        bridge.stop().await.unwrap();
+        fixture.start(Options::default()).await;
+        fixture
+            .complete(&delta("large-go-result", "Go back to Rust"))
+            .await;
+        assert_eq!(
+            fixture.sent().last().unwrap().1["input"],
+            append(
+                append(expected, [message("assistant", "synthetic answer")]),
+                [message("user", "Go back to Rust")],
+            )
+        );
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
+async fn continuity_bridge_large_wire_requests_reach_scope_checks_and_valid_history_binds() {
+    const LARGE: usize = 65 * 1024 * 1024;
+    let fixture = Fixture::new(true).await;
+    let bridge = fixture.bridge();
+    let source = request(json!([message("user", &"x".repeat(LARGE))]));
+    let response = client()
+        .post(format!("http://{}/v1/continuity/prepare", bridge.addr))
+        .bearer_auth(CONTROL_TOKEN)
+        .json(&PrepareRequest {
+            request_id: "large-wire-scope-check".into(),
+            caller: "unconfigured-caller".into(),
+            headers: Headers::new(),
+            body: source,
+            compact: false,
+            allow_rebuild: true,
+        })
+        .send()
+        .await
+        .unwrap();
+    // A real body beyond the former 64 MiB cap reaches its caller-scope check.
+    // It cannot allocate a ticket or bypass the independent state memory budget.
+    assert_eq!(response.status(), 403);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["error"]["code"],
+        "continuity_caller_scope"
+    );
+    let source = request(json!([message("user", &"x".repeat(17 * 1024 * 1024))]));
+    let prepared = bridge_prepare(&bridge, "large-envelope", source.clone()).await;
+    assert_eq!(prepared.body, source);
+    let bound = bridge_bind(&bridge, &prepared, false, source.clone()).await;
+    assert_eq!(bound.body["input"], source["input"]);
+    for header in ["session-id", "thread-id"] {
+        assert!(!bound.headers.get(header).unwrap().is_empty());
+    }
+    let _: ReleaseResponse = bridge_call(
+        &bridge,
+        "release",
+        &ReleaseRequest {
+            ticket: prepared.ticket,
+        },
+    )
+    .await;
+    bridge.stop().await.unwrap();
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn continuity_bridge_rejects_invalid_tokens_before_waiting_for_body() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let fixture = Fixture::new(true).await;
+    let bridge = fixture.bridge();
+    let mut socket = tokio::net::TcpStream::connect(bridge.addr).await.unwrap();
+    socket.write_all(b"POST /v1/continuity/prepare HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer invalid-token\r\nContent-Type: application/json\r\nContent-Length: 999999999\r\nConnection: close\r\n\r\n{").await.unwrap();
+    let mut response = String::new();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        socket.read_to_string(&mut response),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(response.starts_with("HTTP/1.1 401"), "{response}");
+    assert!(response.contains("invalid_continuity_token"), "{response}");
+    for (mime, body, status) in [
+        ("application/foo/bar+json", "{}", 415),
+        ("application/json; invalid", "{}", 415),
+        ("text/json", "{}", 415),
+        ("application/problem+json; charset=utf-8", "{}", 422),
+        ("application/json", "{", 400),
+        ("application/json", "{\"request_id\":false}", 422),
+    ] {
+        let response = client()
+            .post(format!("http://{}/v1/continuity/prepare", bridge.addr))
+            .bearer_auth(CONTROL_TOKEN)
+            .header("content-type", mime)
+            .body(body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            status,
+            "{mime}: {}",
+            response.text().await.unwrap()
+        );
+    }
+    bridge.stop().await.unwrap();
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn oauth_http_previous_expands_same_account_twice_without_rotating_identity_or_losing_cipher()
 {
     let fixture = Fixture::new(true).await;
@@ -403,6 +574,13 @@ async fn oauth_http_missing_checkpoint_foreign_caller_and_size_limit_fail_before
                 .unwrap()
                 .execute(
                     "DELETE FROM native_rebuild_checkpoints_v1 WHERE response=?1",
+                    [id],
+                )
+                .unwrap();
+            Connection::open(fixture.path())
+                .unwrap()
+                .execute(
+                    "DELETE FROM native_rebuild_history_v1 WHERE response=?1",
                     [id],
                 )
                 .unwrap();

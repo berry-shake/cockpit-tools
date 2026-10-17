@@ -43,6 +43,7 @@ pub(super) fn declare_plaintext_message(item: &mut Value) {
             .get("encrypted_function_args")
             .is_none_or(Value::is_null)
         && item.get("encrypted_content").is_none_or(Value::is_null)
+        && item.get("signature").is_none_or(Value::is_null)
     {
         item["encrypted_function_args"] = serde_json::json!([]);
     }

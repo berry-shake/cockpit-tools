@@ -239,13 +239,19 @@ async fn native_test_cooling_continuation_roundtrip(sse_overload: bool, short_co
         .unwrap();
     assert_eq!(initial.status(), 200);
     let _: Value = initial.json().await.unwrap();
-    // Complete histories can now rebuild automatically. Exercise the protected
-    // continuation case after cache eviction, keeping durable ownership intact.
-    let evicted = rusqlite::Connection::open(root.path().join("identity.sqlite"))
-        .unwrap()
+    // Exercise the protected continuation without any replay checkpoint. Hot
+    // cache eviction alone now leaves the durable history available for rebuild.
+    // Preserve ownership so the cooldown must still pin retries to the owner.
+    let connection = rusqlite::Connection::open(root.path().join("identity.sqlite")).unwrap();
+    let evicted = connection
         .execute("DELETE FROM native_rebuild_checkpoints_v1", [])
         .unwrap();
     assert_eq!(evicted, 1);
+    let removed = connection
+        .execute("DELETE FROM native_rebuild_history_v1", [])
+        .unwrap();
+    assert_eq!(removed, 1);
+    drop(connection);
     let body = json!({"model":"gpt-fixture","stream":false,"previous_response_id":"resp-fixture-1","input":[{"type":"reasoning","encrypted_content":"synthetic-owned-cipher"}]});
     let retry = send(body.clone()).await.unwrap();
     assert_eq!(retry.status(), if short_cooldown { 200 } else { 503 });

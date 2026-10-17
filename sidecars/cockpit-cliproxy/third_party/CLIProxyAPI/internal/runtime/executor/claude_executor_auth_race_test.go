@@ -24,6 +24,37 @@ func newSharedClaudeOAuthAuth(id string) *cliproxyauth.Auth {
 	}
 }
 
+func TestClaudeSetupTokenDetectionUsesMetadataLock(t *testing.T) {
+	for _, key := range []string{"", "skip_account_profile", "is_setup_token", "setup_token"} {
+		t.Run("flag_"+key, func(t *testing.T) {
+			auth := newSharedClaudeOAuthAuth("claude-race-setup-token")
+			if key != "" {
+				auth.Metadata[key] = true
+			}
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			for worker := 0; worker < 8; worker++ {
+				wg.Add(1)
+				go func(writer bool) {
+					defer wg.Done()
+					<-start
+					for i := 0; i < 200; i++ {
+						if writer {
+							// Even a different key shares the same map storage.
+							claudeauth.StoreMetadataString(&auth.Metadata, "account_uuid", "test-account")
+						} else if got := isClaudeSetupToken(auth, "sk-ant-oat-race-probe"); got != (key != "") {
+							t.Errorf("isClaudeSetupToken() = %v for flag %q", got, key)
+							return
+						}
+					}
+				}(worker%2 == 0)
+			}
+			close(start)
+			wg.Wait()
+		})
+	}
+}
+
 func TestClaudeExecutorPrepareRequestAuthIsRaceFreeOnSharedCredential(t *testing.T) {
 	executor := NewClaudeExecutor(&config.Config{})
 	executor.oauthProfileFetcher = func(context.Context, *cliproxyauth.Auth, string) (*claudeauth.OAuthProfile, error) {

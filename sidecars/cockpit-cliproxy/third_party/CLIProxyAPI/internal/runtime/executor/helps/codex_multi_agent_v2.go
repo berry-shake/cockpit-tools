@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	multiagentv2 "github.com/router-for-me/CLIProxyAPI/v7/internal/client/codex/optimize-multi-agent-v2"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/codex/collaboration"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
 	openaichatclaude "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/claude/openai/chat-completions"
@@ -14,6 +15,7 @@ import (
 	interactionsclaude "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/interactions/claude"
 	openaiclaude "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/openai/claude"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 )
 
@@ -134,6 +136,20 @@ func OptimizeCodexMultiAgentV2RequestForAuth(ctx context.Context, headers http.H
 // values before an upstream response is translated and returned to the client.
 func RestoreCodexMultiAgentV2Response(payload []byte, optimized bool) []byte {
 	return multiagentv2.RestoreCodexMultiAgentV2Response(payload, optimized)
+}
+
+// MarkCodexMultiAgentV2PlaintextResponse uses the final sent request, independently
+// of the namespace optimization boolean or connection-level namespace state.
+func MarkCodexMultiAgentV2PlaintextResponse(ctx context.Context, headers http.Header, payload []byte, policy collaboration.PlaintextPolicy, cfg *config.Config) []byte {
+	return multiagentv2.MarkCodexMultiAgentV2PlaintextResponse(ctx, headers, payload, policy, cfg)
+}
+
+// SetCodexMultiAgentV2PlaintextObserver applies the same final declaration policy
+// before new output reaches the continuity store, while raw wire logs stay intact.
+func SetCodexMultiAgentV2PlaintextObserver(ctx context.Context, headers http.Header, attempt *cliproxyexecutor.ContinuityAttempt, policy collaboration.PlaintextPolicy, cfg *config.Config) {
+	attempt.SetEventTransform(func(payload []byte) []byte {
+		return multiagentv2.MarkCodexMultiAgentV2PlaintextWireEvent(ctx, headers, payload, policy, cfg)
+	})
 }
 
 // PrepareCodexMultiAgentV2Tools refreshes the collaboration tool declarations at

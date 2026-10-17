@@ -166,6 +166,13 @@ async fn native_http_client(
     account: &CodexAccount,
     context: &NativeTransportContext<'_>,
 ) -> Result<(Client, Option<String>, Option<Value>, String), native_contract::ServiceError> {
+    // Synchronous proxy policy reads only the prepared in-memory snapshot. A
+    // cold native service must load it here, without relying on UI/startup work.
+    // Reuse the bounded, single-flight loader; explicit account/direct/API-key
+    // routes skip shared storage and load failures must not become a fallback.
+    crate::modules::codex_proxy_runtime::ensure_account_proxy_state(account)
+        .await
+        .map_err(|_| native_error(503, "proxy_unavailable", "Account proxy is unavailable"))?;
     let account_proxy = if account.egress_proxy_disabled {
         None
     } else {

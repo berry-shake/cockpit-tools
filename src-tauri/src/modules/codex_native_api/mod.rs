@@ -35,6 +35,7 @@ mod output_error;
 mod output_items;
 mod output_usage;
 pub mod recovery;
+mod request_body;
 mod retry;
 mod server;
 mod token_count;
@@ -75,3 +76,6 @@ mod agent_communication_plaintext_tests;
 mod grok_tool_search_http_tests;
 #[cfg(test)]
 mod grok_error_http_tests;
+
+#[cfg(test)]
+mod live_acceptance_tests;

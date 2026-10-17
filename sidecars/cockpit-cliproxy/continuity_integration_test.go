@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +27,26 @@ import (
 // Run with COCKPIT_CONTINUITY_TEST_EXE pointing at a freshly built host binary.
 // All upstream traffic and credentials below are local fixtures, never accounts.
 func TestRealContinuityWorkerCrossAccountAndRestart(t *testing.T) {
+	runRealContinuityWorkerCrossAccountAndRestart(t, "first", false)
+}
+
+func TestRealContinuityWorkerLargeHistoryCrossAccountAndRestart(t *testing.T) {
+	// Exercise the actual Go SDK executor and Rust worker, including a pure-ID
+	// follow-up after restart. The accepted history exceeds the old hot cache.
+	runRealContinuityWorkerCrossAccountAndRestart(t, strings.Repeat("x", 17*1024*1024), true)
+}
+
+func TestRealContinuityWorkerStreamedCheckpointCrossAccountAndRestart(t *testing.T) {
+	runRealContinuityWorkerCrossAccountAndRestart(t, "first", true, true)
+}
+
+func TestRealContinuityWorkerLargeStreamedCheckpointCrossAccountAndRestart(t *testing.T) {
+	runRealContinuityWorkerCrossAccountAndRestart(t, strings.Repeat("x", 17*1024*1024), true, true)
+}
+
+func runRealContinuityWorkerCrossAccountAndRestart(t *testing.T, initialText string, oauth bool, streamedCheckpoint ...bool) {
+	t.Helper()
+	sparseTerminal := len(streamedCheckpoint) > 0 && streamedCheckpoint[0]
 	executable := os.Getenv("COCKPIT_CONTINUITY_TEST_EXE")
 	if executable == "" {
 		t.Fatal("build the Rust host and set COCKPIT_CONTINUITY_TEST_EXE")
@@ -51,6 +72,19 @@ func TestRealContinuityWorkerCrossAccountAndRestart(t *testing.T) {
 		resultOutput := json.RawMessage(`[]`)
 		if index == 1 {
 			resultOutput = output
+			if sparseTerminal {
+				// Official HTTP responses may send complete items only through
+				// output_item.done and leave the successful terminal output empty.
+				var items []json.RawMessage
+				if err := json.Unmarshal(output, &items); err != nil {
+					t.Error(err)
+					return
+				}
+				for i, item := range items {
+					_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.output_item.done\",\"output_index\":%d,\"item\":%s}\n\n", i, item)
+				}
+				resultOutput = json.RawMessage(`[]`)
+			}
 		}
 		_, _ = fmt.Fprintf(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"response-%d\",\"status\":\"completed\",\"output\":%s}}\n\n", index, resultOutput)
 	}))
@@ -69,7 +103,13 @@ func TestRealContinuityWorkerCrossAccountAndRestart(t *testing.T) {
 	for _, id := range []string{"a", "b"} {
 		registry.GetGlobalRegistry().RegisterClient("sdk-"+id, "codex", []*registry.ModelInfo{{ID: "gpt-5.4"}})
 		defer registry.GetGlobalRegistry().UnregisterClient("sdk-" + id)
-		if _, err := manager.Register(context.Background(), &coreauth.Auth{ID: "sdk-" + id, Provider: "codex", Status: coreauth.StatusActive, Attributes: map[string]string{"account_id": "local-" + id, "api_key": "upstream-" + id, "base_url": upstream.URL}}); err != nil {
+		auth := &coreauth.Auth{ID: "sdk-" + id, Provider: "codex", Status: coreauth.StatusActive, Attributes: map[string]string{"account_id": "local-" + id, "base_url": upstream.URL}}
+		if oauth {
+			auth.Metadata = map[string]any{"access_token": "upstream-" + id, "type": "codex", "refresh_owner": "cockpit_token_authority"}
+		} else {
+			auth.Attributes["api_key"] = "upstream-" + id
+		}
+		if _, err := manager.Register(context.Background(), auth); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -106,11 +146,15 @@ func TestRealContinuityWorkerCrossAccountAndRestart(t *testing.T) {
 			t.Fatalf("continuation failed: %d %s", w.Code, w.Body.String())
 		}
 	}
-	initial := `{"model":"gpt-5.4","stream":true,"input":[{"role":"user","content":"first"}],"client_metadata":{"session_id":"client-root","thread_id":"client-root"}}`
+	initialMessage, _ := json.Marshal(map[string]any{"role": "user", "content": initialText})
+	initial := fmt.Sprintf(`{"model":"gpt-5.4","stream":true,"input":[%s],"client_metadata":{"session_id":"client-root","thread_id":"client-root"}}`, initialMessage)
 	send(initial)
 	send(`{"model":"gpt-5.4","stream":true,"input":[{"type":"agent_message","author":"/root","recipient":"/root/worker","content":[{"type":"encrypted_content","encrypted_content":"agent-message-a"}]}],"client_metadata":{"session_id":"client-root","thread_id":"client-child","x-codex-parent-thread-id":"client-root"}}`)
 	manager.Remove(context.Background(), "sdk-a")
-	follow := fmt.Sprintf(`{"model":"gpt-5.4","stream":true,"previous_response_id":"response-1","input":[{"role":"user","content":"first"},%s,{"type":"function_call_output","call_id":"call-a","output":"agent finished"},{"role":"user","content":"continue"}],"client_metadata":{"session_id":"client-root","thread_id":"client-root"}}`, strings.TrimSuffix(strings.TrimPrefix(string(output), "["), "]"))
+	follow := fmt.Sprintf(`{"model":"gpt-5.4","stream":true,"previous_response_id":"response-1","input":[%s,%s,{"type":"function_call_output","call_id":"call-a","output":"agent finished"},{"role":"user","content":"continue"}],"client_metadata":{"session_id":"client-root","thread_id":"client-root"}}`, initialMessage, strings.TrimSuffix(strings.TrimPrefix(string(output), "["), "]"))
+	if sparseTerminal {
+		follow = `{"model":"gpt-5.4","stream":true,"previous_response_id":"response-1","input":[{"type":"function_call_output","call_id":"call-a","output":"agent finished"},{"role":"user","content":"continue"}],"client_metadata":{"session_id":"client-root","thread_id":"client-root"}}`
+	}
 	send(follow)
 	m.continuityClient.Close()
 	start()
@@ -147,6 +191,15 @@ func TestRealContinuityWorkerCrossAccountAndRestart(t *testing.T) {
 	second, _ := json.Marshal(seenBodies[2])
 	if !strings.Contains(string(second), "original-cipher-a") || !strings.Contains(string(second), "agent-message-a") || !strings.Contains(string(second), "agent finished") {
 		t.Fatal("full cipher/tool history was altered", string(second))
+	}
+	if oauth {
+		firstInput, lastInput := seenBodies[0]["input"].([]any), seenBodies[3]["input"].([]any)
+		if len(firstInput) == 0 || len(lastInput) == 0 || !reflect.DeepEqual(firstInput[0], lastInput[0]) {
+			t.Fatal("restart did not preserve the complete original input")
+		}
+		if _, exists := seenBodies[3]["previous_response_id"]; exists {
+			t.Fatal("OAuth HTTP continuation did not expand its durable history")
+		}
 	}
 	// Explicit Close ends the headless worker without waiting for a GUI shutdown.
 	endpoint := m.continuityClient.endpoint

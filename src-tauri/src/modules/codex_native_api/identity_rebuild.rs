@@ -1,6 +1,9 @@
-//! Bounded complete wire-history checkpoints. Blob provenance stays immutable.
+//! Complete wire-history checkpoints with a bounded hot cache. Blob provenance stays immutable.
 use super::*;
 use std::collections::HashSet;
+
+#[path = "identity_checkpoint.rs"]
+mod checkpoint_store;
 
 const MAX_CHECKPOINT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHE_BYTES: i64 = 64 * 1024 * 1024;
@@ -59,7 +62,7 @@ pub(super) fn initialize(connection: &Connection) -> rusqlite::Result<()> {
             [],
         )?;
     }
-    Ok(())
+    checkpoint_store::initialize(connection)
 }
 
 pub(super) fn reference_generation(
@@ -137,8 +140,7 @@ pub(super) fn full_input(
     let Some(previous) = body.get("previous_response_id").and_then(Value::as_str) else {
         return Ok(true);
     };
-    let raw: Option<String> = connection.query_row("SELECT transcript FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND thread=?2 AND response=?3",params![caller,thread,previous],|row|row.get(0)).optional().map_err(storage)?;
-    let Some(previous) = raw.and_then(|raw| serde_json::from_str::<Vec<Value>>(&raw).ok()) else {
+    let Some(previous) = checkpoint_store::transcript(connection, caller, thread, previous)? else {
         return Ok(false);
     };
     let strip = |items: &[Value]| {
@@ -598,19 +600,12 @@ pub(super) fn complete_input_available(
     ) else {
         return Ok(false);
     };
-    let raw: Option<String> = connection.query_row(
-        "SELECT transcript FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND thread=?2 AND response=?3",
-        params![caller, thread, previous], |row| row.get(0),
-    ).optional().map_err(storage)?;
-    let Some(transcript) = raw
-        .and_then(|raw| serde_json::from_str::<Vec<Value>>(&raw).ok())
+    let Some(transcript) = checkpoint_store::transcript(connection, caller, thread, previous)?
         .and_then(|previous| merge_checkpoint(previous, input))
     else {
         return Ok(false);
     };
-    Ok(replay_items(&transcript)
-        && paired_tools(&transcript)
-        && serde_json::to_vec(&transcript).map_err(storage)?.len() <= MAX_CHECKPOINT_BYTES)
+    Ok(replay_items(&transcript) && paired_tools(&transcript))
 }
 
 impl IdentityStore {
@@ -658,15 +653,15 @@ impl IdentityStore {
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty())
             .ok_or_else(incomplete)?;
-        let checkpoint: Option<(String, String, Option<String>)> = {
-            let connection = self.connection.lock().map_err(storage)?;
-            connection.query_row(
-                "SELECT thread,account,parameters FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND response=?2",
-                params![context.caller, previous],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-            ).optional().map_err(storage)?
+        let checkpoint = {
+            let connection = self.checkpoint_reader()?;
+            checkpoint_store::metadata(&connection, &context.caller, previous)?
         };
-        let (thread, account, parameters) = checkpoint.ok_or_else(incomplete)?;
+        let checkpoint_store::Metadata {
+            thread,
+            account,
+            parameters,
+        } = checkpoint.ok_or_else(incomplete)?;
         if context.thread_id.as_deref() != Some(thread.as_str())
             || context.state_account_id.as_deref() != Some(account.as_str())
         {
@@ -698,10 +693,6 @@ impl IdentityStore {
         let plan = self
             .configure_rebuild(&mut expanded, headers, &candidate, true)?
             .ok_or_else(incomplete)?;
-        if serde_json::to_vec(&plan.body).map_err(storage)?.len() > MAX_CHECKPOINT_BYTES {
-            return Err(ServiceError::new(413, "continuation_history_too_large",
-                "Expanded conversation exceeds the checkpoint size limit; existing history was preserved"));
-        }
         *context = expanded;
         Ok(plan)
     }
@@ -718,14 +709,12 @@ impl IdentityStore {
         let Some(previous) = body.get("previous_response_id").and_then(Value::as_str) else {
             return Ok(None);
         };
-        let raw: Option<Option<String>> = {
-            let connection = self.connection.lock().map_err(storage)?;
-            connection.query_row(
-                "SELECT parameters FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND response=?2",
-                params![context.caller,previous], |row| row.get(0),
-            ).optional().map_err(storage)?
+        let raw = {
+            let connection = self.checkpoint_reader()?;
+            checkpoint_store::metadata(&connection, &context.caller, previous)?
+                .and_then(|checkpoint| checkpoint.parameters)
         };
-        let Some(Some(raw)) = raw else {
+        let Some(raw) = raw else {
             return Ok(None);
         };
         let Ok(parameters) = serde_json::from_str::<serde_json::Map<String, Value>>(&raw) else {
@@ -876,47 +865,54 @@ impl IdentityStore {
         }) {
             return Ok(None);
         }
-        let transcript = if let Some(previous) =
-            body.get("previous_response_id").and_then(Value::as_str)
-        {
-            let connection = self.connection.lock().map_err(storage)?;
-            let checkpoint: Option<(String,String,String,Option<String>)> = connection.query_row(
-                "SELECT thread,account,transcript,parameters FROM native_rebuild_checkpoints_v1 WHERE caller=?1 AND response=?2",
-                params![context.caller,previous], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?)),
-            ).optional().map_err(storage)?;
-            let Some((thread, account, raw, Some(parameters))) = checkpoint else {
-                return Ok(None);
+        let transcript =
+            if let Some(previous) = body.get("previous_response_id").and_then(Value::as_str) {
+                // A separate read connection keeps large history decoding off the
+                // shared identity mutex; WAL readers do not block identity writes.
+                let connection = self.checkpoint_reader()?;
+                let Some(checkpoint_store::Metadata {
+                    thread,
+                    account,
+                    parameters: Some(parameters),
+                }) = checkpoint_store::metadata(&connection, &context.caller, previous)?
+                else {
+                    return Ok(None);
+                };
+                if context.thread_id.as_deref() != Some(thread.as_str())
+                    || context.state_account_id.as_deref() != Some(account.as_str())
+                {
+                    return Ok(None);
+                }
+                let Some(previous) = checkpoint_store::transcript(
+                    &connection,
+                    &context.caller,
+                    Some(&thread),
+                    previous,
+                )?
+                else {
+                    return Ok(None);
+                };
+                let Ok(parameters) =
+                    serde_json::from_str::<serde_json::Map<String, Value>>(&parameters)
+                else {
+                    return Ok(None);
+                };
+                // Never guess whether omitted instructions/tools should inherit across accounts.
+                if parameters.keys().any(|key| body.get(key).is_none()) {
+                    return Ok(None);
+                }
+                let Some(transcript) = merge_checkpoint(previous, input) else {
+                    return Ok(None);
+                };
+                transcript
+            } else {
+                if !context.portable_body && !context.opaque.is_empty() {
+                    return Ok(None);
+                }
+                input.clone()
             };
-            if context.thread_id.as_deref() != Some(thread.as_str())
-                || context.state_account_id.as_deref() != Some(account.as_str())
-            {
-                return Ok(None);
-            }
-            let Ok(previous) = serde_json::from_str::<Vec<Value>>(&raw) else {
-                return Ok(None);
-            };
-            let Ok(parameters) =
-                serde_json::from_str::<serde_json::Map<String, Value>>(&parameters)
-            else {
-                return Ok(None);
-            };
-            // Never guess whether omitted instructions/tools should inherit across accounts.
-            if parameters.keys().any(|key| body.get(key).is_none()) {
-                return Ok(None);
-            }
-            let Some(transcript) = merge_checkpoint(previous, input) else {
-                return Ok(None);
-            };
-            transcript
-        } else {
-            if !context.portable_body && !context.opaque.is_empty() {
-                return Ok(None);
-            }
-            input.clone()
-        };
-        if serde_json::to_vec(&transcript).map_err(storage)?.len() > MAX_CHECKPOINT_BYTES {
-            return Ok(None);
-        }
+        // Cache admission is checked when publishing a checkpoint, not when
+        // validating a complete request that can already be sent upstream.
         context.rebuild_enabled = true;
         context.rebuild_input = Some(transcript.clone());
         context.rebuild_parameters = Some(Value::Object(
@@ -936,7 +932,7 @@ impl IdentityStore {
             })
             .collect(),
         ));
-        let connection = self.connection.lock().map_err(storage)?;
+        let connection = self.checkpoint_reader()?;
         let base_revision = active(
             &connection,
             &context.caller,
@@ -1044,6 +1040,26 @@ impl IdentityStore {
                 })
             });
         drop(streamed);
+        let checkpoint = if complete_output
+            && (if binding.portable_body {
+                replay_items(output)
+            } else {
+                plain_items(output)
+            }) {
+            generation
+                .input
+                .as_ref()
+                .map(|input| {
+                    checkpoint_store::Encoded::prepare(
+                        input,
+                        output,
+                        generation.parameters.as_ref(),
+                    )
+                })
+                .transpose()?
+        } else {
+            None
+        };
         let mut connection = self.connection.lock().map_err(storage)?;
         let transaction = connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -1093,31 +1109,11 @@ impl IdentityStore {
                 transaction.execute("INSERT OR IGNORE INTO native_rebuild_blobs_v1(caller,thread,generation,digest,account,owner) VALUES(?1,?2,?3,?4,?5,?6)",params![binding.caller,thread,generation.id,reference.digest,binding.account_id,binding.owner_id]).map_err(storage)?;
             }
         }
-        if let (Some(input), Some(output)) = (
-            &generation.input,
-            response.get("output").and_then(Value::as_array),
-        ) {
-            if complete_output
-                && (if binding.portable_body {
-                    replay_items(output)
-                } else {
-                    plain_items(output)
-                })
-            {
-                let mut transcript = input.clone();
-                transcript.retain(|item| item["type"] != "compaction_trigger");
-                transcript.extend_from_slice(output);
-                let raw = serde_json::to_string(&transcript).map_err(storage)?;
-                if raw.len() <= MAX_CHECKPOINT_BYTES {
-                    let parameters = generation.parameters.as_ref().map(Value::to_string);
-                    let bytes = raw.len() + parameters.as_ref().map_or(0, String::len);
-                    if bytes <= MAX_CHECKPOINT_BYTES {
-                        transaction.execute("INSERT OR IGNORE INTO native_rebuild_checkpoints_v1(caller,response,thread,account,generation,transcript,bytes,created,parameters) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",params![binding.caller,id,thread,binding.account_id,generation.id,raw,bytes as i64,timestamp(),parameters]).map_err(storage)?;
-                    }
-                }
-            }
+        if let Some(checkpoint) = checkpoint {
+            checkpoint.publish(&transaction, binding, generation, thread, id)?;
         }
-        // Only the optional cache is evicted. Identity and ciphertext ownership remain durable.
+        // Only the hot cache is evicted. Accepted history, identity and ciphertext
+        // ownership remain durable, including for large and old response IDs.
         loop {
             let (count, bytes): (i64, i64) = transaction
                 .query_row(
@@ -1129,7 +1125,13 @@ impl IdentityStore {
             if count <= MAX_CHECKPOINTS && bytes <= MAX_CACHE_BYTES {
                 break;
             }
-            transaction.execute("DELETE FROM native_rebuild_checkpoints_v1 WHERE rowid=(SELECT rowid FROM native_rebuild_checkpoints_v1 ORDER BY created,rowid LIMIT 1)",[]).map_err(storage)?;
+            // A pre-upgrade hot row may be its response's only history copy.
+            // Pin those bounded legacy rows rather than scanning/migrating all
+            // history at startup or silently erasing their continuation proof.
+            let removed = transaction.execute("DELETE FROM native_rebuild_checkpoints_v1 WHERE rowid=(SELECT c.rowid FROM native_rebuild_checkpoints_v1 c WHERE EXISTS(SELECT 1 FROM native_rebuild_history_v1 h WHERE h.caller=c.caller AND h.response=c.response) ORDER BY c.created,c.rowid LIMIT 1)",[]).map_err(storage)?;
+            if removed == 0 {
+                break;
+            }
         }
         // Publish at most one complete generation, or let cancellation win and
         // roll the entire transaction back, including newly accepted input.

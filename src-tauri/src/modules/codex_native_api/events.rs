@@ -256,6 +256,10 @@ impl SseDecoder {
                 }
             }
         }
+        let identity_restored = self
+            .output
+            .as_ref()
+            .is_some_and(|output| output.can_restore_identity(&value));
         let original = (self.output.is_some()
             && matches!(
                 value["type"].as_str(),
@@ -315,7 +319,7 @@ impl SseDecoder {
         }
         Ok(SseFrame {
             value: Some(value),
-            identity_event: original.filter(|_| repaired_output),
+            identity_event: original.filter(|_| repaired_output && !identity_restored),
             bytes: wire.into(),
         })
     }
@@ -650,7 +654,15 @@ mod tests {
 
     #[test]
     fn retry_hints_preserve_nested_seconds_and_take_the_longest_delay() {
-        for wrapper in ["root", "error", "response", "response/error", "body", "body/error", "detail"] {
+        for wrapper in [
+            "root",
+            "error",
+            "response",
+            "response/error",
+            "body",
+            "body/error",
+            "detail",
+        ] {
             for field in ["retry_after", "retry_after_seconds"] {
                 for value in [json!(0), json!(2), json!(1.25), json!("2.5")] {
                     let mut event = json!({});
@@ -662,18 +674,40 @@ mod tests {
                         }
                     }
                     target[field] = value.clone();
-                    let expected = value.as_f64().unwrap_or_else(|| value.as_str().unwrap().parse().unwrap());
-                    assert_eq!(retry_after_event(&event), Some(std::time::Duration::from_secs_f64(expected)), "{event}");
+                    let expected = value
+                        .as_f64()
+                        .unwrap_or_else(|| value.as_str().unwrap().parse().unwrap());
+                    assert_eq!(
+                        retry_after_event(&event),
+                        Some(std::time::Duration::from_secs_f64(expected)),
+                        "{event}"
+                    );
                 }
             }
         }
-        for value in [json!(-1), json!("NaN"), json!("inf"), json!(1e100), json!(true), json!(null), json!({})] {
+        for value in [
+            json!(-1),
+            json!("NaN"),
+            json!("inf"),
+            json!(1e100),
+            json!(true),
+            json!(null),
+            json!({}),
+        ] {
             assert_eq!(retry_after_event(&json!({"retry_after":value})), None);
         }
-        assert_eq!(retry_after_event(&json!({"retry_after":1, "error":{"retry_after_seconds":3.5}, "headers":{"Retry-After":"2"}})), Some(std::time::Duration::from_millis(3500)));
+        assert_eq!(
+            retry_after_event(
+                &json!({"retry_after":1, "error":{"retry_after_seconds":3.5}, "headers":{"Retry-After":"2"}})
+            ),
+            Some(std::time::Duration::from_millis(3500))
+        );
         let mut observation = ResponseObservation::default();
         observation.observe(&json!({"type":"response.failed", "response":{"error":{"code":"server_is_overloaded","retry_after":7}}}));
-        assert_eq!(observation.retry_after, Some(std::time::Duration::from_secs(7)));
+        assert_eq!(
+            observation.retry_after,
+            Some(std::time::Duration::from_secs(7))
+        );
     }
 
     #[test]
@@ -742,7 +776,9 @@ pub(super) fn retry_after_event(event: &Value) -> Option<std::time::Duration> {
         if let Some(seconds) = value.as_u64() {
             return Some(std::time::Duration::from_secs(seconds));
         }
-        let seconds = value.as_f64().or_else(|| value.as_str()?.trim().parse::<f64>().ok())?;
+        let seconds = value
+            .as_f64()
+            .or_else(|| value.as_str()?.trim().parse::<f64>().ok())?;
         std::time::Duration::try_from_secs_f64(seconds).ok()
     }
     let mut delay: Option<std::time::Duration> = None;
@@ -768,9 +804,15 @@ pub(super) fn retry_after_event(event: &Value) -> Option<std::time::Duration> {
             }
         }
     }
-    for error in [Some(event), Some(super::diagnostics::error_object(event)), event.get("error"), event.get("response"),
-        event.pointer("/response/error"), event.get("body"), event.pointer("/body/error")]
-    {
+    for error in [
+        Some(event),
+        Some(super::diagnostics::error_object(event)),
+        event.get("error"),
+        event.get("response"),
+        event.pointer("/response/error"),
+        event.get("body"),
+        event.pointer("/body/error"),
+    ] {
         let Some(error) = error else {
             continue;
         };
@@ -788,6 +830,120 @@ pub(super) fn retry_after_event(event: &Value) -> Option<std::time::Duration> {
         }
     }
     delay
+}
+
+#[cfg(test)]
+mod sparse_identity_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn item() -> Value {
+        json!({"id":"observed","type":"message","status":"completed","role":"assistant","content":[{"type":"output_text","text":"synthetic answer"}],"unknown":{"keep":true}})
+    }
+
+    fn frame(decoder: &mut SseDecoder, event: &Value) -> SseFrame {
+        decoder
+            .push_frames(format!("data: {event}\n\n").as_bytes())
+            .unwrap()
+            .pop()
+            .unwrap()
+    }
+
+    #[test]
+    fn complete_done_can_supply_identity_evidence_for_a_successful_sparse_terminal() {
+        for kind in ["response.completed", "response.done"] {
+            for missing in [false, true] {
+                let mut decoder = SseDecoder::new(8192);
+                let done =
+                    json!({"type":"response.output_item.done","output_index":0,"item":item()});
+                let observed = frame(&mut decoder, &done);
+                assert_eq!(observed.value.as_ref(), Some(&done));
+                assert!(observed.identity_event.is_none());
+                let mut terminal = json!({"type":kind,"response":{"id":"response","status":"completed","output":[]}});
+                if missing {
+                    terminal["response"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("output");
+                }
+                let terminal = frame(&mut decoder, &terminal);
+                assert!(terminal.identity_event.is_none());
+                assert_eq!(
+                    terminal.value.as_ref().unwrap()["response"]["output"],
+                    json!([item()])
+                );
+                assert!(String::from_utf8_lossy(&terminal.bytes).contains("synthetic answer"));
+            }
+        }
+    }
+
+    #[test]
+    fn partial_or_presentation_repaired_output_keeps_the_original_identity_event() {
+        for mode in [
+            "unindexed",
+            "gap",
+            "conflict",
+            "partial",
+            "missing-id",
+            "nonempty-tool",
+            "incomplete",
+        ] {
+            let mut decoder = SseDecoder::new(8192);
+            let mut done =
+                json!({"type":"response.output_item.done","output_index":0,"item":item()});
+            if mode == "unindexed" {
+                done.as_object_mut().unwrap().remove("output_index");
+            }
+            if mode == "gap" {
+                done["output_index"] = json!(1);
+            }
+            if mode == "partial" {
+                done["item"]["content"] = json!([]);
+            }
+            if mode == "nonempty-tool" {
+                done["item"] = json!({"id":"call","type":"function_call","call_id":"call","name":"tool","arguments":"{}"});
+            }
+            frame(&mut decoder, &done);
+            if mode == "conflict" {
+                done["item"]["content"][0]["text"] = json!("different");
+                frame(&mut decoder, &done);
+            }
+            let mut terminal = json!({"type":"response.completed","response":{"id":"response","status":"completed","output":[]}});
+            if mode == "missing-id" {
+                let mut missing = item();
+                missing.as_object_mut().unwrap().remove("id");
+                terminal["response"]["output"] = json!([missing]);
+            }
+            if mode == "nonempty-tool" {
+                terminal["response"]["output"] = json!([{"id":"call","type":"function_call","call_id":"call","name":"tool","arguments":"{\"truncated\":true}"}]);
+            }
+            if mode == "incomplete" {
+                terminal["type"] = json!("response.incomplete");
+                terminal["response"]["status"] = json!("incomplete");
+            }
+            let observed = frame(&mut decoder, &terminal);
+            assert_eq!(observed.identity_event.as_ref(), Some(&terminal), "{mode}");
+        }
+    }
+
+    #[test]
+    fn eof_or_failed_terminal_cannot_turn_done_items_into_success() {
+        for failed in [false, true] {
+            let mut decoder = SseDecoder::new(8192);
+            frame(
+                &mut decoder,
+                &json!({"type":"response.output_item.done","output_index":0,"item":item()}),
+            );
+            if failed {
+                let terminal = json!({"type":"response.failed","response":{"id":"response","status":"failed","error":{"code":"synthetic_failure"},"output":[]}});
+                let observed = frame(&mut decoder, &terminal);
+                assert_eq!(observed.value.as_ref(), Some(&terminal));
+                assert!(observed.identity_event.is_none());
+                assert_eq!(observed.value.unwrap()["response"]["output"], json!([]));
+            }
+            assert!(decoder.finish_frames().unwrap().is_empty());
+        }
+    }
 }
 
 #[cfg(test)]

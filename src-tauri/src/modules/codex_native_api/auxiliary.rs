@@ -80,7 +80,7 @@ async fn handle_tracked(
     let mut stop = state.stop.clone();
     let bytes = tokio::select! {
         _=stop.wait()=>return Err(stopping_error()),
-        result=tokio::time::timeout_at(audio_deadline.unwrap_or_else(|| Instant::now() + state.options.request_timeout),to_bytes(request.into_body(),if is_audio(&path) {state.options.max_upload_bytes.min(26 * 1024 * 1024)} else {state.options.max_body_bytes}))=>result.map_err(|_|ServiceError::new(408,"request_body_timeout","Request body timed out"))?.map_err(|_|ServiceError::new(413,"request_too_large","Request body exceeds its limit"))?,
+        result=tokio::time::timeout_at(audio_deadline.unwrap_or_else(|| Instant::now() + state.options.request_timeout),to_bytes(request.into_body(),if is_audio(&path) {state.options.max_upload_bytes.min(26 * 1024 * 1024)} else {state.options.max_body_bytes}))=>result.map_err(|_|ServiceError::new(408,"request_body_timeout","Request body timed out"))?.map_err(super::request_body::read_error)?,
     };
     let bytes = super::http::decode_body_with_limit(
         &state,
@@ -617,6 +617,7 @@ async fn websocket_tracked(
                 .expect("WebSocket request tracker is present");
             Ok(ws
                 .max_message_size(state.options.max_body_bytes)
+                .max_frame_size(state.options.max_body_bytes)
                 .on_upgrade(move |socket| {
                     relay(
                         state, route, auth, model, connection, socket, upstream.0, tracker,

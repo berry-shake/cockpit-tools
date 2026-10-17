@@ -699,11 +699,13 @@ async fn context_rebuild_cache_miss_reasoning_and_agent_cipher_keep_original_a_p
         fixture.root().await;
         fixture.host.enabled.store(true, Ordering::SeqCst);
         // This case protects genuinely missing history. Opaque checkpoints are
-        // now supported, so remove only the optional replay cache explicitly;
+        // now supported, so remove both the hot cache and accepted replay history explicitly;
         // durable response/cipher ownership must remain available on A.
         Connection::open(fixture.path())
             .unwrap()
-            .execute("DELETE FROM native_rebuild_checkpoints_v1", [])
+            .execute_batch(
+                "DELETE FROM native_rebuild_checkpoints_v1; DELETE FROM native_rebuild_history_v1;",
+            )
             .unwrap();
         let checkpoints: i64 = Connection::open(fixture.path())
             .unwrap()

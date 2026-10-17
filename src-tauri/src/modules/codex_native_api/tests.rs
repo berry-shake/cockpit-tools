@@ -28,6 +28,8 @@ use super::{contract::*, start, Handle, Options};
 
 #[path = "http_parity_tests.rs"]
 mod http_parity_tests;
+#[path = "request_size_tests.rs"]
+mod request_size_tests;
 #[path = "thinking_suffix_tests.rs"]
 mod thinking_suffix_tests;
 

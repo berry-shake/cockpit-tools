@@ -265,10 +265,9 @@ async fn run(
                             timed_client_until(&state, active.then_some(turn_deadline), client_sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
                         },
                         Some(Ok(Message::Text(text))) => {
-                            let body: Value = match serde_json::from_str(text.as_str()) {
+                            let body: Value = match super::request_body::websocket_json(&state, text.clone()).await {
                                 Ok(body) => body,
-                                Err(_) => {
-                                    let error = ServiceError::new(400, "invalid_json", "WebSocket message must be JSON");
+                                Err(error) => {
                                     timed_client_until(&state, active.then_some(turn_deadline), client_sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
                                     continue;
                                 }
@@ -446,8 +445,10 @@ async fn run(
                                 let original = (!upstream_local && matches!(event["type"].as_str(),
                                     Some("response.completed" | "response.done" | "response.incomplete")))
                                     .then(|| event.clone());
+                                let identity_restored = !upstream_local && output_items.can_restore_identity(&event);
                                 let output_changed = !upstream_local && output_items.observe(&mut event)?;
-                                if output_changed {
+                                let presentation_only = output_changed && !identity_restored;
+                                if presentation_only {
                                     // Repair the client transcript without treating a missing or
                                     // contradictory terminal as proof for cross-account replay.
                                     history.invalidate_rebuild_proof();
@@ -457,7 +458,7 @@ async fn run(
                                 if output_changed || usage_changed { text = event.to_string(); }
                                 if !upstream_local {
                                     mapping::observe_event(&state, &prepared,
-                                        original.as_ref().filter(|_| output_changed).unwrap_or(&event)).await?;
+                                        original.as_ref().filter(|_| presentation_only).unwrap_or(&event)).await?;
                                     history.observe(&prepared, &event);
                                 }
                                 if event.get("type").and_then(Value::as_str) == Some("response.created") {
@@ -538,7 +539,7 @@ async fn while_connected<T>(
                 Some(Ok(Message::Pong(_))) => {},
                 None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return Err(ServiceError::new(499, "client_disconnected", "Client WebSocket disconnected")),
                 Some(Ok(Message::Text(text))) => {
-                    if let Some(error) = opening_control(text.as_str(), pending) {
+                    if let Some(error) = opening_control(state, text, pending).await {
                         timed_client_until(state, Some(deadline), socket.send(Message::Text(error_event(&error).to_string().into()))).await?;
                     }
                 },
@@ -651,7 +652,7 @@ async fn while_split_connected<T>(
                 Some(Ok(Message::Pong(_))) => {},
                 None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return Err(ServiceError::new(499, "client_disconnected", "Client WebSocket disconnected")),
                 Some(Ok(Message::Text(text))) => {
-                    if let Some(error) = opening_control(text.as_str(), pending) {
+                    if let Some(error) = opening_control(state, text, pending).await {
                         timed_client_until(state, Some(deadline), sink.send(Message::Text(error_event(&error).to_string().into()))).await?;
                     }
                 },
@@ -1182,7 +1183,11 @@ fn enqueue_request(pending: &mut VecDeque<String>, text: &str) -> Option<Service
     const MAX_PENDING: usize = 8;
     const MAX_PENDING_BYTES: usize = 32 * 1024 * 1024;
     let bytes = pending.iter().map(String::len).sum::<usize>();
-    if pending.len() >= MAX_PENDING || bytes.saturating_add(text.len()) > MAX_PENDING_BYTES {
+    // Bound pipelining without treating one valid large conversation as a
+    // request-size violation. Further creates wait until it leaves the queue.
+    if pending.len() >= MAX_PENDING
+        || (!pending.is_empty() && bytes.saturating_add(text.len()) > MAX_PENDING_BYTES)
+    {
         return Some(ServiceError::new(
             409,
             "websocket_queue_full",
@@ -1192,15 +1197,15 @@ fn enqueue_request(pending: &mut VecDeque<String>, text: &str) -> Option<Service
     pending.push_back(text.to_owned());
     None
 }
-fn opening_control(text: &str, pending: &mut VecDeque<String>) -> Option<ServiceError> {
-    match serde_json::from_str::<Value>(text) {
-        Err(_) => Some(ServiceError::new(
-            400,
-            "invalid_json",
-            "WebSocket message must be JSON",
-        )),
+async fn opening_control(
+    state: &AppState,
+    text: axum::extract::ws::Utf8Bytes,
+    pending: &mut VecDeque<String>,
+) -> Option<ServiceError> {
+    match super::request_body::websocket_json(state, text.clone()).await {
+        Err(error) => Some(error),
         Ok(body) => match body.get("type").and_then(Value::as_str) {
-            Some("response.create" | "response.append") => enqueue_request(pending, text),
+            Some("response.create" | "response.append") => enqueue_request(pending, text.as_str()),
             Some("response.interrupt") => Some(ServiceError::new(
                 409,
                 "unknown_interrupt_response",
@@ -1229,9 +1234,7 @@ async fn first_create(
         };
         match next {
             Some(Ok(Message::Text(text))) => {
-                let parsed = serde_json::from_str(text.as_str()).map_err(|_| {
-                    ServiceError::new(400, "invalid_json", "WebSocket message must be JSON")
-                });
+                let parsed = super::request_body::websocket_json(state, text).await;
                 match parsed.and_then(|body| protocol::normalize_create(body, None, None)) {
                     Ok(body) => return Ok(body),
                     Err(error) if error.status == 400 => {
@@ -1478,13 +1481,14 @@ mod control_queue_tests {
             assert!(body.get("model").is_none());
             assert!(body.get("previous_response_id").is_none());
         }
+        let large = "x".repeat(32 * 1024 * 1024 + 1);
+        assert!(enqueue_request(&mut queue, &large).is_none());
+        assert_eq!(queue.front(), Some(&large));
         assert_eq!(
-            enqueue_request(&mut queue, &"x".repeat(32 * 1024 * 1024 + 1))
-                .unwrap()
-                .code,
+            enqueue_request(&mut queue, "{}").unwrap().code,
             "websocket_queue_full"
         );
-        assert!(queue.is_empty());
+        assert_eq!(queue.len(), 1);
     }
 }
 
