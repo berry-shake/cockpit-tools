@@ -1,6 +1,6 @@
 //! Complete wire-history checkpoints with a bounded hot cache. Blob provenance stays immutable.
 use super::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[path = "identity_checkpoint.rs"]
 mod checkpoint_store;
@@ -435,13 +435,13 @@ fn resource_handles(value: &Value, inherited_definition: bool) -> bool {
         _ => false,
     }
 }
-pub(super) fn replay_tools(tools: Option<&Value>) -> bool {
+pub(in crate::modules::codex_native_api) fn replay_tools(tools: Option<&Value>) -> bool {
     tools.is_none_or(|tools| !resource_handles(tools, false))
 }
 
 /// Validate a self-contained wire representation without decrypting or dropping
 /// content. Server-only item references and nonportable attachment handles decline.
-pub(super) fn replay_items(items: &[Value]) -> bool {
+pub(in crate::modules::codex_native_api) fn replay_items(items: &[Value]) -> bool {
     fn parts(value: &Value, agent: bool) -> bool {
         value.as_array().is_some_and(|parts| {
             parts.iter().all(|part| match part["type"].as_str() {
@@ -456,6 +456,11 @@ pub(super) fn replay_items(items: &[Value]) -> bool {
             })
         })
     }
+    let completed_calls: HashSet<_> = items
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .filter_map(|item| item["call_id"].as_str())
+        .collect();
     items.iter().all(|item| {
         if !item.is_object() || resource_handles(item, false) {
             return false;
@@ -495,10 +500,16 @@ pub(super) fn replay_items(items: &[Value]) -> bool {
                 .as_str()
                 .is_some_and(|v| !v.is_empty()),
             Some("function_call") => {
+                // A matching client result establishes historical completion,
+                // including argument parsing errors. Without that evidence,
+                // retain the strict check used to publish new output safely.
                 item["name"].is_string()
-                    && item["arguments"]
-                        .as_str()
-                        .is_some_and(|a| serde_json::from_str::<Value>(a).is_ok())
+                    && item["arguments"].as_str().is_some_and(|arguments| {
+                        item["call_id"]
+                            .as_str()
+                            .is_some_and(|id| completed_calls.contains(id))
+                            || serde_json::from_str::<Value>(arguments).is_ok()
+                    })
             }
             Some("custom_tool_call") => item["name"].is_string() && item["input"].is_string(),
             Some("function_call_output" | "custom_tool_call_output") => {
@@ -518,25 +529,35 @@ pub(super) fn replay_items(items: &[Value]) -> bool {
     })
 }
 
-pub(super) fn paired_tools(items: &[Value]) -> bool {
-    let mut pending = HashSet::new();
+pub(in crate::modules::codex_native_api) fn paired_tools(items: &[Value]) -> bool {
+    let mut pending = HashMap::new();
     let mut seen = HashSet::new();
     for item in items {
         match item.get("type").and_then(Value::as_str) {
-            Some("function_call" | "custom_tool_call") => {
+            Some(kind @ ("function_call" | "custom_tool_call" | "local_shell_call")) => {
                 let Some(id) = item.get("call_id").and_then(Value::as_str) else {
                     return false;
                 };
                 if !seen.insert(id) {
                     return false;
                 }
-                pending.insert(id);
+                // Official LocalShellCall returns FunctionCallOutput, including
+                // the synthetic "aborted" result inserted by the client.
+                let output = if kind == "custom_tool_call" {
+                    "custom_tool_call_output"
+                } else {
+                    "function_call_output"
+                };
+                pending.insert(id, output);
             }
-            Some("function_call_output" | "custom_tool_call_output") => {
+            Some(kind @ ("function_call_output" | "custom_tool_call_output")) => {
+                if super::super::responses_host_results::is_standalone(item) {
+                    continue;
+                }
                 let Some(id) = item.get("call_id").and_then(Value::as_str) else {
                     return false;
                 };
-                if !pending.remove(id) {
+                if pending.remove(id) != Some(kind) {
                     return false;
                 }
             }
@@ -609,6 +630,32 @@ pub(super) fn complete_input_available(
 }
 
 impl IdentityStore {
+    /// An omitted input is a valid first turn with instructions/tools only.
+    /// Admit its empty history only inside opt-in capability replacement.
+    pub(crate) fn normalize_capability_input(
+        &self,
+        context: &mut RequestIdentity,
+        headers: &HeaderMap,
+        body: &mut Value,
+    ) -> Result<(), ServiceError> {
+        self.normalize_http_input(context, headers, body)?;
+        if body.get("input").is_none_or(Value::is_null) {
+            body["input"] = serde_json::json!([]);
+        }
+        if body["input"].as_array().is_some_and(Vec::is_empty)
+            && context.opaque.is_empty()
+            && !headers.contains_key("conversation_id")
+            && !headers.contains_key("x-codex-turn-state")
+            && ["previous_response_id", "conversation", "conversation_id"]
+                .iter()
+                .all(|key| body.get(key).is_none_or(Value::is_null))
+            && replay_tools(body.get("tools"))
+        {
+            context.portable_body = true;
+        }
+        Ok(())
+    }
+
     /// Normalize only an OAuth HTTP request (or a planning-only copy), before
     /// checkpoint capture. Keep the logical identities generated by inspection
     /// when a generic SDK supplied no explicit session/thread metadata.

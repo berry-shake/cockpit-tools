@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { TauriEvent, emit, listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { dismissBootSplash } from '../utils/bootSplash';
+import { useCodexQuotaSync } from '../hooks/useCodexQuotaSync';
 import {
   buildAntigravityAccountPresentation,
   buildClaudeAccountPresentation,
@@ -239,6 +240,7 @@ function findInstanceById(instances: InstanceProfile[], instanceId: string): Ins
 }
 
 export function FloatingCardWindow() {
+  useCodexQuotaSync();
   const { t } = useTranslation();
   const currentWindowLabel = windowInstance.label;
   const isPrimaryFloatingCardWindow = currentWindowLabel === FLOATING_CARD_WINDOW_LABEL;

@@ -116,7 +116,10 @@ impl Host for LiveHost {
             Ok(Route {
                 account_id: account.id.clone(),
                 owner_id: account.owner.clone(),
+                continuity_account_id: None,
                 installation_profile: Some(account.installation.clone()),
+                official_authorization_revision: None,
+                official_registration_id: None,
                 transport_identity: None,
                 base_url: "https://chatgpt.com/backend-api/codex".into(),
                 model: request.model,
@@ -125,6 +128,7 @@ impl Host for LiveHost {
                 proxy_url: account.proxy.clone(),
                 proxy_route: None,
                 chatgpt: true,
+                chatgpt_plan: false,
                 wire_api: WireApi::Responses,
                 compact_endpoint: None,
                 websocket_endpoint: None,

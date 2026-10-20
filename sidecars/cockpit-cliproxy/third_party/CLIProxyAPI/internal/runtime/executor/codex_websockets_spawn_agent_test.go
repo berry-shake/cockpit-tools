@@ -203,10 +203,9 @@ func TestCodexWebsocketsExecutorOptimizeMultiAgentV2(t *testing.T) {
 	}))
 	defer server.Close()
 
-	auth := &cliproxyauth.Auth{Attributes: map[string]string{
+	auth := &cliproxyauth.Auth{Provider: "codex", Attributes: map[string]string{
 		"base_url": server.URL,
-		"api_key":  "test",
-	}}
+	}, Metadata: map[string]any{"access_token": "synthetic-access"}}
 	req := cliproxyexecutor.Request{Model: "gpt-5.4", Payload: codexSpawnAgentTestPayload()}
 	opts := cliproxyexecutor.Options{
 		SourceFormat: sdktranslator.FromString("openai-response"),

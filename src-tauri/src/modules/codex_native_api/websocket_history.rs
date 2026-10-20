@@ -39,7 +39,7 @@ pub(super) struct ReplayOwner {
 impl ReplayOwner {
     fn from_prepared(prepared: &Prepared) -> Self {
         Self {
-            account: prepared.route.account_id.clone(),
+            account: prepared.route.continuity_id().to_owned(),
             owner: prepared.route.owner_id.clone(),
             caller: prepared.caller.id.clone(),
             session: mapped_header(prepared, "session-id"),
@@ -47,7 +47,7 @@ impl ReplayOwner {
         }
     }
     pub fn matches(&self, prepared: &Prepared) -> bool {
-        self.account == prepared.route.account_id
+        self.account == prepared.route.continuity_id()
             && self.owner == prepared.route.owner_id
             && self.caller == prepared.caller.id
             && self.session == mapped_header(prepared, "session-id")

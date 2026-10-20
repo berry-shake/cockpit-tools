@@ -17,6 +17,7 @@ pub(super) struct SseDecoder {
     pending: Vec<u8>,
     limit: usize,
     scan_from: usize,
+    data_lines: IndependentDataLines,
     output: Option<super::output_items::OutputCollector>,
     terminal: bool,
     pub done: bool,
@@ -28,6 +29,7 @@ impl SseDecoder {
             pending: Vec::new(),
             limit,
             scan_from: 0,
+            data_lines: IndependentDataLines::default(),
             output: Some(super::output_items::OutputCollector::new(limit)),
             terminal: false,
             done: false,
@@ -81,6 +83,7 @@ impl SseDecoder {
             });
             self.pending.clear();
             self.scan_from = 0;
+            self.data_lines = IndependentDataLines::default();
             self.terminal = true;
         }
         Ok(frames)
@@ -95,15 +98,33 @@ impl SseDecoder {
     ) -> Result<(), ServiceError> {
         if !self.pending.is_empty() && starts_field(bytes) {
             let fields = fields(&self.pending);
-            if fields.event.is_none() && fields.valid_data() && starts_data(bytes) {
+            // Preserve the old missing-field-newline compatibility for two
+            // complete data-only chunks. Actual newline-delimited data uses
+            // the incremental scanner below, independent of TCP boundaries.
+            if !self.pending.contains(&b'\n')
+                && fields.event.is_none()
+                && self.pending.len() <= self.limit
+                && bytes.len() <= self.limit
+                && data_object(&self.pending)
+                && !bytes.contains(&b'\n')
+                && data_object(bytes)
+            {
                 let pending = std::mem::take(&mut self.pending);
                 frames.push(self.decode_frame(&pending, b"\n\n")?);
                 self.scan_from = 0;
+                self.data_lines = IndependentDataLines::default();
             } else if !self.pending.ends_with(b"\n")
                 && !self.pending.ends_with(b"\r")
                 && !bytes.starts_with(b"\n")
                 && !bytes.starts_with(b"\r")
-                && (fields.data.is_empty() || fields.valid_data())
+                && (self
+                    .pending
+                    .rsplit(|byte| *byte == b'\n')
+                    .next()
+                    .is_some_and(data_object)
+                    || (fields.data.is_empty()
+                        && complete_event_field(&self.pending)
+                        && trim_ascii(bytes).starts_with(b"data:")))
             {
                 self.pending.push(b'\n');
             }
@@ -112,7 +133,7 @@ impl SseDecoder {
             // A chunk may contain many small events. Bound the pending frame,
             // rather than reject a large transport chunk containing valid frames.
             let remaining = self
-                .limit
+                .pending_limit()
                 .saturating_add(4)
                 .saturating_sub(self.pending.len());
             if remaining == 0 {
@@ -122,15 +143,32 @@ impl SseDecoder {
             self.pending.extend_from_slice(&bytes[..count]);
             bytes = &bytes[count..];
             let mut consumed = 0;
-            while let Some((offset, separator)) = frame_end(&self.pending[self.scan_from..]) {
-                let end = self.scan_from + offset;
+            loop {
+                let standard = frame_end(&self.pending[self.scan_from..])
+                    .map(|(offset, separator)| (self.scan_from + offset, separator, false));
+                let separate = self
+                    .data_lines
+                    .boundary(&self.pending[consumed..], false)
+                    .map(|(offset, separator)| (consumed + offset, separator, true));
+                let Some((end, separator, repaired)) = [standard, separate]
+                    .into_iter()
+                    .flatten()
+                    .min_by_key(|(end, _, _)| *end)
+                else {
+                    break;
+                };
                 if end.saturating_sub(consumed) > self.limit {
                     return Err(event_too_large());
                 }
                 let raw = self.pending[consumed..end].to_vec();
-                let delimiter = self.pending[end..end + separator].to_vec();
+                let delimiter = if repaired {
+                    b"\n\n".to_vec()
+                } else {
+                    self.pending[end..end + separator].to_vec()
+                };
                 frames.push(self.decode_frame(&raw, &delimiter)?);
                 consumed = end + separator;
+                self.data_lines = IndependentDataLines::default();
                 self.scan_from = consumed;
                 if self.terminal || self.done {
                     break;
@@ -140,9 +178,11 @@ impl SseDecoder {
             self.scan_from = self.pending.len().saturating_sub(3);
             if self.terminal || self.done {
                 self.pending.clear();
+                self.data_lines = IndependentDataLines::default();
+                self.scan_from = 0;
                 break;
             }
-            if self.pending.len() > self.limit {
+            if self.pending.len() > self.pending_limit() {
                 return Err(event_too_large());
             }
         }
@@ -151,6 +191,7 @@ impl SseDecoder {
             let pending = std::mem::take(&mut self.pending);
             frames.push(self.decode_frame(&pending, b"\n\n")?);
             self.scan_from = 0;
+            self.data_lines = IndependentDataLines::default();
         }
         Ok(())
     }
@@ -158,7 +199,24 @@ impl SseDecoder {
     pub(super) fn finish_frames(&mut self) -> Result<Vec<SseFrame>, ServiceError> {
         if self.terminal || self.done || !self.has_partial_event() {
             self.pending.clear();
+            self.data_lines = IndependentDataLines::default();
+            self.scan_from = 0;
             return Ok(Vec::new());
+        }
+        let mut frames = Vec::new();
+        while let Some((end, separator)) = self.data_lines.boundary(&self.pending, true) {
+            if end > self.limit {
+                return Err(event_too_large());
+            }
+            let raw = self.pending[..end].to_vec();
+            frames.push(self.decode_frame(&raw, b"\n\n")?);
+            self.pending.drain(..end + separator);
+            self.data_lines = IndependentDataLines::default();
+            self.scan_from = 0;
+            if self.terminal || self.done {
+                self.pending.clear();
+                return Ok(frames);
+            }
         }
         let fields = fields(&self.pending);
         if !fields.data.is_empty() && !fields.valid_data() {
@@ -170,7 +228,20 @@ impl SseDecoder {
         }
         let pending = std::mem::take(&mut self.pending);
         self.scan_from = 0;
-        Ok(vec![self.decode_frame(&pending, b"\n\n")?])
+        self.data_lines = IndependentDataLines::default();
+        frames.push(self.decode_frame(&pending, b"\n\n")?);
+        Ok(frames)
+    }
+
+    fn pending_limit(&self) -> usize {
+        // Confirming independent lines needs at most one following bounded
+        // frame, not an unbounded aggregate or a larger individual event.
+        let prefix = self
+            .data_lines
+            .first
+            .filter(|(end, _)| *end <= self.limit)
+            .map_or(0, |(end, separator)| end.saturating_add(separator));
+        self.limit.saturating_add(prefix)
     }
 
     pub(super) fn has_partial_event(&self) -> bool {
@@ -374,8 +445,97 @@ fn starts_field(bytes: &[u8]) -> bool {
         .into_iter()
         .any(|prefix| bytes.starts_with(prefix))
 }
-fn starts_data(bytes: &[u8]) -> bool {
-    trim_ascii(bytes).starts_with(b"data:")
+
+fn complete_event_field(raw: &[u8]) -> bool {
+    raw.rsplit(|byte| *byte == b'\n')
+        .next()
+        .map(trim_ascii)
+        .and_then(|line| line.strip_prefix(b"event:"))
+        .map(trim_ascii)
+        .is_some_and(|kind| {
+            !kind.is_empty()
+                && std::str::from_utf8(kind).is_ok()
+                && !kind.iter().any(|byte| byte.is_ascii_whitespace())
+        })
+}
+
+/// Some Responses peers omit the blank separator between data-only JSON
+/// events. Repair complete object lines or an existing following [DONE]; an incomplete
+/// JSON line still belongs to the ordinary multiline SSE field. Event/id/retry
+/// and comment fields are handled exclusively by standard SSE framing.
+#[derive(Default)]
+struct IndependentDataLines {
+    scan_from: usize,
+    line_start: usize,
+    first: Option<(usize, usize)>,
+    disabled: bool,
+    #[cfg(test)]
+    scanned_bytes: usize,
+    #[cfg(test)]
+    parsed_lines: usize,
+}
+
+fn data_object(line: &[u8]) -> bool {
+    trim_ascii(line)
+        .strip_prefix(b"data:")
+        .and_then(|data| serde_json::from_slice::<Value>(trim_ascii(data)).ok())
+        .is_some_and(|value| value.is_object())
+}
+
+fn data_done(line: &[u8]) -> bool {
+    trim_ascii(line)
+        .strip_prefix(b"data:")
+        .is_some_and(|data| trim_ascii(data) == b"[DONE]")
+}
+
+impl IndependentDataLines {
+    fn boundary(&mut self, raw: &[u8], eof: bool) -> Option<(usize, usize)> {
+        if self.disabled {
+            return None;
+        }
+        while self.scan_from < raw.len() {
+            let offset = raw[self.scan_from..].iter().position(|byte| *byte == b'\n');
+            let scanned = offset.map_or(raw.len() - self.scan_from, |offset| offset + 1);
+            #[cfg(test)]
+            {
+                self.scanned_bytes += scanned;
+            }
+            self.scan_from += scanned;
+            let Some(_) = offset else {
+                break;
+            };
+            let newline = self.scan_from - 1;
+            #[cfg(test)]
+            {
+                self.parsed_lines += 1;
+            }
+            let line = &raw[self.line_start..newline];
+            if !data_object(line) && !(self.first.is_some() && data_done(line)) {
+                self.disabled = true;
+                return None;
+            }
+            if let Some(first) = self.first {
+                return Some(first);
+            }
+            self.first = Some(if newline > 0 && raw[newline - 1] == b'\r' {
+                (newline - 1, 2)
+            } else {
+                (newline, 1)
+            });
+            self.line_start = self.scan_from;
+        }
+        if eof && self.first.is_some() && self.line_start < raw.len() {
+            #[cfg(test)]
+            {
+                self.parsed_lines += 1;
+            }
+            if data_object(&raw[self.line_start..]) || data_done(&raw[self.line_start..]) {
+                return self.first;
+            }
+            self.disabled = true;
+        }
+        None
+    }
 }
 /// Shared terminal classification for SSE, WebSocket and identity observation.
 /// A failure status is authoritative even when an upstream uses a generic or
@@ -511,7 +671,7 @@ impl ResponseObservation {
                 | "invalid_grant"
                 | "reauthorization_required" => Some(401),
                 "account_deactivated" | "account_suspended" => Some(403),
-                _ => self.http_status,
+                _ => super::chatgpt_plan_wire::error_status(code).or(self.http_status),
             };
         }
         if let Some((status, _)) = super::bootstrap::rejection(event) {

@@ -20,7 +20,10 @@ fn prepared_history() -> Prepared {
             tokio::time::Instant::now() + std::time::Duration::from_secs(60),
         ),
         route: Route {
+            continuity_account_id: None,
             installation_profile: None,
+            official_authorization_revision: None,
+            official_registration_id: None,
             transport_identity: None,
             account_id: "a".into(),
             owner_id: "owner".into(),
@@ -31,6 +34,7 @@ fn prepared_history() -> Prepared {
             proxy_url: None,
             proxy_route: None,
             chatgpt: false,
+            chatgpt_plan: false,
             wire_api: WireApi::Responses,
             compact_endpoint: None,
             websocket_endpoint: None,
@@ -57,6 +61,8 @@ fn prepared_history() -> Prepared {
             image_input: false,
             excluded_account_ids: Vec::new(),
             requires_permit: true,
+            required_capabilities: Vec::new(),
+            capability_fallback_from: None,
             auxiliary: Some("responses.websocket".into()),
         },
         source_body,
@@ -64,10 +70,16 @@ fn prepared_history() -> Prepared {
         image_route_request: None,
         compact: false,
         grok_context: None,
+        plan_tools_context: None,
+        multi_agent_policy: Default::default(),
+        multi_agent_context: Default::default(),
         raw_chat: None,
         rebuild_plan: None,
         rebuild_applied: false,
         bridge_body: None,
+        capability_fallback_enabled: false,
+        capability_fallback: None,
+        transport_pinned: false,
     }
 }
 
@@ -603,4 +615,18 @@ fn large_natural_incomplete_keeps_exact_output_only_as_a_local_anchor() {
         .completed_replay(&prepared, &delta)
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn canonical_member_history_keeps_grant_namespace_when_business_id_is_shared() {
+    let mut prepared = prepared_history();
+    prepared.route.account_id = "original-source".into();
+    prepared.route.continuity_account_id = Some("chatgpt_plan_grant-a".into());
+    let owner = ReplayOwner::from_prepared(&prepared);
+    assert_eq!(owner.account, "chatgpt_plan_grant-a");
+    assert!(owner.matches(&prepared));
+    prepared.route.continuity_account_id = Some("chatgpt_plan_grant-b".into());
+    assert!(!owner.matches(&prepared));
+    prepared.route.continuity_account_id = None;
+    assert!(!owner.matches(&prepared));
 }

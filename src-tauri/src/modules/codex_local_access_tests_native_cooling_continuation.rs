@@ -1,5 +1,18 @@
 // Synthetic accounts and loopback upstreams only; never writes production logs.
 
+#[test]
+fn native_route_wrapper_keeps_large_preparation_state_off_the_retry_stack() {
+    let host = native_test_routing_host();
+    let caller = native_test_caller(NATIVE_PRIMARY_CALLER);
+    let request = native_test_route_request("future-state-budget");
+    let future = native_select_route(&host, &caller, request);
+    // This wrapper is nested in the HTTP/SSE cooldown path. Before the heap
+    // boundary it embedded a 13 KiB preparation future (14 KiB total on arm64).
+    // Leave room for platform layout differences while forbidding that state
+    // from being embedded again; no larger thread stack is needed.
+    assert!(std::mem::size_of_val(&future) < 4096);
+}
+
 fn native_test_set_owner_cooldown(host: &NativeHostBridge, delay: Duration) {
     host.cooldowns.lock().unwrap().insert(
         native_cooldown_key("pool-a", "gpt-fixture", false),

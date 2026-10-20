@@ -1667,9 +1667,9 @@ func newPluginSyncCancelableConn(ctx context.Context, conn net.Conn) net.Conn {
 	go func() {
 		select {
 		case <-ctx.Done():
-			if errDeadline := conn.SetDeadline(time.Now()); errDeadline != nil {
-				_ = conn.Close()
-			}
+			// This connection belongs to one dedicated plugin-sync operation.
+			// Closing it cannot be undone by Redis setting a later read deadline.
+			_ = wrapped.Close()
 		case <-wrapped.done:
 		}
 	}()

@@ -31,6 +31,9 @@ use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
 const CONTROL_TOKEN: &str = "synthetic-http-checkpoint-control-token-never-upstream";
 
+#[path = "legacy_history_continuation_tests.rs"]
+mod legacy_history_continuation_tests;
+
 fn client() -> reqwest::Client {
     reqwest::Client::builder().no_proxy().build().unwrap()
 }
@@ -40,9 +43,9 @@ fn message(role: &str, text: &str) -> Value {
 fn history() -> Value {
     json!([
         message("user", "initial synthetic request"),
-        {"type":"reasoning","id":"old-reasoning","summary":[],"encrypted_content":"synthetic-reasoning"},
+        {"type":"reasoning","id":"rs_old-reasoning","summary":[],"encrypted_content":super::codex_cpa_wire::synthetic_gpt_signature(17)},
         {"type":"compaction","encrypted_content":"synthetic-compaction"},
-        {"type":"function_call","id":"old-call-item","namespace":"collaboration","name":"send_message","call_id":"agent-call","arguments":"{\"message\":\"synthetic-agent-cipher\"}","encrypted_function_args":["message"]},
+        {"type":"function_call","id":"fc_old-call-item","namespace":"collaboration","name":"send_message","call_id":"agent-call","arguments":"{\"message\":\"synthetic-agent-cipher\"}","encrypted_function_args":["message"]},
         {"type":"function_call_output","call_id":"agent-call","output":"synthetic delivery result"},
         message("user", "continue with full tool evidence")
     ])
@@ -71,6 +74,7 @@ fn completion(id: &str) -> Value {
 #[derive(Default)]
 struct Upstream {
     sent: Mutex<Vec<(HeaderMap, Value)>>,
+    next_output: Mutex<Option<Vec<Value>>>,
 }
 async fn upstream(
     State(state): State<Arc<Upstream>>,
@@ -81,9 +85,13 @@ async fn upstream(
     let mut sent = state.sent.lock().unwrap();
     sent.push((headers, body));
     let id = format!("response-{}", sent.len());
+    let mut event = completion(&id);
+    if let Some(output) = state.next_output.lock().unwrap().take() {
+        event["response"]["output"] = json!(output);
+    }
     Response::builder()
         .header("content-type", "text/event-stream")
-        .body(Body::from(format!("data: {}\n\n", completion(&id))))
+        .body(Body::from(format!("data: {event}\n\n")))
         .unwrap()
 }
 async fn websocket(
@@ -153,6 +161,7 @@ impl Host for TestHost {
                 }
             });
             Ok(Route {
+                continuity_account_id: None,
                 account_id: account.into(),
                 owner_id: format!("owner-{account}"),
                 base_url: self.base.clone(),
@@ -162,10 +171,13 @@ impl Host for TestHost {
                 proxy_url: None,
                 proxy_route: None,
                 chatgpt: self.oauth,
+                chatgpt_plan: false,
                 wire_api: WireApi::Responses,
                 compact_endpoint: None,
                 websocket_endpoint: None,
                 installation_profile: None,
+                official_authorization_revision: None,
+                official_registration_id: None,
                 transport_identity: None,
                 default_service_tier: None,
                 permit: None,

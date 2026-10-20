@@ -27,8 +27,14 @@ func RewriteCodexSpawnAgentDescription(ctx context.Context, headers http.Header,
 
 // RewriteCodexMultiAgentV2Input converts official Codex multi-agent input into
 // standard Responses API messages when multi-agent v2 optimization is enabled.
-func RewriteCodexMultiAgentV2Input(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config) []byte {
-	return multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg)
+func RewriteCodexMultiAgentV2Input(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config, isCompat ...bool) []byte {
+	return multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg, isCompat...)
+}
+
+// RewriteCodexPortableGatewayInput retains generic provider gateway routing
+// metadata as readable content, without changing the CPA Codex adapter contract.
+func RewriteCodexPortableGatewayInput(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config) []byte {
+	return multiagentv2.RewriteCodexPortableGatewayInput(ctx, headers, payload, cfg)
 }
 
 // RewriteCodexOrphanDelegationInput converts orphan Codex delegation outputs into
@@ -83,7 +89,7 @@ func TranslateRequestWithAPIKeyModelCompatibility(ctx context.Context, headers h
 	if from == sdktranslator.FormatOpenAIResponse {
 		payload = RewriteCodexOrphanDelegationInput(ctx, headers, payload, cfg)
 		if to != sdktranslator.FormatCodex && to != sdktranslator.FormatOpenAIResponse {
-			payload = multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg)
+			payload = multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, payload, cfg, true)
 		}
 	}
 
@@ -121,13 +127,14 @@ func OptimizeCodexMultiAgentV2Request(ctx context.Context, headers http.Header, 
 	return multiagentv2.OptimizeCodexMultiAgentV2Request(ctx, headers, payload, cfg)
 }
 
-// OptimizeCodexMultiAgentV2RequestForAuth applies the standard Codex MultiAgentV2
-// request optimization and, when the selected codex-api-key model has is-compat
-// enabled, also converts agent_message items into portable message/user input.
-func OptimizeCodexMultiAgentV2RequestForAuth(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config, auth *cliproxyauth.Auth, model string) ([]byte, bool) {
+// OptimizeCodexMultiAgentV2RequestForAuth applies CPA's execution-attempt policy:
+// orphan delegation, optional official-client optimization, then model compatibility.
+// Compatibility is independent of the optional optimization switch and user agent.
+func OptimizeCodexMultiAgentV2RequestForAuth(ctx context.Context, headers http.Header, payload []byte, cfg *config.Config, auth *cliproxyauth.Auth, isCompat bool) ([]byte, bool) {
+	payload = multiagentv2.RewriteCodexOrphanDelegationInputForConfig(ctx, headers, payload, cfg)
 	updated, optimized := multiagentv2.OptimizeCodexMultiAgentV2Request(ctx, headers, payload, cfg)
-	if cliproxyauth.CodexAPIKeyModelIsCompat(cfg, auth, model) {
-		updated = multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, updated, cfg)
+	if isCompat {
+		updated = multiagentv2.RewriteCodexMultiAgentV2Input(ctx, headers, updated, cfg, true)
 	}
 	return updated, optimized
 }
