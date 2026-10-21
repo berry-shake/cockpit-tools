@@ -35,7 +35,9 @@ func (e *failOnceStreamExecutor) Execute(context.Context, *coreauth.Auth, coreex
 	return coreexecutor.Response{}, &coreauth.Error{Code: "not_implemented", Message: "Execute not implemented"}
 }
 
-func (e *failOnceStreamExecutor) ExecuteStream(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (*coreexecutor.StreamResult, error) {
+func (e *failOnceStreamExecutor) ExecuteStream(ctx context.Context, _ *coreauth.Auth, _ coreexecutor.Request, _ coreexecutor.Options) (*coreexecutor.StreamResult, error) {
+	// This fixture models an upstream 401, not a failure before dispatch.
+	coreexecutor.MarkUpstreamAttempt(ctx)
 	e.mu.Lock()
 	e.calls++
 	call := e.calls

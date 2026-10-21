@@ -65,12 +65,6 @@ export interface CodexLocalAccessCustomRoutingRule {
   isPreferred: boolean;
 }
 
-export interface CodexLocalAccessOAuthQuotaReserve {
-  hourlyPercent: number;
-  weeklyPercent: number;
-  strict?: boolean;
-  safetyMarginPercent?: number;
-}
 
 export interface CodexLocalAccessAccountModelRule {
   accountId: string;
@@ -198,7 +192,6 @@ export interface CodexLocalAccessCollection {
   disableCooling: boolean;
   restrictFreeAccounts: boolean;
   boundOauthAccountId?: string | null;
-  boundOauthQuotaReserve?: CodexLocalAccessOAuthQuotaReserve | null;
   accountIds: string[];
   /** Paused service members retain their scopes and scheduling preferences. */
   pausedAccountIds?: string[];
@@ -314,6 +307,8 @@ export interface CodexLocalAccessProxyRoute {
 
 export interface CodexLocalAccessUsageEvent {
   authorizationRoute?: 'official' | 'local_gateway' | null;
+  /** Recorded fallback evidence; absent for older logs or pending diagnostics. */
+  authorizationFallback?: CodexAuthorizationFallbackTrace | null;
   timestamp: number;
   requestId: string;
   accountId: string;
@@ -334,6 +329,8 @@ export interface CodexLocalAccessUsageEvent {
   serviceTier?: string | null;
   /** Final outbound field (auto when omitted); absent for historical records. */
   requestedServiceTier?: string | null;
+  /** Explicit adaptation on the final sent attempt; never inferred from feedback. */
+  serviceTierAdaptation?: CodexServiceTierAdaptation | null;
   /** Upstream feedback, preserved verbatim (including default). */
   responseServiceTier?: string | null;
   /** Request reasoning effort (e.g. low/medium/high/xhigh/max), when present. */
@@ -381,8 +378,30 @@ export interface CodexLocalAccessUsageEventPage {
   totalPages: number;
 }
 
+export interface CodexAuthorizationFallbackTrace {
+  reason: string;
+  /** Missing on legacy records, which describe an upstream rejection. */
+  triggerStage?: string;
+  fromAccountId: string;
+  toAccountId: string;
+  fromRoute: string;
+  toRoute: string;
+  status?: number | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface CodexServiceTierAdaptation {
+  requestedTier: string;
+  sentTier: 'default';
+  reason: 'official_default_only';
+}
+
 export interface CodexLocalAccessRequestAttempt {
+  serviceTierAdaptation?: CodexServiceTierAdaptation | null;
   authorizationRoute?: 'official' | 'local_gateway' | null;
+  authorizationFallback?: CodexAuthorizationFallbackTrace | null;
+  upstreamRequestId?: string | null;
   sequence: number;
   transportError?: string | null;
   transportPoolRetired?: boolean | null;
@@ -502,7 +521,6 @@ export interface CodexLocalAccessAccountPoolHealth {
   availableAuths: number;
   unavailableAuths: number;
   modelExcludedAuths: number;
-  quotaReservedAuths: number;
   imagePolicyBlockedAuths: number;
   accountStatuses: CodexLocalAccessAccountPoolMemberHealth[];
   /** 账号范围/候选筛选诊断；不表示账号凭据或健康状态异常。 */
@@ -535,20 +553,6 @@ export interface CodexLocalAccessProfileAttachment {
   error: string | null;
 }
 
-export interface CodexLocalAccessQuotaReserveStatus {
-  accountId: string;
-  snapshotUpdatedAt: number | null;
-  snapshotFresh: boolean;
-  blocked: boolean;
-  warning: boolean;
-  effectiveWindow: "hourly" | "weekly" | null;
-  effectiveRemainingPercent: number | null;
-  effectiveReservePercent: number | null;
-  strict?: boolean;
-  safetyMarginPercent?: number;
-  inFlight?: number;
-  awaitingConfirmation?: boolean;
-}
 
 export interface CodexServiceMemberAccess {
   sourceAccountId: string;
@@ -584,7 +588,6 @@ export interface CodexLocalAccessState {
   accountPoolHealth: CodexLocalAccessAccountPoolHealth[];
   /** 手动恢复后仍在抑制窗口内的账号：异常列表里临时隐藏这些账号的行。 */
   recoverySuppressedAccountIds?: string[];
-  quotaReserveStatus: CodexLocalAccessQuotaReserveStatus | null;
 }
 
 export interface CodexLocalAccessAppendAccountSkipped {
