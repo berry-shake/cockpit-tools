@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 )
@@ -51,6 +52,9 @@ func TestContinuityClientAcceptsConversationBeyondFormerEnvelopeLimit(t *testing
 		t.Fatal(err)
 	}
 	defer client.Close()
+	// This fixture checks envelope integrity, not the production latency budget.
+	// Race instrumentation can make a 64 MiB JSON round trip exceed ten seconds.
+	client.client.Timeout = time.Minute
 	result, err := client.Bind(context.Background(), coreexecutor.ContinuityBindRequest{
 		Ticket: "large-ticket", AttemptID: "large-attempt", AccountID: "sdk-a", Body: body,
 	})
