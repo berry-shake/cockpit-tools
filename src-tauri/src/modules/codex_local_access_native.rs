@@ -267,6 +267,7 @@ struct NativeHostBridge {
     routing_cursors: Mutex<HashMap<String, (String, u64)>>,
     selection_gates: Mutex<HashMap<String, std::sync::Weak<TokioMutex<()>>>>,
     gates: Mutex<HashMap<String, Arc<Semaphore>>>,
+    account_waiters: AtomicU64,
     cooldowns: Mutex<HashMap<NativeCooldownKey, NativeCooldown>>,
     cooling_disabled: AtomicBool,
     clients: Mutex<NativeHttpClientCache>,
@@ -608,12 +609,12 @@ fn native_scoped_account_ids(
     )
 }
 
-fn native_quota_allows(_collection: &CodexLocalAccessCollection, account: &CodexAccount) -> bool {
+fn native_quota_allows(collection: &CodexLocalAccessCollection, account: &CodexAccount) -> bool {
     let now = now_ms();
     if account_quota_cooldown(account, now).is_some_and(|snapshot| snapshot.active(now)) {
         return false;
     }
-    true
+    native_bound_quota_reserve_allows(collection, account)
 }
 
 fn native_is_reserve_model(model: &str) -> bool {
@@ -632,6 +633,7 @@ fn native_model_quota_allows(
     }
     if native_is_reserve_model(model) && !account.is_api_key_auth() {
         account_has_gpt_reserve_entitlement(account)
+            && native_bound_quota_reserve_allows(collection, account)
     } else {
         native_quota_allows(collection, account)
     }
@@ -833,6 +835,23 @@ impl native_contract::Host for NativeHostBridge {
             route,
             requested_model,
         ))
+    }
+    fn observe_rate_limits(&self, account_id: &str, snapshot: QuotaSnapshot, started: Instant) {
+        observe_gateway_quota(account_id, snapshot, started);
+    }
+    fn quota_request_started(&self, account_id: &str) {
+        note_gateway_quota_request(account_id);
+    }
+    fn check_quota_before_send(
+        &self,
+        account_id: &str,
+    ) -> Result<(), native_contract::ServiceError> {
+        let local = self
+            .collection_override
+            .as_ref()
+            .filter(|collection| collection.bound_oauth_account_id.as_deref() == Some(account_id))
+            .and_then(|collection| collection.bound_oauth_quota_reserve.as_ref());
+        check_gateway_quota_before_send(account_id, self.collection_override.is_none(), local)
     }
     fn set_session_affinity_enabled(&self, enabled: bool) {
         if self
@@ -1073,9 +1092,8 @@ impl native_contract::Host for NativeHostBridge {
                 idle_timeout: Duration::from_millis(
                     limits.sidecar_stream_idle_timeout_ms.max(1000),
                 ),
-                total_timeout: Duration::from_millis(
-                    limits.legacy_stream_total_timeout_ms.max(1000),
-                ),
+                // Go ordinary requests have no total deadline, including active streams.
+                total_timeout: Duration::ZERO,
                 image_open_timeout: Duration::from_millis(
                     limits.sidecar_image_stream_open_timeout_ms.max(1000),
                 ),
@@ -1500,6 +1518,7 @@ mod native_live_pool;
 mod native_host_tests {
     use super::*;
     include!("codex_local_access_tests_native.rs");
+    include!("codex_local_access_tests_quota_protection.rs");
     include!("codex_local_access_native_identity_fixture_tests.rs");
     include!("codex_local_access_native_paused_member_tests.rs");
     include!("codex_local_access_tests_native_cooldown.rs");
@@ -1522,4 +1541,12 @@ mod native_host_tests {
         assert!(!native_pattern_matches("gpt-*", "evil/gpt-6"));
         assert!(!native_pattern_matches("gpt-6", "gpt-6-mini"));
     }
+}
+
+fn native_bound_quota_reserve_allows(
+    collection: &CodexLocalAccessCollection,
+    account: &CodexAccount,
+) -> bool {
+    quota_reserve_policy(collection, &account.id)
+        .is_none_or(|reserve| quota_reserve_allows(&reserve, account))
 }

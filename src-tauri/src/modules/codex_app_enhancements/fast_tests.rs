@@ -3,8 +3,33 @@ use std::sync::Mutex;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
+#[test]
+fn live_quota_condition_requires_valid_minified_locals() {
+    assert_eq!(valid_quota_identifier(Some("Ct")), Some("Ct"));
+    assert_eq!(valid_quota_identifier(Some("$gate")), Some("$gate"));
+    for invalid in [
+        None,
+        Some(""),
+        Some("1gate"),
+        Some("a-b"),
+        Some("a;alert(1)"),
+    ] {
+        assert_eq!(valid_quota_identifier(invalid), None);
+    }
+    assert_eq!(
+        live_quota_condition("Ct", "vn"),
+        "(window.__cockpitEnhancements?.apiService===true&&window.__cockpitEnhancements?.quotaCompat===true&&(Ct=false,vn=false),false)"
+    );
+}
+
 struct Options {
     api_service: bool,
+    quota_compat: bool,
+    public_entry: bool,
+    live_quota: bool,
+    live_plan_invalid: bool,
+    debugger_error: bool,
+    preload_first: bool,
     profile_dir: PathBuf,
     draft_snapshot: Option<Value>,
     draft_approval_rejection: Option<&'static str>,
@@ -31,6 +56,12 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             api_service: false,
+            quota_compat: true,
+            public_entry: false,
+            live_quota: false,
+            live_plan_invalid: false,
+            debugger_error: false,
+            preload_first: false,
             profile_dir: PathBuf::new(),
             draft_snapshot: None,
             draft_approval_rejection: None,
@@ -90,6 +121,10 @@ async fn start(options: Options) -> Running {
     let startup = options.startup.clone();
     let profile_dir = options.profile_dir.clone();
     let api_service = options.api_service;
+    let quota_compat = options.quota_compat;
+    let public_entry = options.public_entry;
+    let live_quota = options.live_quota;
+    let preload_first = options.preload_first;
     let server = tokio::spawn(async move {
         let (socket, _) = listener.accept().await.unwrap();
         let mut socket = tokio_tungstenite::accept_async(socket).await.unwrap();
@@ -137,6 +172,15 @@ async fn start(options: Options) -> Running {
                     let expression = message["params"]["expression"].as_str().unwrap();
                     let value = if expression == "location.href" {
                         json!("app://-/index.html")
+                    } else if expression == "window.__cockpitQuotaCompat.prepareLiveQuotaGate()" {
+                        json!({"ok":true,"plan":{
+                            "url":if options.live_plan_invalid { "https://example.test/assets/app-primary-mock.js" } else { "app://-/assets/app-primary-mock.js" },
+                            "lineNumber":12,"columnNumber":34,"hardVariable":"Ct","guardVariable":"vn"
+                        }})
+                    } else if expression
+                        .starts_with("window.__cockpitQuotaCompat.installLiveQuotaGuard(")
+                    {
+                        json!({"ok":true})
                     } else if let Some(nonce) = argument(expression, "prepareHandoff") {
                         prepared_nonce = Some(nonce);
                         preparations += 1;
@@ -226,6 +270,17 @@ async fn start(options: Options) -> Running {
                         json!({"identifier":format!("registration-{registrations}")})
                     }
                 }
+                "Debugger.enable" | "Debugger.disable" | "Debugger.removeBreakpoint"
+                    if options.live_quota =>
+                {
+                    if options.debugger_error && method == "Debugger.enable" {
+                        error = Some(json!({"code":-32601,"message":"Method not found"}));
+                    }
+                    json!({})
+                }
+                "Debugger.setBreakpointByUrl" if options.live_quota => {
+                    json!({"breakpointId":"live-quota"})
+                }
                 _ => {
                     // This simulated modern client deliberately has no
                     // Debugger or live-edit protocol implementation.
@@ -277,16 +332,37 @@ async fn start(options: Options) -> Running {
         }
     });
     let (stop, stop_rx) = watch::channel(false);
-    let runtime = tokio::spawn(run(
-        format!("ws://{address}/devtools/page/mock"),
-        profile_dir,
-        true,
-        true,
-        true,
-        api_service,
-        startup,
-        stop_rx,
-    ));
+    let runtime = tokio::spawn(async move {
+        let url = format!("ws://{address}/devtools/page/mock");
+        if public_entry {
+            run(
+                url,
+                profile_dir,
+                true,
+                quota_compat,
+                true,
+                api_service,
+                preload_first,
+                startup,
+                stop_rx,
+            )
+            .await
+        } else {
+            run_with_live_quota(
+                url,
+                profile_dir,
+                true,
+                quota_compat,
+                true,
+                api_service,
+                preload_first,
+                startup,
+                stop_rx,
+                live_quota,
+            )
+            .await
+        }
+    });
     Running {
         stop,
         runtime,
@@ -369,6 +445,157 @@ fn assert_safe_protocol(calls: &[Value]) {
 }
 
 #[tokio::test]
+async fn api_service_fallback_waits_without_automatic_reload() {
+    let mut runtime = start(Options {
+        api_service: true,
+        quota_compat: false,
+        public_entry: true,
+        ..Options::default()
+    })
+    .await;
+    runtime.notice("document", Some("restart-required")).await;
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
+    let calls = runtime.finish(false).await;
+    assert_eq!(
+        expressions(&calls, "window.__cockpitNativeFast.inspectStartupReload()"),
+        0
+    );
+    assert_eq!(
+        expressions(
+            &calls,
+            "window.__cockpitNativeFast.reloadPreparedDocument()"
+        ),
+        0
+    );
+    assert_safe_protocol(&calls);
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn api_service_public_entry_uses_current_page_on_supported_platforms() {
+    let mut runtime = start(Options {
+        api_service: true,
+        live_quota: true,
+        public_entry: true,
+        ..Options::default()
+    })
+    .await;
+    runtime
+        .notice("activation", Some("quota-breakpoint-armed"))
+        .await;
+    let calls = runtime.finish(false).await;
+    assert_eq!(methods(&calls, "Debugger.setBreakpointByUrl"), 1);
+    assert_eq!(
+        expressions(
+            &calls,
+            "window.__cockpitNativeFast.reloadPreparedDocument()"
+        ),
+        0
+    );
+}
+
+#[tokio::test]
+async fn live_quota_activates_current_document_without_reload_and_cleans_up() {
+    let mut runtime = start(Options {
+        api_service: true,
+        live_quota: true,
+        ..Options::default()
+    })
+    .await;
+    assert_eq!(
+        runtime
+            .notice("activation", Some("quota-breakpoint-armed"))
+            .await["state"],
+        "active"
+    );
+    assert_eq!(runtime.navigations.load(Ordering::Acquire), 0);
+    let calls = runtime.finish(false).await;
+    assert_eq!(methods(&calls, "Debugger.enable"), 1);
+    let breakpoint = calls
+        .iter()
+        .find(|call| call["method"] == "Debugger.setBreakpointByUrl")
+        .unwrap();
+    assert_eq!(breakpoint["params"]["lineNumber"], 12);
+    assert_eq!(breakpoint["params"]["columnNumber"], 34);
+    assert_eq!(
+        breakpoint["params"]["condition"],
+        live_quota_condition("Ct", "vn")
+    );
+    assert_eq!(
+        expressions(
+            &calls,
+            "window.__cockpitQuotaCompat.installLiveQuotaGuard()"
+        ),
+        1
+    );
+    assert_eq!(
+        expressions(
+            &calls,
+            "window.__cockpitNativeFast.reloadPreparedDocument()"
+        ),
+        0
+    );
+    assert_eq!(
+        expressions(&calls, "window.__cockpitNativeFast.prepareHandoff()"),
+        0
+    );
+    assert_eq!(methods(&calls, "Page.reload"), 0);
+    assert_eq!(methods(&calls, "Debugger.removeBreakpoint"), 1);
+    assert_eq!(methods(&calls, "Debugger.disable"), 1);
+    assert_eq!(
+        methods(&calls, "Page.removeScriptToEvaluateOnNewDocument"),
+        1
+    );
+    assert!(calls.iter().any(|call| call["params"]["expression"]
+        .as_str()
+        .is_some_and(|value| value.contains("disposeLiveQuotaGuard?.()"))));
+    assert!(calls
+        .iter()
+        .filter(|call| call["method"] == "Runtime.evaluate")
+        .all(|call| call["params"]["contextId"] == 1));
+}
+
+#[tokio::test]
+async fn live_quota_failure_never_falls_back_to_reload_or_reports_active() {
+    for invalid_plan in [false, true] {
+        let mut runtime = start(Options {
+            api_service: true,
+            live_quota: true,
+            live_plan_invalid: invalid_plan,
+            debugger_error: !invalid_plan,
+            ..Options::default()
+        })
+        .await;
+        let reason = if invalid_plan {
+            "quota-location-invalid"
+        } else {
+            "debugger-enable-failed"
+        };
+        assert_ne!(
+            runtime.notice("activation", Some(reason)).await["state"],
+            "active"
+        );
+        let calls = runtime.finish(false).await;
+        assert_eq!(methods(&calls, "Debugger.setBreakpointByUrl"), 0);
+        assert_eq!(
+            expressions(
+                &calls,
+                "window.__cockpitQuotaCompat.installLiveQuotaGuard()"
+            ),
+            0
+        );
+        assert_eq!(
+            expressions(
+                &calls,
+                "window.__cockpitNativeFast.reloadPreparedDocument()"
+            ),
+            0
+        );
+        assert_eq!(methods(&calls, "Page.reload"), 0);
+    }
+}
+
+#[tokio::test]
 async fn fresh_launch_registers_then_reloads_once_and_requires_module_evaluation() {
     let mut runtime = start(Options::default()).await;
     assert_eq!(
@@ -417,13 +644,19 @@ async fn capability_only_activation_reports_partial_state_and_never_claims_full_
     })
     .await;
     let notice = runtime
-        .notice("activation", Some("capability-only-quota-provider-not-unique"))
+        .notice(
+            "activation",
+            Some("capability-only-quota-provider-not-unique"),
+        )
         .await;
     assert_eq!(notice["state"], "active-capability");
     assert_eq!(runtime.navigations.load(Ordering::Acquire), 1);
     let calls = runtime.finish(false).await;
     assert_eq!(methods(&calls, "Page.addScriptToEvaluateOnNewDocument"), 1);
-    assert_eq!(methods(&calls, "Page.removeScriptToEvaluateOnNewDocument"), 1);
+    assert_eq!(
+        methods(&calls, "Page.removeScriptToEvaluateOnNewDocument"),
+        1
+    );
     assert_safe_protocol(&calls);
 }
 
@@ -1178,12 +1411,19 @@ async fn handoff_uses_one_nonce_and_keeps_new_document_script_small() {
 
 #[tokio::test]
 async fn api_service_binding_is_carried_into_the_new_document_and_revoked_on_cleanup() {
-    let mut runtime = start(Options { api_service: true, ..Options::default() }).await;
+    let mut runtime = start(Options {
+        api_service: true,
+        ..Options::default()
+    })
+    .await;
     runtime.notice("activation", Some("module-evaluated")).await;
     let calls = runtime.finish(false).await;
-    let script = calls.iter()
+    let script = calls
+        .iter()
         .find(|call| call["method"] == "Page.addScriptToEvaluateOnNewDocument")
-        .unwrap()["params"]["source"].as_str().unwrap();
+        .unwrap()["params"]["source"]
+        .as_str()
+        .unwrap();
     assert!(script.contains("\"apiService\":true"));
     // The CDP startup script must retain native dictation eligibility and
     // transcription rather than installing either retired audio adapter.
@@ -1194,7 +1434,9 @@ async fn api_service_binding_is_carried_into_the_new_document_and_revoked_on_cle
     assert!(!script.contains("__cockpitDictationBridge_"));
     assert!(script.contains("previous.apiDictation = false"));
     assert!(script.contains("capability = nativeValue => nativeValue"));
-    assert!(calls.iter().filter_map(|call| call["params"]["expression"].as_str())
+    assert!(calls
+        .iter()
+        .filter_map(|call| call["params"]["expression"].as_str())
         .any(|value| value.contains("s.apiService=false;")));
     assert_safe_protocol(&calls);
 }
@@ -1303,6 +1545,15 @@ fn transport_and_asset_boundaries_reject_remote_or_ambiguous_targets() {
     assert!(!local_document("app://external/index.html"));
     assert!(local_initial("app://-/assets/app-initial-valid.js"));
     assert!(!local_initial("app://-/assets/app-initial-valid.js?other"));
+    assert!(local_primary("app://-/assets/app-primary-98d23d806dbd.js"));
+    for value in [
+        "https://example.com/assets/app-primary-valid.js",
+        "app://-/assets/app-initial-valid.js",
+        "app://-/assets/app-primary-valid.js?other",
+        "app://-/assets/app-primary-valid.js#fragment",
+    ] {
+        assert!(!local_primary(value), "{value}");
+    }
 }
 
 #[tokio::test]
@@ -1311,6 +1562,7 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
     assert!(run(
         "invalid".to_string(),
         PathBuf::new(),
+        false,
         false,
         false,
         false,
@@ -1327,6 +1579,7 @@ async fn disabled_and_stopped_sessions_do_not_connect() {
         true,
         true,
         true,
+        false,
         false,
         None,
         receiver

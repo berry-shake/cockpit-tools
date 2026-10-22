@@ -167,8 +167,8 @@
       "speed": "輸出速度",
       "cache": "快取命中率",
       "cacheShort": "快取",
-      "speedHint": "目前對話近期有效 API 請求的加權輸出速度，不含首回應等待；無法關聯或缺少計時時顯示 —。",
-      "cacheHint": "近期輸入 Token 中命中快取的比例，依輸入量加權。",
+      "speedHint": "目前對話有效請求的平均輸出速度，不含首次回應等待；缺少有效測量時顯示 —。",
+      "cacheHint": "目前對話有效請求依輸入 Token 加權的平均快取命中率。停止生成後保留；缺少計數時顯示 —。",
       "aggregateHint": "各帳號視窗剩餘百分比之和，不按方案容量加權。顏色依帳號總覽：≥80% 綠，≥40% 黃，≥10% 橙，低於10% 紅；未知值不著色。",
       "waiting": "等待對話用量紀錄",
       "refreshFailed": "額度更新失敗，已保留上次結果。請重試。",
@@ -225,7 +225,11 @@
       "avgLatency": "平均延遲",
       "successRate": "成功率",
       "verifiedStatistics": "已核實統計",
-      "excludedHistory": "有 {{count}} 筆歷史記錄缺少派送依據，未計入"
+      "excludedHistory": "有 {{count}} 筆歷史記錄缺少派送依據，未計入",
+      "averageSpeed": "平均輸出速度",
+      "serviceUnavailable": "API 服務暫時無法使用，請重試。",
+      "tierAdjusted": "已調整為標準",
+      "averageCache": "平均快取命中率"
     },
     "apiKeyAccount": "API Key 帳號",
     "status": "狀態",
@@ -2351,6 +2355,9 @@
       "rule": "短週期剩餘 <= {{shortCycle}}% 或週剩餘 <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "工作階段修復失敗，備份還原尚未完成，已停止啟動。請先檢查日誌與備份，再重試。",
+      "sessionCheckTimeout": "工作階段檢查逾時，已停止啟動。請重試，或查看日誌。",
+      "sessionFileTooLarge": "工作階段檔案首行過大，已停止啟動。請查看日誌。",
       "bindingFailed": "無法確認帳號綁定，已停止啟動，請重試切換帳號。",
       "processScanFailed": "無法檢查舊背景程序，已停止啟動，請重試。",
       "proxyEntryFailed": "設定的代理入口無法啟動，未改用其他出口，請重試。"
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "此 OAuth 帳號僅支援語音轉寫，其他音訊操作需使用 API Key 供應商。",
         "audioUnavailable": "音訊轉送暫時無法使用。",
         "audioUpstreamFailed": "音訊上游請求失敗。",
-        "modelNotAvailable": "模型 {{model}} 不在目前 API Key 的可用模型範圍內。"
+        "modelNotAvailable": "模型 {{model}} 不在目前 API Key 的可用模型範圍內。",
+        "quotaReserved": "帳號額度已保留或正在確認，請稍後重試。"
       },
       "testRateLimited": "服務可達，但上游限流或額度不足：{{detail}}。",
       "testHttpFailed": "服務可達，但請求返回 HTTP {{status}}：{{detail}}。",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "停用 image_generation 能力",
           "message": "開啟後，API 服務會在本機閘道轉發普通文字對話前移除 image_generation 工具宣告，避免部分供應商回報「Image generation is not enabled」；不會刪除 gpt-image 等生圖模型。是否繼續？"
-        }
+        },
+        "quotaReserveToggle": "保留 OAuth 額度",
+        "quotaReserveDesc": "API 服務只會在 5 小時與每週剩餘額度皆高於保留值時使用此 OAuth 帳號。",
+        "quotaReserveHourlyLabel": "5 小時保留",
+        "quotaReserveWeeklyLabel": "每週保留",
+        "quotaReserveInvalid": "請輸入 1 到 100 的整數",
+        "strictReserve": "嚴格保護",
+        "strictReserveDesc": "設定保留額度後自動啟用安全緩衝保護；接近保留值時，每個帳號僅送出一個請求，結束後確認最新額度。其他用戶端用量不受此設定約束。",
+        "strictNativeOnly": "嚴格保護需要 Rust 原生引擎；切換 Go 前請先關閉嚴格保護。",
+        "safetyMargin": "安全緩衝",
+        "safetyMarginUnit": "百分點",
+        "safetyMarginInvalid": "請輸入 1 到 20 的整數",
+        "quotaInFlight": "處理中 {{count}}",
+        "quotaWaiting": "等待額度確認",
+        "quotaStale": "額度待更新",
+        "quotaProtected": "已保留",
+        "quotaUpdated": "更新於 {{time}}"
       },
       "customRoutingEdit": "編輯自訂調度",
       "customRoutingTitle": "自訂調度",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "帳號池無可用帳號",
           "poolUnavailableDetail": "模型 {{model}} 的請求未能選出可用帳號",
           "poolUnattributedDetail": "未收到逐帳號診斷，無法歸屬到特定帳號。請檢查此 API Key 的帳號範圍與模型設定。",
-          "poolDiagnosticDetail": "模型 {{model}}：候選 {{candidate}}，範圍符合 {{scoped}}，可用 {{available}}，不可用 {{unavailable}}，模型排除 {{modelExcluded}}，生圖策略攔截 {{imageBlocked}}",
+          "poolDiagnosticDetail": "模型 {{model}}：候選 {{candidate}}，範圍符合 {{scoped}}，可用 {{available}}，不可用 {{unavailable}}，模型排除 {{modelExcluded}}，額度保留 {{quotaReserved}}，生圖策略攔截 {{imageBlocked}}",
           "poolNoCandidatesDetail": "本次請求沒有候選帳號。請檢查請求模型與帳號載入狀態。",
           "poolScopeMismatchDetail": "候選帳號未符合此 API Key 的帳號範圍，或無法識別帳號對應關係。請檢查綁定帳號與模型設定。",
           "inspectBinding": "檢查綁定",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "此綁定帳號尚未載入目前服務，請檢查帳號載入及帳號池同步狀態。",
           "boundAccountNotCandidateDetail": "此綁定帳號已載入，但未進入本次請求的候選集，請檢查請求模型、供應商及請求類型。",
           "scopeUnknownDetail": "目前範圍診斷不足以確定具體原因，請檢查綁定和服務日誌。",
-          "poolBlockedDetail": "範圍內篩選結果：無法調度 {{unavailable}}（如停用、冷卻或驗證失敗），模型排除 {{modelExcluded}}，生圖策略攔截 {{imageBlocked}}。請檢查各帳號原因與對應設定。",
+          "poolBlockedDetail": "範圍內篩選結果：無法調度 {{unavailable}}（如停用、冷卻或驗證失敗），模型排除 {{modelExcluded}}，額度保留 {{quotaReserved}}，生圖策略攔截 {{imageBlocked}}。請檢查各帳號原因與對應設定。",
           "poolUnknownDetail": "目前診斷不足以確定具體原因。請檢查此 API Key 的帳號範圍、模型設定與服務記錄。",
           "clearHint": "清除僅移除此筆診斷紀錄，不會修復設定、Token 或額度；請求再次失敗時會重新出現。",
           "clearSuccess": "已清除診斷紀錄，不代表帳號池已恢復可用。",

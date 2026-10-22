@@ -167,8 +167,8 @@
       "speed": "输出速度",
       "cache": "缓存命中率",
       "cacheShort": "缓存",
-      "speedHint": "当前会话近期有效 API 请求的加权输出速度，不含首响等待；无法关联或缺少计时显示 —。",
-      "cacheHint": "近期输入 Token 中命中缓存的比例，按输入量加权。",
+      "speedHint": "当前会话有效请求的平均输出速度，不含首响等待；缺少有效测量显示 —。",
+      "cacheHint": "当前会话有效请求按输入 Token 加权的平均缓存命中率。生成停止后保留；缺少计数显示 —。",
       "aggregateHint": "各账号窗口剩余百分比之和，不按套餐容量加权。颜色遵循账号总览：≥80% 绿，≥40% 黄，≥10% 橙，低于10% 红；未知值不着色。",
       "waiting": "等待会话用量记录",
       "refreshFailed": "额度刷新失败，已保留上次结果。请重试。",
@@ -225,7 +225,11 @@
       "avgLatency": "平均延迟",
       "successRate": "成功率",
       "verifiedStatistics": "已核实统计",
-      "excludedHistory": "有 {{count}} 条历史记录缺少派发依据，未计入"
+      "excludedHistory": "有 {{count}} 条历史记录缺少派发依据，未计入",
+      "averageSpeed": "平均输出速度",
+      "serviceUnavailable": "API 服务暂不可用，请重试。",
+      "tierAdjusted": "已调整为标准",
+      "averageCache": "平均缓存命中率"
     },
     "apiKeyAccount": "API Key 账号",
     "status": "状态",
@@ -2571,6 +2575,9 @@
       "rule": "短周期剩余 <= {{shortCycle}}% 或周剩余 <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "会话修复失败，备份恢复未完成，已停止启动。请先检查日志和备份，再重试。",
+      "sessionCheckTimeout": "会话检查超时，已停止启动。请重试，或查看日志。",
+      "sessionFileTooLarge": "会话文件首行过大，已停止启动。请查看日志。",
       "bindingFailed": "无法确认账号绑定，已停止启动，请重试切号。",
       "processScanFailed": "无法检查旧后台进程，已停止启动，请重试。",
       "proxyEntryFailed": "配置的代理入口无法启动，未改用其他出口，请重试。"
@@ -3132,7 +3139,8 @@
         "audioNotSupported": "此 OAuth 账号仅支持语音转写，其他音频操作需使用 API Key 供应商。",
         "audioUnavailable": "音频转发暂不可用。",
         "audioUpstreamFailed": "音频上游请求失败。",
-        "modelNotAvailable": "模型 {{model}} 不在当前 API Key 的可用模型范围内。"
+        "modelNotAvailable": "模型 {{model}} 不在当前 API Key 的可用模型范围内。",
+        "quotaReserved": "账号额度已保留或正在确认，请稍后重试。"
       },
       "testRateLimited": "服务可达，但上游限流或额度不足：{{detail}}。",
       "testHttpFailed": "服务可达，但请求返回 HTTP {{status}}：{{detail}}。",
@@ -3238,7 +3246,7 @@
           "poolUnavailable": "账号池无可用账号",
           "poolUnavailableDetail": "模型 {{model}} 的请求没有选出可用账号",
           "poolUnattributedDetail": "未收到逐账号诊断，无法归属到具体账号。请检查此 API Key 的账号范围及模型配置。",
-          "poolDiagnosticDetail": "模型 {{model}}：候选 {{candidate}}，范围匹配 {{scoped}}，可用 {{available}}，不可用 {{unavailable}}，模型排除 {{modelExcluded}}，生图策略拦截 {{imageBlocked}}",
+          "poolDiagnosticDetail": "模型 {{model}}：候选 {{candidate}}，范围匹配 {{scoped}}，可用 {{available}}，不可用 {{unavailable}}，模型排除 {{modelExcluded}}，额度保留 {{quotaReserved}}，生图策略拦截 {{imageBlocked}}",
           "poolNoCandidatesDetail": "本次请求没有候选账号。请检查请求模型和账号加载状态。",
           "poolScopeMismatchDetail": "候选账号未匹配此 API Key 的账号范围，或账号映射无法识别。请检查绑定账号及模型配置。",
           "inspectBinding": "检查绑定",
@@ -3250,7 +3258,7 @@
           "boundAccountNotLoadedDetail": "此绑定账号尚未加载到当前服务，请检查账号加载及账号池同步状态。",
           "boundAccountNotCandidateDetail": "此绑定账号已加载，但未进入本次请求的候选集，请检查请求模型、供应商及请求类型。",
           "scopeUnknownDetail": "当前范围诊断不足以确定具体原因，请检查绑定和服务日志。",
-          "poolBlockedDetail": "范围内筛选结果：不可调度 {{unavailable}}（如停用、冷却或鉴权失败），模型排除 {{modelExcluded}}，生图策略拦截 {{imageBlocked}}。请检查逐账号原因及对应设置。",
+          "poolBlockedDetail": "范围内筛选结果：不可调度 {{unavailable}}（如停用、冷却或鉴权失败），模型排除 {{modelExcluded}}，额度保留 {{quotaReserved}}，生图策略拦截 {{imageBlocked}}。请检查逐账号原因及对应设置。",
           "poolUnknownDetail": "当前诊断不足以确定具体原因。请检查此 API Key 的账号范围、模型配置和服务日志。",
           "clearHint": "清除仅移除此条诊断记录，不会修复配置、Token 或额度；请求再次失败时会重新出现。",
           "clearSuccess": "已清除诊断记录，不代表账号池已恢复可用。",
@@ -3357,7 +3365,23 @@
         "imageGenerationConfirm": {
           "title": "禁用 image_generation 能力",
           "message": "开启后，API 服务会在本地网关转发普通文本对话前移除 image_generation 工具声明，避免部分供应商报 “Image generation is not enabled”；不会删除 gpt-image 等生图模型。是否继续？"
-        }
+        },
+        "quotaReserveToggle": "保留 OAuth 额度",
+        "quotaReserveDesc": "API 服务仅在 5 小时和周剩余额度均高于保留值时使用该 OAuth 账号。",
+        "quotaReserveHourlyLabel": "5 小时保留",
+        "quotaReserveWeeklyLabel": "周保留",
+        "quotaReserveInvalid": "请输入 1 到 100 的整数",
+        "strictReserve": "严格保护",
+        "strictReserveDesc": "设置保留额度后自动启用安全垫保护；接近保留值时，每个账号仅发出一个请求，结束后确认最新额度。其他客户端用量不受此设置约束。",
+        "strictNativeOnly": "严格保护需要 Rust 原生引擎；切换 Go 前请先关闭严格保护。",
+        "safetyMargin": "安全垫",
+        "safetyMarginUnit": "个百分点",
+        "safetyMarginInvalid": "请输入 1 到 20 的整数",
+        "quotaInFlight": "在途 {{count}}",
+        "quotaWaiting": "等待额度确认",
+        "quotaStale": "额度待更新",
+        "quotaProtected": "已保留",
+        "quotaUpdated": "更新于 {{time}}"
       },
       "customRoutingEdit": "编辑自定义调度",
       "customRoutingTitle": "自定义调度",

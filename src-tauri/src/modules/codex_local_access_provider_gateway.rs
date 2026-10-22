@@ -2765,6 +2765,8 @@ async fn spawn_provider_gateway_sidecar(
         .arg(&launch_config.config_path)
         .arg("--manifest")
         .arg(&launch_config.manifest_path)
+        .arg("--quota-reserve-state")
+        .arg(&launch_config.quota_reserve_path)
         .arg("--quota-pool-state")
         .arg(&launch_config.quota_pool_path)
         .arg("--parent-pid")

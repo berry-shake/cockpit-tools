@@ -145,6 +145,7 @@ test('module rewriting preserves ordinary literals and rewrites actual module ed
   const { api } = load();
   const source = 'import a from "./a.js";export{a}from"../b.js";const plain="./keep.txt", pattern=/import[(]"x"[)]/;const object={import:()=>import(`./c.js`)};const href=import.meta.url;const nested=`text ${import("./d.js")}`;';
   const rewritten = await api.rewriteModule(source, moduleUrl);
+  assert.equal(api.rewriteModuleSync(source, moduleUrl), rewritten);
   assert.match(rewritten, /import a from "app:\/\/-\/assets\/a.js"/);
   assert.match(rewritten, /from"app:\/\/-\/b.js"/);
   assert.match(rewritten, /import\("app:\/\/-\/assets\/c.js"\)/);
@@ -154,6 +155,7 @@ test('module rewriting preserves ordinary literals and rewrites actual module ed
   assert.ok(rewritten.includes('pattern=/import[(]"x"[)]/'));
   for (const unsupported of ['import(computed)', 'import("./"+suffix)', 'const p=import.meta.resolve("./x.js")']) {
     await assert.rejects(() => api.rewriteModule(unsupported, moduleUrl));
+    assert.throws(() => api.rewriteModuleSync(unsupported, moduleUrl));
   }
 });
 

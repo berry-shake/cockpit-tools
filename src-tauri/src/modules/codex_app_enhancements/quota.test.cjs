@@ -307,10 +307,143 @@ test('unknown or ambiguous module contracts are never partially transformed', ()
   }
 });
 
+test('live quota plan anchors after both submit gates without changing other blocks', () => {
+  const h = composerHarness();
+  const location = h.transformed.diagnostics.location;
+  assert.equal(location.url, primaryUrl);
+  assert.equal(location.hardVariable, 'reserve');
+  assert.equal(location.guardVariable, 'generic');
+  assert.equal(location.hostVariable, 'host');
+  const line = primary.split('\n')[location.lineNumber];
+  assert.equal(line.slice(location.columnNumber, location.columnNumber + 12), 'let disabled');
+});
+
+test('live quota condition updates evaluated V8 locals without pausing or reloading', async () => {
+  const h = composerHarness();
+  h.context.__cockpitEnhancements.apiService = true;
+  const { Session } = require('node:inspector');
+  const session = new Session();
+  session.connect();
+  const post = (method, params = {}) => new Promise((resolve, reject) => {
+    session.post(method, params, (error, result) => error ? reject(error) : resolve(result));
+  });
+  let pauses = 0;
+  session.on('Debugger.paused', () => { pauses++; session.post('Debugger.resume'); });
+  try {
+    await post('Debugger.enable');
+    // Preserve offsets while removing the synthetic module import for the VM.
+    vm.runInNewContext(primary.replace(/^import[^;]+;/m, match => ' '.repeat(match.length)),
+      h.context, { filename: primaryUrl });
+    assert.equal(h.render().submitDisabled, true);
+    const plan = h.transformed.diagnostics.location;
+    const condition = `(window.__cockpitEnhancements?.apiService===true&&window.__cockpitEnhancements?.quotaCompat===true&&(${plan.hardVariable}=false,${plan.guardVariable}=false),false)`;
+    const breakpoint = await post('Debugger.setBreakpointByUrl', {
+      url: plan.url, lineNumber: plan.lineNumber, columnNumber: plan.columnNumber, condition,
+    });
+    assert.ok(breakpoint.locations.length > 0, 'the native gate location resolves');
+    for (const reserve of [false, true]) for (const generic of [false, true]) {
+      Object.assign(h.values, { reserve, generic });
+      assert.equal(h.render().submitDisabled, false);
+      assert.equal(h.render({ submitDisabled: true }).submitDisabled, true);
+    }
+    h.context.__cockpitEnhancements.apiService = false;
+    assert.equal(h.render().submitDisabled, true, 'revoking the binding restores native gates');
+    assert.equal(pauses, 0);
+    await post('Debugger.removeBreakpoint', { breakpointId: breakpoint.breakpointId });
+    h.context.__cockpitEnhancements.apiService = true;
+    assert.equal(h.render().submitDisabled, true, 'removing the condition restores native behavior');
+  } finally {
+    await post('Debugger.disable');
+    session.disconnect();
+  }
+});
+
+test('live quota install rewrites only the main usage snapshot and refreshes the mounted composer', () => {
+  const { api, context } = load();
+  Object.assign(context.__cockpitEnhancements, { apiService: true });
+  let dispatched = 0;
+  const hook = { memoizedState: vm.runInNewContext('new Set()', context),
+    queue: { dispatch: () => { dispatched++; } }, next: null };
+  const type = function Composer() {};
+  type.toString = () => 'function Composer(){let disabled=other||reserve||generic,next;return{submitDisabled:disabled}}';
+  const composer = { __reactFiber$test: { type, memoizedState: hook, return: null } };
+  const aside = {
+    innerText: 'Codex 和工作使用额度已用完 工作空间额度已用完',
+    style: { setProperty() {}, removeProperty() {} },
+    setAttribute() {}, removeAttribute() {},
+  };
+  const usage = {
+    user_id: 'user',
+    rate_limit: { allowed: false, limit_reached: true, primary_window: { used_percent: 100 } },
+    rate_limit_reached_type: { type: 'workspace_member_credits_depleted' },
+    rate_limit_upsell: { banner_type: 'workspace_member_credits_depleted', model_slug: null },
+    credits: { balance: 0 },
+  };
+  const query = { queryKey: ['rate-limit-status'], state: { data: usage } };
+  const imageQuery = { queryKey: ['rate-limit-status', 'image-generation'], state: { data: { rate_limit: { allowed: false } } } };
+  let subscribed = 0, unsubscribed = 0, published = usage, cacheListener;
+  const client = {
+    getQueryCache: () => ({ findAll: () => [query, imageQuery],
+      subscribe: listener => { cacheListener = listener; subscribed++; return () => { unsubscribed++; }; } }),
+    setQueryData(key, value) {
+      const target = key[1] === 'image-generation' ? imageQuery : query;
+      target.state.data = typeof value === 'function' ? value(target.state.data) : value;
+      if (target === query) published = target.state.data;
+    },
+  };
+  const originalSetter = client.setQueryData;
+  Object.assign(context, {
+    document: {
+      body: { innerText: aside.innerText },
+      documentElement: {},
+      querySelectorAll(selector) {
+        if (selector === '[data-codex-composer-root]') return [composer];
+        if (selector === 'aside[role="status"]') return [aside];
+        if (selector === '[data-cockpit-hidden-usage="true"]') return [aside];
+        return [];
+      },
+    },
+    MutationObserver: class { observe() {} disconnect() {} },
+  });
+  const finder = { __reactFiber$test: null };
+  finder.__reactFiber$test = { child: null, sibling: null, memoizedProps: { client }, return: null };
+  context.document.getElementById = () => finder;
+  const result = api.installLiveQuotaGuard({
+    hardVariable: 'reserve', guardVariable: 'generic', hostVariable: 'host',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.client, true);
+  assert.equal(published.rate_limit.allowed, true);
+  assert.equal(published.rate_limit.limit_reached, false);
+  assert.equal(published.rate_limit_upsell, null);
+  assert.equal(published.rate_limit_reached_type, null);
+  assert.deepEqual(published.credits, { balance: 0 });
+  assert.equal(imageQuery.state.data.rate_limit.allowed, false, 'image quota data is never changed');
+  assert.equal(dispatched, 1);
+  assert.equal(subscribed, 1);
+  assert.equal(context.__cockpitEnhancements.nativePatchState, 'active');
+  assert.equal(context.__cockpitEnhancements.nativePatchMode, 'live-quota');
+  const updatedUsage = { ...usage, credits: { balance: 7 } };
+  query.state.data = updatedUsage;
+  cacheListener({ query });
+  assert.equal(published.rate_limit.allowed, true, 'fresh cache updates retain compatibility');
+  assert.equal(published.credits.balance, 7, 'real balances remain intact');
+  client.setQueryData(['rate-limit-status'], previous => {
+    assert.equal(previous.rate_limit.allowed, false, 'updaters receive the original snapshot');
+    return { ...previous, credits: { balance: 8 } };
+  });
+  assert.equal(published.rate_limit.allowed, true);
+  context.__cockpitQuotaCompat.disposeLiveQuotaGuard();
+  assert.equal(unsubscribed, 1);
+  assert.equal(published.rate_limit.allowed, false, 'cleanup restores the latest original quota');
+  assert.equal(published.credits.balance, 8, 'cleanup preserves newer data');
+  assert.equal(client.setQueryData, originalSetter);
+});
+
 function bundleBrowser() {
   const result = load(), { context } = result, listeners = new Map(), elements = [], blobs = new Map(), revoked = [];
   const nativeTest = fs.readFileSync(path.join(__dirname, 'native_dictation.test.cjs'), 'utf8');
-  const fixtureMatch = /const fixture = (`[\s\S]*?`);\n\nfunction load/.exec(nativeTest);
+  const fixtureMatch = /const fixture = (`[\s\S]*?`);\r?\n\r?\nfunction load/.exec(nativeTest);
   assert.ok(fixtureMatch, 'native capability fixture must remain available');
   const capabilityFixture = vm.runInNewContext(fixtureMatch[1]);
   let serial = 0;

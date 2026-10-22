@@ -10,6 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.3.73] - 2026-10-22
+
+### Changed
+
+- Remove the Rust API Service engine's five-minute text request limit, 32 MiB full-response limit, 8 MiB accumulated output limit, and Chat conversion limits of 32 MiB and 4,096 items. Change the Codex stream event limit from 8 MiB to a 50 MiB per-line limit.
+- Increase image API response limits from 32 MiB to 96 MiB and change the 64 MiB image upload limit from a combined request limit to a per-file limit. Keep the independent image API's five-minute total timeout.
+- Remove the 30-second wait limit for the first client WebSocket message, change Chat provider stream limits from 8 MiB to 4 MiB per line, and cap the account concurrency wait queue at 100 requests.
+- Restore optional OAuth quota reserves for API Service bindings, including 5-hour and weekly thresholds, safety margins, protection status and admission checks in both gateway engines. Quota reservation is unchecked by default for new bindings. Existing bindings keep their saved choice; enable protection again if an earlier version removed its settings.
+- API Service clients use the same current-chat average output speed and input-token-weighted cache hit rate in the footer and overview, retaining the measurements after generation stops. Request records distinguish requested and returned speed tiers.
+- Open and refresh recent API request records faster, with indexed summaries for new requests and immediate dialog updates. Existing request history is retained without a bulk rebuild.
+
+### Fixed
+
+- Activate quota compatibility in the current Codex API Service page on Windows and macOS without reloading the window or waiting for a later page load. Remove incorrect send blocking caused by exhausted subscription quota, hide the corresponding notice, and restore the local quota cache when enhancements stop.
+- Show output speed and cache hit rates in the footer and overview with exactly one decimal place, discarding remaining digits without rounding; 99.99% displays as 99.9%.
+- Reduce repeated account refreshes and statistics work after Codex switches, retaining confirmed counters during background refresh. Limit launch-time session checks and report timeouts or recovery failures inside the launch dialog.
+- Keep verified request records visible during background refresh failures and when switching dialog tabs. Distinguish empty results, unlinked chats and unavailable services, and reject replies from previous chats or service bindings.
+- Preserve verified current-chat average speed and cache measurements across brief database read failures, expire caches when their verification lapses, and clear measurements when the service binding or chat changes.
+
 ## [1.3.72] - 2026-10-21
 
 ### Added

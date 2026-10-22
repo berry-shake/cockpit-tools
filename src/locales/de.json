@@ -167,8 +167,8 @@
       "speed": "Ausgabetempo",
       "cache": "Cache-Trefferrate",
       "cacheShort": "Cachequote",
-      "speedHint": "Gewichtetes Ausgabetempo der letzten gültigen API-Anfragen dieser Unterhaltung, ohne Wartezeit auf die erste Antwort. Bei fehlender Zuordnung oder Zeitmessung wird — angezeigt.",
-      "cacheHint": "Anteil der zuletzt aus dem Cache bedienten Eingabe-Token, gewichtet nach Eingabemenge.",
+      "speedHint": "Durchschnittliche Ausgabegeschwindigkeit gültiger Anfragen in diesem Chat, ohne Wartezeit auf die erste Antwort. Fehlende Messwerte: —.",
+      "cacheHint": "Nach Eingabe-Token gewichtete durchschnittliche Cache-Trefferrate gültiger Anfragen in diesem Chat. Bleibt nach Generierungsende erhalten; fehlende Zähler: —.",
       "aggregateHint": "Summe der verbleibenden Kontingentprozente, ohne Gewichtung nach Tarifkapazität. Farben wie in der Kontoübersicht: ≥80 % grün, ≥40 % gelb, ≥10 % orange, unter 10 % rot. Unbekannte Werte erhalten keine Kontingentfarbe.",
       "waiting": "Warte auf Chat-Nutzungsdaten",
       "refreshFailed": "Kontingent konnte nicht aktualisiert werden. Vorherige Ergebnisse bleiben erhalten. Erneut versuchen.",
@@ -225,7 +225,11 @@
       "avgLatency": "Mittl. Latenz",
       "successRate": "Erfolgsquote",
       "verifiedStatistics": "Geprüfte Statistik",
-      "excludedHistory": "{{count}} frühere Einträge ohne Versandnachweis werden nicht mitgezählt."
+      "excludedHistory": "{{count}} frühere Einträge ohne Versandnachweis werden nicht mitgezählt.",
+      "averageSpeed": "Mittlere Ausgaberate",
+      "serviceUnavailable": "API-Dienst nicht verfügbar. Bitte erneut versuchen.",
+      "tierAdjusted": "Auf Standard angepasst",
+      "averageCache": "Mittlere Cache-Treffer"
     },
     "apiKeyAccount": "API-Key-Konto",
     "status": "Zustand",
@@ -2351,6 +2355,9 @@
       "rule": "Kurzzeitrest <= {{shortCycle}}% oder Wochenrest <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Die Sitzungsreparatur ist fehlgeschlagen, die Sicherung wurde nicht vollständig wiederhergestellt. Start angehalten; vor einem erneuten Versuch Protokolle und Sicherungen prüfen.",
+      "sessionCheckTimeout": "Die Sitzungsprüfung hat zu lange gedauert. Start angehalten; erneut versuchen oder Protokolle prüfen.",
+      "sessionFileTooLarge": "Der Kopf einer Sitzungsdatei ist zu groß. Start angehalten; Protokolle prüfen.",
       "bindingFailed": "Die Kontozuordnung konnte nicht bestätigt werden. Start abgebrochen; bitte den Kontowechsel erneut versuchen.",
       "processScanFailed": "Die bisherigen Hintergrundprozesse konnten nicht geprüft werden. Start abgebrochen; bitte erneut versuchen.",
       "proxyEntryFailed": "Der konfigurierte Proxy konnte nicht gestartet werden. Es wurde keine andere Route verwendet. Bitte erneut versuchen."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Dieses OAuth-Konto unterstützt nur Transkription. Für andere Audiofunktionen ist ein Anbieter mit API Key erforderlich.",
         "audioUnavailable": "Audioweiterleitung ist nicht verfügbar.",
         "audioUpstreamFailed": "Die Audioanfrage an den Anbieter ist fehlgeschlagen.",
-        "modelNotAvailable": "Das Modell {{model}} ist für diesen API Key nicht verfügbar."
+        "modelNotAvailable": "Das Modell {{model}} ist für diesen API Key nicht verfügbar.",
+        "quotaReserved": "Das Kontingent ist reserviert oder wird überprüft. Bitte in Kürze erneut versuchen."
       },
       "testRateLimited": "Dienst erreichbar, aber Upstream ist limitiert oder das Kontingent ist erschöpft: {{detail}}.",
       "testHttpFailed": "Dienst erreichbar, aber die Anfrage gab HTTP {{status}} zurück: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "image_generation deaktivieren",
           "message": "Bei Aktivierung entfernt der API-Dienst im lokalen Gateway vor dem Weiterleiten normaler Textchats die Tool-Deklaration image_generation, um Fehler wie „Image generation is not enabled“ zu vermeiden. gpt-image und andere Bildmodelle werden nicht entfernt. Fortfahren?"
-        }
+        },
+        "quotaReserveToggle": "OAuth-Kontingent reservieren",
+        "quotaReserveDesc": "Der API-Dienst nutzt dieses OAuth-Konto nur, solange sowohl das verbleibende 5-Stunden- als auch das Wochenkontingent über dem jeweiligen Reservewert liegt.",
+        "quotaReserveHourlyLabel": "5-Std.-Reserve",
+        "quotaReserveWeeklyLabel": "Wochenreserve",
+        "quotaReserveInvalid": "Geben Sie eine ganze Zahl von 1 bis 100 ein.",
+        "strictReserve": "Strenger Schutz",
+        "strictReserveDesc": "Reserviertes Kontingent wird automatisch mit einem Sicherheitspuffer geschützt. Nahe der Grenze ist pro Konto eine Anfrage erlaubt; danach wird das aktuelle Kontingent bestätigt. Die Nutzung anderer Clients bleibt unberührt.",
+        "strictNativeOnly": "Strenger Schutz erfordert die Rust-Engine. Vor dem Wechsel zu Go bitte ausschalten.",
+        "safetyMargin": "Sicherheitspuffer",
+        "safetyMarginUnit": "Prozentpunkte",
+        "safetyMarginInvalid": "Ganze Zahl von 1 bis 20 eingeben.",
+        "quotaInFlight": "Aktiv: {{count}}",
+        "quotaWaiting": "Kontingentprüfung ausstehend",
+        "quotaStale": "Kontingent nicht verfügbar",
+        "quotaProtected": "Reserviert",
+        "quotaUpdated": "Aktualisiert: {{time}}"
       },
       "customRoutingEdit": "Benutzerdefiniertes Routing bearbeiten",
       "customRoutingTitle": "Benutzerdefiniertes Routing",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Kein verfügbares Pool-Konto",
           "poolUnavailableDetail": "Für Modell {{model}} wurde kein verfügbares Konto ausgewählt",
           "poolUnattributedDetail": "Es liegen keine Diagnosedaten je Konto vor. Der Fehler lässt sich daher keinem Konto zuordnen. Prüfen Sie die Kontozuordnung und Modellkonfiguration dieses API-Schlüssels.",
-          "poolDiagnosticDetail": "Modell {{model}}: {{candidate}} Kandidaten, {{scoped}} im Bereich, {{available}} verfügbar, {{unavailable}} nicht verfügbar, {{modelExcluded}} vom Modell ausgeschlossen, {{imageBlocked}} durch Bildrichtlinie blockiert",
+          "poolDiagnosticDetail": "Modell {{model}}: {{candidate}} Kandidaten, {{scoped}} im Bereich, {{available}} verfügbar, {{unavailable}} nicht verfügbar, {{modelExcluded}} vom Modell ausgeschlossen, {{quotaReserved}} durch Reserve blockiert, {{imageBlocked}} durch Bildrichtlinie blockiert",
           "poolNoCandidatesDetail": "Für diese Anfrage gibt es keine Kandidaten. Prüfen Sie das angefragte Modell und den Ladestatus der Konten.",
           "poolScopeMismatchDetail": "Kein Kandidat passt zum Kontobereich dieses API-Schlüssels, oder die Kontozuordnung wurde nicht erkannt. Prüfen Sie die ausgewählten Konten und die Modellkonfiguration.",
           "inspectBinding": "Bindung prüfen",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Dieses gebundene Konto ist im aktuellen Dienst nicht geladen. Prüfen Sie das Laden der Konten und die Pool-Synchronisierung.",
           "boundAccountNotCandidateDetail": "Dieses gebundene Konto ist geladen, gehört aber nicht zu den Kandidaten dieser Anfrage. Prüfen Sie Modell, Anbieter und Anfragetyp.",
           "scopeUnknownDetail": "Die Bereichsdiagnose nennt keine konkrete Ursache. Prüfen Sie die Bindung und die Dienstprotokolle.",
-          "poolBlockedDetail": "Filter im Kontobereich: {{unavailable}} nicht verfügbar (z. B. deaktiviert, Abkühlphase oder Authentifizierungsfehler), {{modelExcluded}} durch Modellfilter ausgeschlossen, {{imageBlocked}} durch Bildrichtlinie blockiert. Prüfen Sie die Kontogründe und Einstellungen.",
+          "poolBlockedDetail": "Filter im Kontobereich: {{unavailable}} nicht verfügbar (z. B. deaktiviert, Abkühlphase oder Authentifizierungsfehler), {{modelExcluded}} durch Modellfilter ausgeschlossen, {{quotaReserved}} durch Kontingentreserve blockiert, {{imageBlocked}} durch Bildrichtlinie blockiert. Prüfen Sie die Kontogründe und Einstellungen.",
           "poolUnknownDetail": "Die Diagnose zeigt keine eindeutige Ursache. Prüfen Sie Kontobereich, Modellkonfiguration und Dienstprotokolle.",
           "clearHint": "Löschen entfernt nur diesen Diagnoseeintrag. Einstellungen, Tokens und Kontingente werden nicht repariert; eine erneute fehlgeschlagene Anfrage kann einen neuen Eintrag erzeugen.",
           "clearSuccess": "Diagnoseeintrag gelöscht. Der Kontopool ist dadurch nicht automatisch wieder verfügbar.",

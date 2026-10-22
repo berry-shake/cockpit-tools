@@ -167,8 +167,8 @@
       "speed": "Velocidade de saída",
       "cache": "Acertos de cache",
       "cacheShort": "Em cache",
-      "speedHint": "Velocidade de saída ponderada das solicitações API válidas recentes desta conversa, sem a espera pela primeira resposta. Exibe — quando não é possível associar as solicitações ou faltam dados de tempo.",
-      "cacheHint": "Proporção dos tokens de entrada recentes atendidos pelo cache, ponderada pelo volume de entrada.",
+      "speedHint": "Velocidade média de saída das solicitações válidas desta conversa, sem a espera pela primeira resposta. Sem medições: —.",
+      "cacheHint": "Taxa média de acertos de cache das solicitações válidas desta conversa, ponderada pelos tokens de entrada. Mantida após interromper a geração; sem contadores: —.",
       "aggregateHint": "Soma das porcentagens restantes, sem ponderação pela capacidade do plano. Cores iguais às da visão de contas: ≥80% verde, ≥40% amarelo, ≥10% laranja e abaixo de 10% vermelho. Valores desconhecidos não recebem cor de cota.",
       "waiting": "Aguardando registros de uso da conversa",
       "refreshFailed": "Falha ao atualizar a cota. Os resultados anteriores foram mantidos. Tente novamente.",
@@ -225,7 +225,11 @@
       "avgLatency": "Latência média",
       "successRate": "Taxa de sucesso",
       "verifiedStatistics": "Dados verificados",
-      "excludedHistory": "{{count}} registros históricos sem comprovação de envio foram excluídos da contagem."
+      "excludedHistory": "{{count}} registros históricos sem comprovação de envio foram excluídos da contagem.",
+      "averageSpeed": "Velocidade média",
+      "serviceUnavailable": "Serviço de API indisponível. Tente novamente.",
+      "tierAdjusted": "Ajustado para padrão",
+      "averageCache": "Acertos médios de cache"
     },
     "apiKeyAccount": "Conta API Key",
     "status": "Estado",
@@ -2351,6 +2355,9 @@
       "rule": "Saldo curto <= {{shortCycle}}% ou semanal <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "A reparação das sessões falhou e a restauração está incompleta. Inicialização interrompida; verifique os logs e backups antes de tentar novamente.",
+      "sessionCheckTimeout": "A verificação das sessões excedeu o tempo. Inicialização interrompida; tente novamente ou consulte os logs.",
+      "sessionFileTooLarge": "O cabeçalho de um arquivo de sessão é muito grande. Inicialização interrompida; consulte os logs.",
       "bindingFailed": "Não foi possível confirmar a conta vinculada. Inicialização interrompida; tente trocar de conta novamente.",
       "processScanFailed": "Não foi possível verificar os processos anteriores em segundo plano. Inicialização interrompida; tente novamente.",
       "proxyEntryFailed": "Não foi possível iniciar o proxy configurado. Nenhuma rota alternativa foi usada; tente novamente."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Esta conta OAuth só oferece transcrição. Use um provedor com API Key para outras operações de áudio.",
         "audioUnavailable": "O encaminhamento de áudio está indisponível.",
         "audioUpstreamFailed": "A solicitação de áudio ao provedor falhou.",
-        "modelNotAvailable": "O modelo {{model}} não está disponível para esta API Key."
+        "modelNotAvailable": "O modelo {{model}} não está disponível para esta API Key.",
+        "quotaReserved": "A cota da conta está reservada ou aguardando confirmação. Tente novamente em instantes."
       },
       "testRateLimited": "O serviço está acessível, mas o upstream está limitado ou a cota acabou: {{detail}}.",
       "testHttpFailed": "O serviço está acessível, mas a requisição retornou HTTP {{status}}: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "Desativar image_generation",
           "message": "Ao ativar, o serviço API removerá a declaração da ferramenta image_generation no gateway local antes de encaminhar conversas de texto, evitando erros como \"Image generation is not enabled\". gpt-image e outros modelos de imagem não são removidos. Continuar?"
-        }
+        },
+        "quotaReserveToggle": "Reservar cota OAuth",
+        "quotaReserveDesc": "O serviço API usa esta conta OAuth somente enquanto as cotas restantes de 5 horas e semanal estiverem acima dos valores reservados.",
+        "quotaReserveHourlyLabel": "Reserva de 5 h",
+        "quotaReserveWeeklyLabel": "Reserva semanal",
+        "quotaReserveInvalid": "Digite um número inteiro de 1 a 100.",
+        "strictReserve": "Proteção rigorosa",
+        "strictReserveDesc": "A cota reservada é protegida automaticamente com uma margem de segurança. Perto do limite, cada conta permite uma solicitação e confirma a cota atual ao concluir. O uso de outros clientes não é limitado.",
+        "strictNativeOnly": "A proteção rigorosa exige o motor Rust. Desative-a antes de mudar para Go.",
+        "safetyMargin": "Margem de segurança",
+        "safetyMarginUnit": "pontos percentuais",
+        "safetyMarginInvalid": "Digite um inteiro de 1 a 20.",
+        "quotaInFlight": "Em andamento: {{count}}",
+        "quotaWaiting": "Aguardando confirmação da cota",
+        "quotaStale": "Cota indisponível",
+        "quotaProtected": "Reservado",
+        "quotaUpdated": "Atualizado: {{time}}"
       },
       "customRoutingEdit": "Editar roteamento personalizado",
       "customRoutingTitle": "Roteamento personalizado",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Nenhuma conta disponível no pool",
           "poolUnavailableDetail": "Nenhuma conta disponível foi selecionada para o modelo {{model}}",
           "poolUnattributedDetail": "Nenhum diagnóstico por conta foi recebido, portanto esta falha não pode ser atribuída a uma conta. Verifique o escopo de contas e a configuração de modelos desta chave API.",
-          "poolDiagnosticDetail": "Modelo {{model}}: {{candidate}} candidatas, {{scoped}} no escopo, {{available}} disponíveis, {{unavailable}} indisponíveis, {{modelExcluded}} excluídas pelo modelo, {{imageBlocked}} bloqueadas pela política de imagens",
+          "poolDiagnosticDetail": "Modelo {{model}}: {{candidate}} candidatas, {{scoped}} no escopo, {{available}} disponíveis, {{unavailable}} indisponíveis, {{modelExcluded}} excluídas pelo modelo, {{quotaReserved}} reservadas pela cota, {{imageBlocked}} bloqueadas pela política de imagens",
           "poolNoCandidatesDetail": "Não há contas candidatas para esta solicitação. Verifique o modelo solicitado e o carregamento das contas.",
           "poolScopeMismatchDetail": "Nenhuma candidata corresponde ao escopo desta chave API, ou seu vínculo com a conta não foi reconhecido. Verifique as contas selecionadas e a configuração do modelo.",
           "inspectBinding": "Ver vínculo",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Esta conta vinculada não está carregada no serviço atual. Verifique o carregamento das contas e a sincronização do pool.",
           "boundAccountNotCandidateDetail": "Esta conta vinculada foi carregada, mas não é candidata para esta solicitação. Verifique o modelo, o provedor e o tipo de solicitação.",
           "scopeUnknownDetail": "O diagnóstico de escopo não indica uma causa específica. Verifique os vínculos e os registros do serviço.",
-          "poolBlockedDetail": "Filtro no escopo: {{unavailable}} indisponíveis (por desativação, espera ou falha de autenticação, por exemplo), {{modelExcluded}} excluídas por modelo, {{imageBlocked}} bloqueadas pela política de imagens. Verifique os motivos por conta e os ajustes.",
+          "poolBlockedDetail": "Filtro no escopo: {{unavailable}} indisponíveis (por desativação, espera ou falha de autenticação, por exemplo), {{modelExcluded}} excluídas por modelo, {{quotaReserved}} bloqueadas por reserva de cota, {{imageBlocked}} bloqueadas pela política de imagens. Verifique os motivos por conta e os ajustes.",
           "poolUnknownDetail": "O diagnóstico não identifica uma causa específica. Verifique o escopo da chave API, a configuração do modelo e os registros do serviço.",
           "clearHint": "Limpar remove apenas este diagnóstico. Não corrige ajustes, tokens nem cotas; outra solicitação com falha pode criar um novo registro.",
           "clearSuccess": "Diagnóstico removido. Isso não significa que o grupo de contas esteja disponível novamente.",

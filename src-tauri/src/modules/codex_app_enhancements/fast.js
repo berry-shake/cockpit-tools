@@ -300,6 +300,73 @@
     return parts.join("");
   }
 
+  // The startup preload runs as a classic document-start script. It must finish
+  // before the parser reaches the app entry, so it cannot yield to the event
+  // loop like the background preparation path does.
+  function rewriteModuleSync(source, url) {
+    const iterator = tokens(source);
+    const buffered = [];
+    const next = () => buffered.length ? buffered.shift() : iterator.next().value;
+    const peek = () => { if (!buffered.length) { const token = iterator.next().value; if (token) buffered.push(token); } return buffered[0]; };
+    const edits = [];
+    const rewrite = token => {
+      if (token?.kind !== "literal" || !/^["'`]/.test(token.text)) throw new Error("computed-import");
+      const target = token.text.slice(1, -1);
+      if (/\\|[\r\n]/.test(target)) throw new Error("escaped-import");
+      if (!target.startsWith(".")) return;
+      const resolved = new URL(target, url);
+      if (!(resolved.protocol === "app:" && resolved.host === "-" || resolved.protocol === "file:" && !resolved.host)) throw new Error("external-module");
+      edits.push({ start: token.start, end: token.end, text: JSON.stringify(resolved.href) });
+    };
+    let token, previous = null;
+    while ((token = next())) {
+      if (token.kind !== "name" || [".", "?."].includes(previous?.text)) { previous = token; continue; }
+      if (peek()?.text === ":") { previous = token; continue; }
+      if (token.text === "import") {
+        if (peek()?.text === ".") {
+          next();
+          const meta = next(), dot = next(), property = next();
+          if (meta?.text !== "meta" || dot?.text !== "." || property?.text !== "url") throw new Error("unknown-import-meta");
+          edits.push({ start: token.start, end: property.end, text: JSON.stringify(url) });
+        } else if (peek()?.text === "(") {
+          next();
+          const argument = next();
+          if (argument?.kind !== "literal") throw new Error("computed-import");
+          if (![",", ")"].includes(peek()?.text)) throw new Error("computed-import");
+          rewrite(argument);
+        } else {
+          let item = next();
+          if (item?.kind !== "literal") {
+            while (item && !["from", ";"].includes(item.text)) item = next();
+            item = item?.text === "from" ? next() : null;
+          }
+          rewrite(item);
+        }
+      } else if (token.text === "export" && ["*", "{"].includes(peek()?.text)) {
+        let item = next();
+        if (item.text === "{") {
+          while (item && item.text !== "}") item = next();
+          if (peek()?.text !== "from") { previous = token; continue; }
+          next();
+        } else {
+          while (item && !["from", ";"].includes(item.text)) item = next();
+          if (item?.text !== "from") throw new Error("unknown-export");
+        }
+        rewrite(next());
+      }
+      previous = token;
+    }
+    let end = 0;
+    const parts = [];
+    for (const edit of edits) {
+      if (edit.start < end) throw new Error("overlapping-imports");
+      parts.push(source.slice(end, edit.start), edit.text);
+      end = edit.end;
+    }
+    parts.push(source.slice(end));
+    return parts.join("");
+  }
+
   function prepareLive(source, url) {
     if (!localAsset(url) || typeof source !== "string" || source.length > LIMIT) return failure(source, "unsupported-module");
     let result = { ok: true, patchedSource: source };
@@ -566,7 +633,7 @@
     return result;
   }
 
-  const api = { allow, transform, localAsset, functionRange, rewriteModule, prepareLive, prepareModule, prepareDocument, installModule, prepareHandoff, consumeHandoff, cancelHandoff, reloadPreparedDocument,
+  const api = { allow, transform, localAsset, functionRange, rewriteModule, rewriteModuleSync, prepareLive, prepareModule, prepareDocument, installModule, prepareHandoff, consumeHandoff, cancelHandoff, reloadPreparedDocument,
     inspectStartupReload: () => {
       const guard = root.__cockpitStartupGuard;
       if (!guard) return { ok: false, reason: "startup-guard-unavailable" };

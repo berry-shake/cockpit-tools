@@ -167,8 +167,8 @@
       "speed": "Rychlost výstupu",
       "cache": "Zásahy mezipaměti",
       "cacheShort": "Mezipaměť",
-      "speedHint": "Vážená rychlost výstupu nedávných platných požadavků API v této konverzaci bez čekání na první odpověď. Pokud požadavky nelze přiřadit nebo chybí časové údaje, zobrazí se —.",
-      "cacheHint": "Podíl nedávných vstupních tokenů obsloužených z mezipaměti, vážený objemem vstupu.",
+      "speedHint": "Průměrná rychlost výstupu platných požadavků v tomto chatu bez čekání na první odpověď. Chybějící měření: —.",
+      "cacheHint": "Průměrná úspěšnost mezipaměti platných požadavků v tomto chatu vážená vstupními tokeny. Zachová se po zastavení generování; chybějící počty: —.",
       "aggregateHint": "Součet zbývajících procent bez vážení kapacitou tarifu. Barvy jako v přehledu účtů: ≥80 % zelená, ≥40 % žlutá, ≥10 % oranžová, pod 10 % červená. Neznámé hodnoty nemají barvu kvóty.",
       "waiting": "Čekání na záznamy využití chatu",
       "refreshFailed": "Kvótu se nepodařilo obnovit. Předchozí výsledky jsou zachovány. Zkuste to znovu.",
@@ -225,7 +225,11 @@
       "avgLatency": "Prům. odezva",
       "successRate": "Úspěšnost",
       "verifiedStatistics": "Ověřené údaje",
-      "excludedHistory": "{{count}} historických záznamů bez potvrzení o odeslání není započítáno."
+      "excludedHistory": "{{count}} historických záznamů bez potvrzení o odeslání není započítáno.",
+      "averageSpeed": "Průměrná rychlost",
+      "serviceUnavailable": "Služba API není dostupná. Zkuste to znovu.",
+      "tierAdjusted": "Upraveno na standardní",
+      "averageCache": "Průměr zásahů mezipaměti"
     },
     "apiKeyAccount": "Účet API Key",
     "status": "Stav",
@@ -2351,6 +2355,9 @@
       "rule": "Krátkodobý zůstatek <= {{shortCycle}}% nebo týdenní zůstatek <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Oprava relací selhala a obnova zálohy není dokončena. Spuštění bylo zastaveno; před dalším pokusem zkontrolujte protokoly a zálohy.",
+      "sessionCheckTimeout": "Kontrola relací vypršela. Spuštění bylo zastaveno; zkuste to znovu nebo zkontrolujte protokoly.",
+      "sessionFileTooLarge": "Záhlaví souboru relace je příliš velké. Spuštění bylo zastaveno; zkontrolujte protokoly.",
       "bindingFailed": "Nelze potvrdit přiřazení účtu. Spuštění zastaveno. Zkuste účet přepnout znovu.",
       "processScanFailed": "Nelze zkontrolovat předchozí procesy na pozadí. Spuštění zastaveno. Zkuste to znovu.",
       "proxyEntryFailed": "Nakonfigurovaný proxy server nelze spustit. Jiná trasa nebyla použita. Zkuste to znovu."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Tento účet OAuth podporuje pouze přepis. Pro jiné zvukové operace použijte poskytovatele s API Key.",
         "audioUnavailable": "Předávání zvuku není dostupné.",
         "audioUpstreamFailed": "Zvukový požadavek poskytovateli selhal.",
-        "modelNotAvailable": "Model {{model}} není pro tento API Key dostupný."
+        "modelNotAvailable": "Model {{model}} není pro tento API Key dostupný.",
+        "quotaReserved": "Kvóta účtu je rezervována nebo čeká na ověření. Zkuste to za chvíli."
       },
       "testRateLimited": "Služba je dosažitelná, ale upstream je omezen nebo kvóta vyčerpána: {{detail}}.",
       "testHttpFailed": "Služba je dosažitelná, ale požadavek vrátil HTTP {{status}}: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "Zakázat image_generation",
           "message": "Po zapnutí služba API v místní bráně před přeposláním běžných textových konverzací odstraní deklaraci nástroje image_generation, aby se předešlo chybám typu „Image generation is not enabled“. Modely obrázků jako gpt-image se nemažou. Pokračovat?"
-        }
+        },
+        "quotaReserveToggle": "Rezervovat kvótu OAuth",
+        "quotaReserveDesc": "Služba API používá tento účet OAuth jen tehdy, když je zbývající 5hodinová i týdenní kvóta vyšší než rezervovaná hodnota.",
+        "quotaReserveHourlyLabel": "Rezerva 5 hodin",
+        "quotaReserveWeeklyLabel": "Týdenní rezerva",
+        "quotaReserveInvalid": "Zadejte celé číslo od 1 do 100.",
+        "strictReserve": "Přísná ochrana",
+        "strictReserveDesc": "Rezervovanou kvótu automaticky chrání bezpečnostní rezerva. Blízko limitu se povolí jeden požadavek na účet a po dokončení se ověří aktuální kvóta. Využití ostatních klientů není omezeno.",
+        "strictNativeOnly": "Přísná ochrana vyžaduje modul Rust. Před přepnutím na Go ji vypněte.",
+        "safetyMargin": "Bezpečnostní rezerva",
+        "safetyMarginUnit": "procentních bodů",
+        "safetyMarginInvalid": "Zadejte celé číslo od 1 do 20.",
+        "quotaInFlight": "Probíhá: {{count}}",
+        "quotaWaiting": "Čeká na potvrzení kvóty",
+        "quotaStale": "Kvóta není dostupná",
+        "quotaProtected": "Rezervováno",
+        "quotaUpdated": "Aktualizováno: {{time}}"
       },
       "customRoutingEdit": "Upravit vlastní směrování",
       "customRoutingTitle": "Vlastní směrování",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Ve fondu není dostupný účet",
           "poolUnavailableDetail": "Pro model {{model}} nebyl vybrán žádný dostupný účet",
           "poolUnattributedDetail": "Diagnostika jednotlivých účtů nebyla přijata, proto nelze chybu přiřadit konkrétnímu účtu. Zkontrolujte rozsah účtů a nastavení modelů tohoto klíče API.",
-          "poolDiagnosticDetail": "Model {{model}}: kandidátů {{candidate}}, v rozsahu {{scoped}}, dostupných {{available}}, nedostupných {{unavailable}}, vyloučených modelem {{modelExcluded}}, blokovaných zásadou obrázků {{imageBlocked}}",
+          "poolDiagnosticDetail": "Model {{model}}: kandidátů {{candidate}}, v rozsahu {{scoped}}, dostupných {{available}}, nedostupných {{unavailable}}, vyloučených modelem {{modelExcluded}}, rezervovaných kvótou {{quotaReserved}}, blokovaných zásadou obrázků {{imageBlocked}}",
           "poolNoCandidatesDetail": "Pro tento požadavek nejsou žádné kandidátní účty. Zkontrolujte požadovaný model a načítání účtů.",
           "poolScopeMismatchDetail": "Žádný kandidát neodpovídá rozsahu účtů tohoto klíče API nebo nebylo rozpoznáno přiřazení účtu. Zkontrolujte vybrané účty a konfiguraci modelu.",
           "inspectBinding": "Prověřit vazbu",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Tento přiřazený účet není načten v aktuální službě. Zkontrolujte načítání účtů a synchronizaci fondu.",
           "boundAccountNotCandidateDetail": "Tento přiřazený účet je načten, ale není kandidátem pro tento požadavek. Zkontrolujte model, poskytovatele a typ požadavku.",
           "scopeUnknownDetail": "Diagnostika rozsahu neurčuje konkrétní příčinu. Zkontrolujte vazby a protokoly služby.",
-          "poolBlockedDetail": "Filtr v rozsahu: {{unavailable}} nedostupných (např. zakázaných, v čekání nebo s chybou ověření), {{modelExcluded}} vyloučených modelem, {{imageBlocked}} blokovaných pravidly obrázků. Zkontrolujte důvody u účtů a nastavení.",
+          "poolBlockedDetail": "Filtr v rozsahu: {{unavailable}} nedostupných (např. zakázaných, v čekání nebo s chybou ověření), {{modelExcluded}} vyloučených modelem, {{quotaReserved}} blokovaných rezervou kvóty, {{imageBlocked}} blokovaných pravidly obrázků. Zkontrolujte důvody u účtů a nastavení.",
           "poolUnknownDetail": "Diagnostika neurčuje konkrétní příčinu. Zkontrolujte rozsah klíče API, konfiguraci modelu a protokoly služby.",
           "clearHint": "Smazání odstraní pouze tento diagnostický záznam. Neopraví nastavení, tokeny ani kvótu; další neúspěšný požadavek může vytvořit nový záznam.",
           "clearSuccess": "Diagnostický záznam smazán. To neznamená, že je fond účtů opět dostupný.",

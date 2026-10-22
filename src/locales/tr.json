@@ -167,8 +167,8 @@
       "speed": "Çıktı hızı",
       "cache": "Önbellek isabeti",
       "cacheShort": "Önbellek",
-      "speedHint": "Bu görüşmedeki son geçerli API isteklerinin, ilk yanıt bekleme süresi hariç ağırlıklı çıktı hızı. İstekler eşleştirilemiyorsa veya zamanlama verisi yoksa — gösterilir.",
-      "cacheHint": "Son giriş belirteçlerinin önbellekten karşılanan oranı; giriş hacmine göre ağırlıklandırılır.",
+      "speedHint": "Bu sohbetteki geçerli isteklerin ortalama çıktı hızı; ilk yanıt bekleme süresi hariçtir. Ölçüm yoksa — gösterilir.",
+      "cacheHint": "Bu sohbetteki geçerli isteklerin giriş tokenlarıyla ağırlıklandırılmış ortalama önbellek isabet oranı. Üretim durdurulunca korunur; sayaç yoksa — gösterilir.",
       "aggregateHint": "Plan kapasitesine göre ağırlıklandırılmadan kalan kota yüzdelerinin toplamı. Renkler hesap özetiyle aynıdır: ≥%80 yeşil, ≥%40 sarı, ≥%10 turuncu, %10 altında kırmızı. Bilinmeyen değerler kota rengi almaz.",
       "waiting": "Sohbet kullanım kayıtları bekleniyor",
       "refreshFailed": "Kota yenilenemedi. Önceki sonuçlar korundu. Yeniden deneyin.",
@@ -225,7 +225,11 @@
       "avgLatency": "Ort. gecikme",
       "successRate": "Başarı oranı",
       "verifiedStatistics": "Doğrulanmış veri",
-      "excludedHistory": "Gönderim kanıtı olmayan {{count}} geçmiş kayıt hesaba katılmadı."
+      "excludedHistory": "Gönderim kanıtı olmayan {{count}} geçmiş kayıt hesaba katılmadı.",
+      "averageSpeed": "Ortalama çıkış hızı",
+      "serviceUnavailable": "API hizmeti kullanılamıyor. Yeniden deneyin.",
+      "tierAdjusted": "Standart olarak uyarlandı",
+      "averageCache": "Ortalama önbellek isabeti"
     },
     "apiKeyAccount": "API Key hesabı",
     "status": "Durum",
@@ -2351,6 +2355,9 @@
       "rule": "Kısa dönem kalan <= {{shortCycle}}% veya haftalık kalan <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Oturum onarımı başarısız oldu ve yedek geri yükleme tamamlanmadı. Başlatma durduruldu; yeniden denemeden önce günlükleri ve yedekleri inceleyin.",
+      "sessionCheckTimeout": "Oturum denetimi zaman aşımına uğradı. Başlatma durduruldu; yeniden deneyin veya günlükleri inceleyin.",
+      "sessionFileTooLarge": "Oturum dosyasının başlığı çok büyük. Başlatma durduruldu; günlükleri inceleyin.",
       "bindingFailed": "Hesap bağlantısı doğrulanamadı. Başlatma durduruldu; hesap değiştirmeyi yeniden deneyin.",
       "processScanFailed": "Önceki arka plan işlemleri denetlenemedi. Başlatma durduruldu; yeniden deneyin.",
       "proxyEntryFailed": "Yapılandırılan vekil sunucu başlatılamadı. Başka bir rota kullanılmadı; yeniden deneyin."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Bu OAuth hesabı yalnızca ses dökümünü destekler. Diğer ses işlemleri için API Key sağlayıcısı kullanın.",
         "audioUnavailable": "Ses iletimi kullanılamıyor.",
         "audioUpstreamFailed": "Ses sağlayıcısına yapılan istek başarısız oldu.",
-        "modelNotAvailable": "{{model}} modeli bu API Key için kullanılamıyor."
+        "modelNotAvailable": "{{model}} modeli bu API Key için kullanılamıyor.",
+        "quotaReserved": "Hesap kotası ayrılmış veya doğrulanmayı bekliyor. Birazdan tekrar deneyin."
       },
       "testRateLimited": "Hizmete erişiliyor ancak upstream hız sınırında veya kota tükendi: {{detail}}.",
       "testHttpFailed": "Hizmete erişiliyor ancak istek HTTP {{status}} döndürdü: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "image_generation kapat",
           "message": "Açılınca API hizmeti, normal metin sohbetlerini iletmeden önce yerel ağ geçidinde image_generation araç bildirimini kaldırarak \"Image generation is not enabled\" gibi hataları önler. gpt-image ve diğer görsel modeller silinmez. Devam edilsin mi?"
-        }
+        },
+        "quotaReserveToggle": "OAuth kotasını koru",
+        "quotaReserveDesc": "API hizmeti bu OAuth hesabını yalnızca kalan 5 saatlik ve haftalık kotalar koruma değerlerinin üzerindeyken kullanır.",
+        "quotaReserveHourlyLabel": "5 saatlik koruma",
+        "quotaReserveWeeklyLabel": "Haftalık koruma",
+        "quotaReserveInvalid": "1 ile 100 arasında bir tam sayı girin.",
+        "strictReserve": "Sıkı koruma",
+        "strictReserveDesc": "Ayrılan kota, güvenlik payıyla otomatik korunur. Eşiğe yaklaşınca hesap başına tek istek gönderilir ve tamamlandıktan sonra güncel kota doğrulanır. Diğer istemcilerin kullanımı kısıtlanmaz.",
+        "strictNativeOnly": "Sıkı koruma Rust motoru gerektirir. Go motoruna geçmeden önce kapatın.",
+        "safetyMargin": "Güvenlik payı",
+        "safetyMarginUnit": "yüzde puan",
+        "safetyMarginInvalid": "1 ile 20 arasında bir tam sayı girin.",
+        "quotaInFlight": "Süren: {{count}}",
+        "quotaWaiting": "Kota onayı bekleniyor",
+        "quotaStale": "Kota henüz güncel değil",
+        "quotaProtected": "Ayrıldı",
+        "quotaUpdated": "Güncellendi: {{time}}"
       },
       "customRoutingEdit": "Özel yönlendirmeyi düzenle",
       "customRoutingTitle": "Özel yönlendirme",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Havuzda kullanılabilir hesap yok",
           "poolUnavailableDetail": "{{model}} modeli için kullanılabilir hesap seçilemedi",
           "poolUnattributedDetail": "Hesap bazında tanılama alınmadığından bu hata belirli bir hesaba bağlanamaz. Bu API anahtarının hesap kapsamını ve model yapılandırmasını kontrol edin.",
-          "poolDiagnosticDetail": "Model {{model}}: {{candidate}} aday, kapsamda {{scoped}}, kullanılabilir {{available}}, kullanılamaz {{unavailable}}, modelce dışlanan {{modelExcluded}}, görsel ilkesiyle engellenen {{imageBlocked}}",
+          "poolDiagnosticDetail": "Model {{model}}: {{candidate}} aday, kapsamda {{scoped}}, kullanılabilir {{available}}, kullanılamaz {{unavailable}}, modelce dışlanan {{modelExcluded}}, kota rezervli {{quotaReserved}}, görsel ilkesiyle engellenen {{imageBlocked}}",
           "poolNoCandidatesDetail": "Bu istek için aday hesap yok. İstenen modeli ve hesap yükleme durumunu kontrol edin.",
           "poolScopeMismatchDetail": "Hiçbir aday bu API anahtarının hesap kapsamıyla eşleşmiyor veya hesap eşlemesi tanınmıyor. Seçilen hesapları ve model ayarlarını kontrol edin.",
           "inspectBinding": "Bağı denetle",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Bu bağlı hesap mevcut hizmete yüklenmemiş. Hesap yüklemesini ve havuz eşitlemesini denetleyin.",
           "boundAccountNotCandidateDetail": "Bu bağlı hesap yüklenmiş ancak bu isteğin adayları arasında değil. İstenen modeli, sağlayıcıyı ve istek türünü denetleyin.",
           "scopeUnknownDetail": "Kapsam tanısı belirli bir nedeni saptamıyor. Bağları ve hizmet günlüklerini denetleyin.",
-          "poolBlockedDetail": "Kapsam içi filtre: {{unavailable}} kullanılamıyor (ör. devre dışı, beklemede veya kimlik doğrulaması başarısız), {{modelExcluded}} model nedeniyle dışlandı, {{imageBlocked}} görsel ilkesiyle engellendi. Hesap nedenlerini ve ayarları kontrol edin.",
+          "poolBlockedDetail": "Kapsam içi filtre: {{unavailable}} kullanılamıyor (ör. devre dışı, beklemede veya kimlik doğrulaması başarısız), {{modelExcluded}} model nedeniyle dışlandı, {{quotaReserved}} kota rezerviyle engellendi, {{imageBlocked}} görsel ilkesiyle engellendi. Hesap nedenlerini ve ayarları kontrol edin.",
           "poolUnknownDetail": "Mevcut tanılama belirli bir neden göstermiyor. API anahtarı kapsamını, model ayarlarını ve hizmet günlüklerini kontrol edin.",
           "clearHint": "Silme yalnızca bu tanılama kaydını kaldırır. Ayarları, belirteçleri veya kotayı düzeltmez; sonraki başarısız istek yeni bir kayıt oluşturabilir.",
           "clearSuccess": "Tanılama kaydı silindi. Bu, hesap havuzunun yeniden kullanılabilir olduğu anlamına gelmez.",

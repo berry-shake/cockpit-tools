@@ -167,8 +167,8 @@
       "speed": "Szybkość wyjścia",
       "cache": "Trafienia pamięci podr.",
       "cacheShort": "Pamięć podr.",
-      "speedHint": "Ważona szybkość wyjścia ostatnich prawidłowych żądań API w tej rozmowie, bez oczekiwania na pierwszą odpowiedź. Gdy nie można przypisać żądań lub brakuje danych czasowych, wyświetla się —.",
-      "cacheHint": "Udział ostatnich tokenów wejściowych obsłużonych z pamięci podręcznej, ważony wielkością wejścia.",
+      "speedHint": "Średnia szybkość wyjścia prawidłowych żądań w tym czacie, bez oczekiwania na pierwszą odpowiedź. Brak pomiarów: —.",
+      "cacheHint": "Średni współczynnik trafień w pamięć podręczną prawidłowych żądań w tym czacie, ważony tokenami wejściowymi. Zachowany po zatrzymaniu generowania; brak liczników: —.",
       "aggregateHint": "Suma pozostałych procentów bez ważenia pojemnością planu. Kolory jak w przeglądzie kont: ≥80% zielony, ≥40% żółty, ≥10% pomarańczowy, poniżej 10% czerwony. Nieznane wartości nie mają koloru limitu.",
       "waiting": "Oczekiwanie na dane użycia czatu",
       "refreshFailed": "Nie udało się odświeżyć limitu. Zachowano poprzednie wyniki. Spróbuj ponownie.",
@@ -225,7 +225,11 @@
       "avgLatency": "Śr. opóźnienie",
       "successRate": "Skuteczność",
       "verifiedStatistics": "Potwierdzone dane",
-      "excludedHistory": "Pominięto historyczne wpisy bez potwierdzenia wysłania: {{count}}."
+      "excludedHistory": "Pominięto historyczne wpisy bez potwierdzenia wysłania: {{count}}.",
+      "averageSpeed": "Średnia prędkość",
+      "serviceUnavailable": "Usługa API jest niedostępna. Spróbuj ponownie.",
+      "tierAdjusted": "Zmieniono na standardowy",
+      "averageCache": "Średni udział pamięci"
     },
     "apiKeyAccount": "Konto API Key",
     "status": "Stan",
@@ -2351,6 +2355,9 @@
       "rule": "Pozostało krótkookresowo <= {{shortCycle}}% lub tygodniowo <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Naprawa sesji nie powiodła się, a przywracanie kopii jest niepełne. Uruchamianie zatrzymane; przed ponowną próbą sprawdź dzienniki i kopie zapasowe.",
+      "sessionCheckTimeout": "Przekroczono czas sprawdzania sesji. Uruchamianie zatrzymane; spróbuj ponownie lub sprawdź dzienniki.",
+      "sessionFileTooLarge": "Nagłówek pliku sesji jest zbyt duży. Uruchamianie zatrzymane; sprawdź dzienniki.",
       "bindingFailed": "Nie można potwierdzić powiązania konta. Uruchamianie zatrzymano. Spróbuj ponownie przełączyć konto.",
       "processScanFailed": "Nie można sprawdzić poprzednich procesów w tle. Uruchamianie zatrzymano. Spróbuj ponownie.",
       "proxyEntryFailed": "Nie można uruchomić skonfigurowanego proxy. Nie użyto innej trasy. Spróbuj ponownie."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "To konto OAuth obsługuje tylko transkrypcję. Do innych operacji audio użyj dostawcy z API Key.",
         "audioUnavailable": "Przekazywanie audio jest niedostępne.",
         "audioUpstreamFailed": "Żądanie audio do dostawcy nie powiodło się.",
-        "modelNotAvailable": "Model {{model}} nie jest dostępny dla tego API Key."
+        "modelNotAvailable": "Model {{model}} nie jest dostępny dla tego API Key.",
+        "quotaReserved": "Limit konta jest zarezerwowany lub czeka na potwierdzenie. Spróbuj za chwilę."
       },
       "testRateLimited": "Usługa jest osiągalna, ale upstream jest ograniczony lub limit został wyczerpany: {{detail}}.",
       "testHttpFailed": "Usługa jest osiągalna, ale żądanie zwróciło HTTP {{status}}: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "Wyłącz image_generation",
           "message": "Po włączeniu usługa API usunie deklarację narzędzia image_generation w lokalnej bramie przed przekazaniem zwykłych czatów tekstowych, aby uniknąć błędów typu „Image generation is not enabled”. gpt-image i inne modele obrazów nie są usuwane. Kontynuować?"
-        }
+        },
+        "quotaReserveToggle": "Zachowaj limit OAuth",
+        "quotaReserveDesc": "Usługa API używa tego konta OAuth tylko wtedy, gdy pozostałe limity 5-godzinny i tygodniowy są wyższe od wartości rezerwy.",
+        "quotaReserveHourlyLabel": "Rezerwa 5 godz.",
+        "quotaReserveWeeklyLabel": "Rezerwa tygodniowa",
+        "quotaReserveInvalid": "Wpisz liczbę całkowitą od 1 do 100.",
+        "strictReserve": "Ścisła ochrona",
+        "strictReserveDesc": "Rezerwę limitu automatycznie chroni margines bezpieczeństwa. Blisko progu dozwolone jest jedno żądanie na konto, po którym potwierdzany jest aktualny limit. Użycie innych klientów nie jest ograniczane.",
+        "strictNativeOnly": "Ścisła ochrona wymaga silnika Rust. Wyłącz ją przed przejściem na Go.",
+        "safetyMargin": "Margines zapasu",
+        "safetyMarginUnit": "punktów procentowych",
+        "safetyMarginInvalid": "Wpisz liczbę całkowitą od 1 do 20.",
+        "quotaInFlight": "W toku: {{count}}",
+        "quotaWaiting": "Oczekiwanie na potwierdzenie limitu",
+        "quotaStale": "Limit niedostępny",
+        "quotaProtected": "Zarezerwowano",
+        "quotaUpdated": "Aktualizacja: {{time}}"
       },
       "customRoutingEdit": "Edytuj niestandardowe routowanie",
       "customRoutingTitle": "Niestandardowe routowanie",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Brak dostępnego konta w puli",
           "poolUnavailableDetail": "Nie wybrano dostępnego konta dla modelu {{model}}",
           "poolUnattributedDetail": "Nie otrzymano diagnostyki poszczególnych kont, więc nie można przypisać tego błędu do konkretnego konta. Sprawdź zakres kont i konfigurację modeli tego klucza API.",
-          "poolDiagnosticDetail": "Model {{model}}: kandydaci {{candidate}}, w zakresie {{scoped}}, dostępne {{available}}, niedostępne {{unavailable}}, wykluczone przez model {{modelExcluded}}, zablokowane przez zasady obrazów {{imageBlocked}}",
+          "poolDiagnosticDetail": "Model {{model}}: kandydaci {{candidate}}, w zakresie {{scoped}}, dostępne {{available}}, niedostępne {{unavailable}}, wykluczone przez model {{modelExcluded}}, zarezerwowane przez limit {{quotaReserved}}, zablokowane przez zasady obrazów {{imageBlocked}}",
           "poolNoCandidatesDetail": "Brak kont kandydatów dla tego żądania. Sprawdź żądany model i stan ładowania kont.",
           "poolScopeMismatchDetail": "Żaden kandydat nie pasuje do zakresu kont tego klucza API lub nie rozpoznano powiązania konta. Sprawdź wybrane konta i konfigurację modelu.",
           "inspectBinding": "Sprawdź powiąz.",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "To przypisane konto nie jest wczytane w obecnej usłudze. Sprawdź wczytywanie kont i synchronizację puli.",
           "boundAccountNotCandidateDetail": "To przypisane konto jest wczytane, ale nie jest kandydatem dla tego żądania. Sprawdź model, dostawcę i typ żądania.",
           "scopeUnknownDetail": "Diagnostyka zakresu nie wskazuje konkretnej przyczyny. Sprawdź powiązania i dzienniki usługi.",
-          "poolBlockedDetail": "Filtr w zakresie: {{unavailable}} niedostępnych (np. wyłączonych, oczekujących lub z błędem uwierzytelniania), {{modelExcluded}} wykluczonych przez model, {{imageBlocked}} zablokowanych zasadami obrazów. Sprawdź powody dla kont i ustawienia.",
+          "poolBlockedDetail": "Filtr w zakresie: {{unavailable}} niedostępnych (np. wyłączonych, oczekujących lub z błędem uwierzytelniania), {{modelExcluded}} wykluczonych przez model, {{quotaReserved}} zablokowanych rezerwą limitu, {{imageBlocked}} zablokowanych zasadami obrazów. Sprawdź powody dla kont i ustawienia.",
           "poolUnknownDetail": "Diagnostyka nie wskazuje konkretnej przyczyny. Sprawdź zakres klucza API, konfigurację modelu i dzienniki usługi.",
           "clearHint": "Usunięcie dotyczy tylko tego wpisu diagnostycznego. Nie naprawia ustawień, tokenów ani limitów; kolejne nieudane żądanie może utworzyć nowy wpis.",
           "clearSuccess": "Wpis diagnostyczny usunięty. Nie oznacza to przywrócenia dostępności puli kont.",

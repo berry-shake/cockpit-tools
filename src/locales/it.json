@@ -167,8 +167,8 @@
       "speed": "Velocità di uscita",
       "cache": "Riscontri cache",
       "cacheShort": "In cache",
-      "speedHint": "Velocità di uscita ponderata delle richieste API valide recenti di questa conversazione, esclusa l’attesa della prima risposta. Mostra — se le richieste non sono associabili o mancano i dati temporali.",
-      "cacheHint": "Quota dei token di ingresso recenti serviti dalla cache, ponderata per il volume di ingresso.",
+      "speedHint": "Velocità media di output delle richieste valide in questa chat, esclusa l’attesa della prima risposta. Misure mancanti: —.",
+      "cacheHint": "Percentuale media di accessi alla cache delle richieste valide in questa chat, ponderata per i token di input. Conservata dopo l’arresto della generazione; contatori mancanti: —.",
       "aggregateHint": "Somma delle percentuali rimanenti, senza ponderazione per capacità del piano. Colori come nella panoramica degli account: ≥80% verde, ≥40% giallo, ≥10% arancione, meno del 10% rosso. Nessun colore di quota per i valori sconosciuti.",
       "waiting": "In attesa dei dati di utilizzo della chat",
       "refreshFailed": "Aggiornamento della quota non riuscito. I risultati precedenti sono conservati. Riprova.",
@@ -225,7 +225,11 @@
       "avgLatency": "Latenza media",
       "successRate": "Tasso di riuscita",
       "verifiedStatistics": "Dati verificati",
-      "excludedHistory": "{{count}} voci storiche senza prova di invio sono escluse dal conteggio."
+      "excludedHistory": "{{count}} voci storiche senza prova di invio sono escluse dal conteggio.",
+      "averageSpeed": "Velocità media",
+      "serviceUnavailable": "Servizio API non disponibile. Riprova.",
+      "tierAdjusted": "Adattato a standard",
+      "averageCache": "Cache media"
     },
     "apiKeyAccount": "Account con chiave API",
     "status": "Stato",
@@ -2351,6 +2355,9 @@
       "rule": "Residuo breve <= {{shortCycle}}% o settimanale <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Riparazione delle sessioni non riuscita e ripristino incompleto. Avvio interrotto; controlla registri e backup prima di riprovare.",
+      "sessionCheckTimeout": "Tempo scaduto per il controllo delle sessioni. Avvio interrotto; riprova o controlla i registri.",
+      "sessionFileTooLarge": "L’intestazione di un file di sessione è troppo grande. Avvio interrotto; controlla i registri.",
       "bindingFailed": "Impossibile confermare l’account associato. Avvio interrotto; riprova a cambiare account.",
       "processScanFailed": "Impossibile verificare i processi precedenti in background. Avvio interrotto; riprova.",
       "proxyEntryFailed": "Impossibile avviare il proxy configurato. Nessun percorso alternativo utilizzato; riprova."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Questo account OAuth supporta solo la trascrizione. Usa un fornitore con API Key per le altre operazioni audio.",
         "audioUnavailable": "L’inoltro audio non è disponibile.",
         "audioUpstreamFailed": "La richiesta audio al fornitore non è riuscita.",
-        "modelNotAvailable": "Il modello {{model}} non è disponibile per questa API Key."
+        "modelNotAvailable": "Il modello {{model}} non è disponibile per questa API Key.",
+        "quotaReserved": "La quota è riservata o in attesa di conferma. Riprova tra poco."
       },
       "testRateLimited": "Il servizio è raggiungibile, ma l’upstream è limitato o la quota è esaurita: {{detail}}.",
       "testHttpFailed": "Il servizio è raggiungibile, ma la richiesta ha restituito HTTP {{status}}: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "Disattiva image_generation",
           "message": "Se attivo, il servizio API rimuoverà nel gateway locale la dichiarazione dello strumento image_generation prima di inoltrare le chat di testo, evitando errori come \"Image generation is not enabled\". gpt-image e altri modelli immagine non vengono rimossi. Continuare?"
-        }
+        },
+        "quotaReserveToggle": "Riserva quota OAuth",
+        "quotaReserveDesc": "Il servizio API usa questo account OAuth solo finché le quote residue di 5 ore e settimanale sono superiori ai valori riservati.",
+        "quotaReserveHourlyLabel": "Riserva 5 ore",
+        "quotaReserveWeeklyLabel": "Riserva settimanale",
+        "quotaReserveInvalid": "Inserisci un numero intero da 1 a 100.",
+        "strictReserve": "Protezione rigorosa",
+        "strictReserveDesc": "La quota riservata è protetta automaticamente con un margine di sicurezza. Vicino alla soglia è consentita una richiesta per account, poi si conferma la quota aggiornata. L’uso degli altri client non è limitato.",
+        "strictNativeOnly": "La protezione rigorosa richiede il motore Rust. Disattivala prima di passare a Go.",
+        "safetyMargin": "Margine di sicurezza",
+        "safetyMarginUnit": "punti percentuali",
+        "safetyMarginInvalid": "Inserisci un intero da 1 a 20.",
+        "quotaInFlight": "In corso: {{count}}",
+        "quotaWaiting": "In attesa di conferma quota",
+        "quotaStale": "Quota non disponibile",
+        "quotaProtected": "Riservato",
+        "quotaUpdated": "Aggiornato: {{time}}"
       },
       "customRoutingEdit": "Modifica routing personalizzato",
       "customRoutingTitle": "Routing personalizzato",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Nessun account disponibile nel pool",
           "poolUnavailableDetail": "Non è stato selezionato un account disponibile per il modello {{model}}",
           "poolUnattributedDetail": "Non sono stati ricevuti dati diagnostici per account, quindi non è possibile attribuire questo errore a un account. Verifica gli account inclusi e la configurazione dei modelli di questa chiave API.",
-          "poolDiagnosticDetail": "Modello {{model}}: {{candidate}} candidati, {{scoped}} nell’ambito, {{available}} disponibili, {{unavailable}} non disponibili, {{modelExcluded}} esclusi dal modello, {{imageBlocked}} bloccati dalla policy immagini",
+          "poolDiagnosticDetail": "Modello {{model}}: {{candidate}} candidati, {{scoped}} nell’ambito, {{available}} disponibili, {{unavailable}} non disponibili, {{modelExcluded}} esclusi dal modello, {{quotaReserved}} riservati dalla quota, {{imageBlocked}} bloccati dalla policy immagini",
           "poolNoCandidatesDetail": "Nessun account candidato per questa richiesta. Controlla il modello richiesto e il caricamento degli account.",
           "poolScopeMismatchDetail": "Nessun candidato rientra nell’ambito di questa chiave API, oppure l’associazione all’account non è riconosciuta. Controlla gli account selezionati e la configurazione del modello.",
           "inspectBinding": "Verifica legame",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Questo account associato non è caricato nel servizio attuale. Verifica il caricamento degli account e la sincronizzazione del pool.",
           "boundAccountNotCandidateDetail": "Questo account associato è caricato, ma non è candidato per questa richiesta. Verifica il modello, il fornitore e il tipo di richiesta.",
           "scopeUnknownDetail": "La diagnosi dell’ambito non indica una causa precisa. Verifica le associazioni e i log del servizio.",
-          "poolBlockedDetail": "Filtro nell’ambito: {{unavailable}} non disponibili (ad esempio disabilitati, in attesa o con autenticazione fallita), {{modelExcluded}} esclusi per modello, {{imageBlocked}} bloccati dalle regole immagini. Controlla i motivi per account e le impostazioni.",
+          "poolBlockedDetail": "Filtro nell’ambito: {{unavailable}} non disponibili (ad esempio disabilitati, in attesa o con autenticazione fallita), {{modelExcluded}} esclusi per modello, {{quotaReserved}} bloccati dalla riserva di quota, {{imageBlocked}} bloccati dalle regole immagini. Controlla i motivi per account e le impostazioni.",
           "poolUnknownDetail": "La diagnosi non individua una causa precisa. Controlla l’ambito della chiave API, la configurazione del modello e i registri del servizio.",
           "clearHint": "La cancellazione rimuove solo questa diagnosi. Non ripara impostazioni, token o quote; un’altra richiesta fallita può creare un nuovo record.",
           "clearSuccess": "Diagnosi cancellata. Ciò non significa che il pool di account sia tornato disponibile.",

@@ -167,8 +167,8 @@
       "speed": "Output speed",
       "cache": "Cache hit rate",
       "cacheShort": "Cache",
-      "speedHint": "Weighted output speed of recent valid API requests in this conversation, excluding time to first response. Shows — when requests cannot be linked or timing is unavailable.",
-      "cacheHint": "Share of recent input tokens served from cache, weighted by input volume.",
+      "speedHint": "Average output speed of valid requests in this chat, excluding first-response wait. Missing measurements show —.",
+      "cacheHint": "Cache hit rate of valid requests in this chat, weighted by input tokens. Kept after generation stops; missing counters show —.",
       "aggregateHint": "Sum of account window percentages, without plan-capacity weighting. Colors follow account overview: ≥80% green, ≥40% yellow, ≥10% orange, below 10% red. Unknown values have no quota color.",
       "waiting": "Waiting for chat usage records",
       "refreshFailed": "Quota refresh failed. Previous results are retained. Try again.",
@@ -225,7 +225,11 @@
       "avgLatency": "Avg. latency",
       "successRate": "Success rate",
       "verifiedStatistics": "Verified stats",
-      "excludedHistory": "{{count}} historical records lack dispatch evidence and are excluded."
+      "excludedHistory": "{{count}} historical records lack dispatch evidence and are excluded.",
+      "averageSpeed": "Average output speed",
+      "serviceUnavailable": "API service unavailable. Please retry.",
+      "tierAdjusted": "Adjusted to Standard",
+      "averageCache": "Average cache hits"
     },
     "apiKeyAccount": "API Key account",
     "status": "Status",
@@ -2571,6 +2575,9 @@
       "rule": "Short-cycle remaining <= {{shortCycle}}% or weekly remaining <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Session repair failed and backup restoration is incomplete. Launch stopped; inspect the logs and backups before retrying.",
+      "sessionCheckTimeout": "Session checks timed out. Launch stopped; retry or inspect the logs.",
+      "sessionFileTooLarge": "A session file header is too large. Launch stopped; inspect the logs.",
       "bindingFailed": "Account binding could not be confirmed. Launch stopped; retry switching accounts.",
       "processScanFailed": "Could not inspect the old background processes. Launch stopped; retry.",
       "proxyEntryFailed": "The configured proxy entry could not start. No alternative route was used; retry."
@@ -3132,7 +3139,8 @@
         "audioNotSupported": "This OAuth account supports transcription only. Use an API Key provider for other audio operations.",
         "audioUnavailable": "Audio forwarding is unavailable.",
         "audioUpstreamFailed": "The audio upstream request failed.",
-        "modelNotAvailable": "Model {{model}} is not available for this API key."
+        "modelNotAvailable": "Model {{model}} is not available for this API key.",
+        "quotaReserved": "Account quota is reserved or awaiting confirmation. Retry shortly."
       },
       "testRateLimited": "Service is reachable, but upstream is rate limited or quota is exhausted: {{detail}}.",
       "testHttpFailed": "Service is reachable, but the request returned HTTP {{status}}: {{detail}}.",
@@ -3238,7 +3246,7 @@
           "poolUnavailable": "No available pool account",
           "poolUnavailableDetail": "No available account was selected for model {{model}}",
           "poolUnattributedDetail": "No per-account diagnostics were received, so this failure cannot be attributed to an account. Check this API key’s account scope and model configuration.",
-          "poolDiagnosticDetail": "Model {{model}}: {{candidate}} candidates, {{scoped}} in scope, {{available}} available, {{unavailable}} unavailable, {{modelExcluded}} model-excluded, {{imageBlocked}} image-policy blocked",
+          "poolDiagnosticDetail": "Model {{model}}: {{candidate}} candidates, {{scoped}} in scope, {{available}} available, {{unavailable}} unavailable, {{modelExcluded}} model-excluded, {{quotaReserved}} quota-reserved, {{imageBlocked}} image-policy blocked",
           "poolNoCandidatesDetail": "There are no candidate accounts for this request. Check the requested model and account loading status.",
           "poolScopeMismatchDetail": "No candidate matched this API key’s account scope, or its account mapping could not be recognized. Check the selected accounts and model configuration.",
           "inspectBinding": "Check binding",
@@ -3250,7 +3258,7 @@
           "boundAccountNotLoadedDetail": "This bound account is not loaded in the current service. Check account loading and pool synchronization.",
           "boundAccountNotCandidateDetail": "This bound account was loaded but is not a candidate for this request. Check the requested model, provider and request type.",
           "scopeUnknownDetail": "The scope diagnostic does not identify a specific cause. Check binding and service logs.",
-          "poolBlockedDetail": "In-scope filtering: {{unavailable}} unavailable (such as disabled, cooling down or authentication failure), {{modelExcluded}} model-excluded, {{imageBlocked}} image-policy blocked. Check member reasons and the corresponding settings.",
+          "poolBlockedDetail": "In-scope filtering: {{unavailable}} unavailable (such as disabled, cooling down or authentication failure), {{modelExcluded}} model-excluded, {{quotaReserved}} quota-reserved, {{imageBlocked}} image-policy blocked. Check member reasons and the corresponding settings.",
           "poolUnknownDetail": "The current diagnostics do not identify a specific cause. Check this API key’s account scope, model configuration and service logs.",
           "clearHint": "Clearing removes only this diagnostic record. It does not repair settings, tokens or quota; another failed request can create a new record.",
           "clearSuccess": "Diagnostic record cleared. This does not mean the account pool has recovered.",
@@ -3357,7 +3365,23 @@
         "imageGenerationConfirm": {
           "title": "Disable image_generation",
           "message": "When enabled, the API service removes the image_generation tool declaration in the local gateway before forwarding normal text chats, avoiding provider errors such as \"Image generation is not enabled\". gpt-image and other image models are not removed. Continue?"
-        }
+        },
+        "quotaReserveToggle": "Reserve OAuth quota",
+        "quotaReserveDesc": "The API service uses this OAuth account only while both the 5-hour and weekly remaining quotas are above the reserved values.",
+        "quotaReserveHourlyLabel": "5-hour reserve",
+        "quotaReserveWeeklyLabel": "Weekly reserve",
+        "quotaReserveInvalid": "Enter an integer from 1 to 100.",
+        "strictReserve": "Strict protection",
+        "strictReserveDesc": "Quota reserves are protected automatically with a safety margin. Near the reserve, each account allows one request and confirms fresh quota after completion. Other clients’ usage is outside this protection.",
+        "strictNativeOnly": "Strict protection requires the Rust engine. Turn it off before switching to Go.",
+        "safetyMargin": "Safety margin",
+        "safetyMarginUnit": "percentage points",
+        "safetyMarginInvalid": "Enter an integer from 1 to 20.",
+        "quotaInFlight": "In flight: {{count}}",
+        "quotaWaiting": "Awaiting quota confirmation",
+        "quotaStale": "Quota unavailable",
+        "quotaProtected": "Reserved",
+        "quotaUpdated": "Updated {{time}}"
       },
       "customRoutingEdit": "Edit Custom Routing",
       "customRoutingTitle": "Custom Routing",

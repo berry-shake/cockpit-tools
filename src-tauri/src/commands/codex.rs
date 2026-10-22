@@ -8,7 +8,7 @@ use crate::models::codex_local_access::{
     CodexLocalAccessChatMessage, CodexLocalAccessChatResult, CodexLocalAccessClientBaseUrlHost,
     CodexLocalAccessCustomRoutingRule, CodexLocalAccessGatewayMode,
     CodexLocalAccessImageGenerationPolicy, CodexLocalAccessModelAlias,
-    CodexLocalAccessModelPricing, CodexLocalAccessPortCleanupResult,
+    CodexLocalAccessModelPricing, CodexLocalAccessPortCleanupResult, CodexLocalAccessQuotaReserve,
     CodexLocalAccessRequestKind, CodexLocalAccessRoutingStrategy, CodexLocalAccessScope,
     CodexLocalAccessState, CodexLocalAccessTestFailure, CodexLocalAccessTestResult,
     CodexLocalAccessTimeoutPreset, CodexLocalAccessTimeouts, CodexLocalAccessUsageEventPage,

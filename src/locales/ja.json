@@ -167,8 +167,8 @@
       "speed": "出力速度",
       "cache": "キャッシュヒット率",
       "cacheShort": "キャッシュ",
-      "speedHint": "現在の会話に紐づく直近の有効な API リクエストの加重出力速度です。最初の応答までの待ち時間は含みません。紐づけできない場合や計測時間がない場合は — を表示します。",
-      "cacheHint": "直近の入力 Token に占めるキャッシュヒットの割合を、入力量で加重して計算します。",
+      "speedHint": "このチャットの有効なリクエストの平均出力速度です。初回応答の待ち時間は含みません。測定値がない場合は — を表示します。",
+      "cacheHint": "このチャットの有効なリクエストを入力トークン数で重み付けした平均キャッシュヒット率です。生成停止後も保持し、カウントがない場合は — を表示します。",
       "aggregateHint": "各アカウントの残り枠の割合を合計し、プラン容量では加重しません。アカウント一覧と同じ色分けです：80%以上は緑、40%以上は黄、10%以上は橙、10%未満は赤。不明な値は色分けしません。",
       "waiting": "会話の使用量記録を待機中",
       "refreshFailed": "クォータの更新に失敗しました。前回の結果を保持しています。再試行してください。",
@@ -225,7 +225,11 @@
       "avgLatency": "平均遅延",
       "successRate": "成功率",
       "verifiedStatistics": "確認済み統計",
-      "excludedHistory": "送信の根拠が確認できない過去の記録 {{count}} 件は集計対象外です。"
+      "excludedHistory": "送信の根拠が確認できない過去の記録 {{count}} 件は集計対象外です。",
+      "averageSpeed": "平均出力速度",
+      "serviceUnavailable": "API サービスを利用できません。再試行してください。",
+      "tierAdjusted": "標準に調整済み",
+      "averageCache": "平均キャッシュヒット率"
     },
     "apiKeyAccount": "API Key アカウント",
     "status": "状態",
@@ -2351,6 +2355,9 @@
       "rule": "短期残量 <= {{shortCycle}}% または週次残量 <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "セッションの修復に失敗し、バックアップの復元が完了していません。起動を停止しました。再試行する前にログとバックアップを確認してください。",
+      "sessionCheckTimeout": "セッションの確認がタイムアウトしました。起動を停止しました。再試行するか、ログを確認してください。",
+      "sessionFileTooLarge": "セッションファイルの先頭行が大きすぎます。起動を停止しました。ログを確認してください。",
       "bindingFailed": "アカウントの関連付けを確認できません。起動を中止しました。切り替えを再試行してください。",
       "processScanFailed": "既存のバックグラウンドプロセスを確認できません。起動を中止しました。再試行してください。",
       "proxyEntryFailed": "設定されたプロキシを起動できません。別の経路は使用していません。再試行してください。"
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "この OAuth アカウントは文字起こしのみ対応しています。他の音声操作には API Key プロバイダーを使用してください。",
         "audioUnavailable": "音声の転送を利用できません。",
         "audioUpstreamFailed": "音声の上流リクエストに失敗しました。",
-        "modelNotAvailable": "モデル {{model}} はこの API Key では利用できません。"
+        "modelNotAvailable": "モデル {{model}} はこの API Key では利用できません。",
+        "quotaReserved": "アカウントの利用枠は予約済みか確認中です。少し待って再試行してください。"
       },
       "testRateLimited": "サービスには到達しましたが、上流でレート制限またはクォータ不足です: {{detail}}。",
       "testHttpFailed": "サービスには到達しましたが、リクエストは HTTP {{status}} を返しました: {{detail}}。",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "image_generation を無効化",
           "message": "有効にすると、API サービスは通常のテキスト対話を転送する前にローカルゲートウェイで image_generation ツール宣言を除外し、「Image generation is not enabled」などのエラーを避けます。gpt-image などの画像モデルは削除しません。続行しますか？"
-        }
+        },
+        "quotaReserveToggle": "OAuth クォータを確保",
+        "quotaReserveDesc": "API サービスは、5 時間と週間の残りクォータがどちらも確保値を上回る場合にのみ、この OAuth アカウントを使用します。",
+        "quotaReserveHourlyLabel": "5 時間確保",
+        "quotaReserveWeeklyLabel": "週間確保",
+        "quotaReserveInvalid": "1 から 100 の整数を入力してください。",
+        "strictReserve": "厳格な保護",
+        "strictReserveDesc": "予約枠を設定すると、安全マージンによる保護が自動で有効になります。しきい値付近ではアカウントごとに1件ずつ送信し、完了後に最新の残量を確認します。他のクライアントの使用量は制限しません。",
+        "strictNativeOnly": "厳格な保護には Rust エンジンが必要です。Go に切り替える前に無効にしてください。",
+        "safetyMargin": "安全余裕",
+        "safetyMarginUnit": "ポイント",
+        "safetyMarginInvalid": "1〜20の整数を入力してください。",
+        "quotaInFlight": "処理中: {{count}}",
+        "quotaWaiting": "残量の確認待ち",
+        "quotaStale": "残量の更新待ち",
+        "quotaProtected": "保留中",
+        "quotaUpdated": "更新: {{time}}"
       },
       "customRoutingEdit": "カスタムルーティングを編集",
       "customRoutingTitle": "カスタムルーティング",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "プールに利用可能なアカウントがありません",
           "poolUnavailableDetail": "モデル {{model}} に利用可能なアカウントを選択できませんでした",
           "poolUnattributedDetail": "アカウント別の診断情報がないため、このエラーを特定のアカウントに関連付けることはできません。この API キーの対象アカウントとモデル設定を確認してください。",
-          "poolDiagnosticDetail": "モデル {{model}}：候補 {{candidate}}、範囲内 {{scoped}}、利用可能 {{available}}、利用不可 {{unavailable}}、モデル除外 {{modelExcluded}}、画像ポリシー除外 {{imageBlocked}}",
+          "poolDiagnosticDetail": "モデル {{model}}：候補 {{candidate}}、範囲内 {{scoped}}、利用可能 {{available}}、利用不可 {{unavailable}}、モデル除外 {{modelExcluded}}、クォータ予約 {{quotaReserved}}、画像ポリシー除外 {{imageBlocked}}",
           "poolNoCandidatesDetail": "このリクエストに候補アカウントがありません。要求モデルとアカウントの読み込み状況を確認してください。",
           "poolScopeMismatchDetail": "候補がこの API キーのアカウント範囲に一致しないか、アカウントの対応関係を認識できません。選択したアカウントとモデル設定を確認してください。",
           "inspectBinding": "紐付け確認",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "この紐付けアカウントは現在のサービスに読み込まれていません。読み込みとプールの同期を確認してください。",
           "boundAccountNotCandidateDetail": "この紐付けアカウントは読み込み済みですが、今回のリクエストの候補に含まれていません。モデル、プロバイダー、リクエスト種別を確認してください。",
           "scopeUnknownDetail": "範囲の診断だけでは原因を特定できません。紐付けとサービスログを確認してください。",
-          "poolBlockedDetail": "範囲内の選別結果：利用不可 {{unavailable}}（無効化、待機中、認証失敗など）、モデル除外 {{modelExcluded}}、画像ポリシーによる制限 {{imageBlocked}}。各アカウントの理由と設定を確認してください。",
+          "poolBlockedDetail": "範囲内の選別結果：利用不可 {{unavailable}}（無効化、待機中、認証失敗など）、モデル除外 {{modelExcluded}}、クォータ予約による制限 {{quotaReserved}}、画像ポリシーによる制限 {{imageBlocked}}。各アカウントの理由と設定を確認してください。",
           "poolUnknownDetail": "現在の診断では具体的な原因を特定できません。API キーのアカウント範囲、モデル設定、サービスログを確認してください。",
           "clearHint": "消去するのはこの診断記録だけです。設定、トークン、クォータは修復されず、リクエストが再び失敗すると新しい記録が作成されます。",
           "clearSuccess": "診断記録を消去しました。アカウントプールが復旧したことを意味するものではありません。",

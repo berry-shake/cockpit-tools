@@ -167,8 +167,8 @@
       "speed": "Tốc độ đầu ra",
       "cache": "Tỷ lệ trúng bộ nhớ đệm",
       "cacheShort": "Bộ nhớ đệm",
-      "speedHint": "Tốc độ đầu ra có trọng số của các yêu cầu API hợp lệ gần đây trong cuộc trò chuyện này, không tính thời gian chờ phản hồi đầu tiên. Hiển thị — khi không thể liên kết yêu cầu hoặc thiếu dữ liệu thời gian.",
-      "cacheHint": "Tỷ lệ token đầu vào gần đây được phục vụ từ bộ nhớ đệm, tính trọng số theo lượng đầu vào.",
+      "speedHint": "Tốc độ đầu ra trung bình của các yêu cầu hợp lệ trong cuộc trò chuyện này, không tính thời gian chờ phản hồi đầu tiên. Thiếu số đo: —.",
+      "cacheHint": "Tỷ lệ trúng bộ nhớ đệm trung bình của các yêu cầu hợp lệ trong cuộc trò chuyện này, được tính trọng số theo token đầu vào. Giữ nguyên sau khi dừng tạo; thiếu số liệu đếm: —.",
       "aggregateHint": "Tổng tỷ lệ hạn mức còn lại, không tính trọng số theo dung lượng gói. Màu giống tổng quan tài khoản: ≥80% xanh lá, ≥40% vàng, ≥10% cam, dưới 10% đỏ. Giá trị chưa xác định không tô màu hạn mức.",
       "waiting": "Đang chờ bản ghi sử dụng cuộc trò chuyện",
       "refreshFailed": "Không thể làm mới hạn mức. Đã giữ lại kết quả trước. Vui lòng thử lại.",
@@ -225,7 +225,11 @@
       "avgLatency": "Độ trễ TB",
       "successRate": "Tỷ lệ thành công",
       "verifiedStatistics": "Số liệu xác minh",
-      "excludedHistory": "{{count}} bản ghi cũ thiếu bằng chứng gửi yêu cầu nên không được tính."
+      "excludedHistory": "{{count}} bản ghi cũ thiếu bằng chứng gửi yêu cầu nên không được tính.",
+      "averageSpeed": "Tốc độ trung bình",
+      "serviceUnavailable": "Dịch vụ API chưa khả dụng. Vui lòng thử lại.",
+      "tierAdjusted": "Đã chuyển sang chuẩn",
+      "averageCache": "Tỷ lệ bộ nhớ đệm TB"
     },
     "apiKeyAccount": "Tài khoản API Key",
     "status": "Trạng thái",
@@ -2351,6 +2355,9 @@
       "rule": "Còn lại ngắn hạn <= {{shortCycle}}% hoặc tuần <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "Sửa phiên thất bại và khôi phục bản sao lưu chưa hoàn tất. Đã dừng khởi chạy; hãy kiểm tra nhật ký và bản sao lưu trước khi thử lại.",
+      "sessionCheckTimeout": "Kiểm tra phiên đã hết thời gian chờ. Đã dừng khởi chạy; hãy thử lại hoặc xem nhật ký.",
+      "sessionFileTooLarge": "Dòng đầu của tệp phiên quá lớn. Đã dừng khởi chạy; hãy xem nhật ký.",
       "bindingFailed": "Không thể xác nhận tài khoản liên kết. Đã dừng khởi động; hãy thử chuyển tài khoản lại.",
       "processScanFailed": "Không thể kiểm tra các tiến trình nền cũ. Đã dừng khởi động; hãy thử lại.",
       "proxyEntryFailed": "Không thể khởi động proxy đã cấu hình. Không sử dụng tuyến thay thế; hãy thử lại."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Tài khoản OAuth này chỉ hỗ trợ phiên âm. Hãy dùng nhà cung cấp có API Key cho các thao tác âm thanh khác.",
         "audioUnavailable": "Không thể chuyển tiếp âm thanh.",
         "audioUpstreamFailed": "Yêu cầu âm thanh tới nhà cung cấp thất bại.",
-        "modelNotAvailable": "Mô hình {{model}} không khả dụng với API Key này."
+        "modelNotAvailable": "Mô hình {{model}} không khả dụng với API Key này.",
+        "quotaReserved": "Hạn mức tài khoản đã được dự trữ hoặc đang chờ xác nhận. Vui lòng thử lại sau ít phút."
       },
       "testRateLimited": "Dịch vụ truy cập được nhưng upstream bị giới hạn hoặc hết hạn mức: {{detail}}.",
       "testHttpFailed": "Dịch vụ truy cập được nhưng yêu cầu trả về HTTP {{status}}: {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "Tắt image_generation",
           "message": "Khi bật, dịch vụ API sẽ bỏ khai báo công cụ image_generation trong cổng cục bộ trước khi chuyển tiếp hội thoại văn bản để tránh lỗi như \"Image generation is not enabled\". Không xóa gpt-image hay các mô hình tạo ảnh khác. Tiếp tục?"
-        }
+        },
+        "quotaReserveToggle": "Giữ lại hạn mức OAuth",
+        "quotaReserveDesc": "Dịch vụ API chỉ dùng tài khoản OAuth này khi hạn mức còn lại của 5 giờ và tuần đều cao hơn mức giữ lại.",
+        "quotaReserveHourlyLabel": "Giữ lại 5 giờ",
+        "quotaReserveWeeklyLabel": "Giữ lại theo tuần",
+        "quotaReserveInvalid": "Nhập số nguyên từ 1 đến 100.",
+        "strictReserve": "Bảo vệ nghiêm ngặt",
+        "strictReserveDesc": "Hạn mức dự trữ tự động được bảo vệ bằng biên an toàn. Gần ngưỡng, mỗi tài khoản chỉ gửi một yêu cầu rồi xác nhận hạn mức mới sau khi hoàn tất. Việc sử dụng của ứng dụng khác không bị giới hạn.",
+        "strictNativeOnly": "Bảo vệ nghiêm ngặt cần bộ máy Rust. Hãy tắt trước khi chuyển sang Go.",
+        "safetyMargin": "Biên an toàn",
+        "safetyMarginUnit": "điểm phần trăm",
+        "safetyMarginInvalid": "Nhập số nguyên từ 1 đến 20.",
+        "quotaInFlight": "Đang chạy: {{count}}",
+        "quotaWaiting": "Chờ xác nhận hạn mức",
+        "quotaStale": "Chưa có hạn mức mới",
+        "quotaProtected": "Đã dự trữ",
+        "quotaUpdated": "Cập nhật lúc {{time}}"
       },
       "customRoutingEdit": "Sửa định tuyến tùy chỉnh",
       "customRoutingTitle": "Định tuyến tùy chỉnh",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Không có tài khoản khả dụng trong nhóm",
           "poolUnavailableDetail": "Không chọn được tài khoản khả dụng cho mô hình {{model}}",
           "poolUnattributedDetail": "Chưa nhận được dữ liệu chẩn đoán theo tài khoản nên không thể gán lỗi này cho một tài khoản cụ thể. Hãy kiểm tra phạm vi tài khoản và cấu hình mô hình của khóa API này.",
-          "poolDiagnosticDetail": "Mô hình {{model}}: {{candidate}} ứng viên, {{scoped}} trong phạm vi, {{available}} khả dụng, {{unavailable}} không khả dụng, {{modelExcluded}} bị loại theo mô hình, {{imageBlocked}} bị chặn bởi chính sách ảnh",
+          "poolDiagnosticDetail": "Mô hình {{model}}: {{candidate}} ứng viên, {{scoped}} trong phạm vi, {{available}} khả dụng, {{unavailable}} không khả dụng, {{modelExcluded}} bị loại theo mô hình, {{quotaReserved}} được giữ hạn mức, {{imageBlocked}} bị chặn bởi chính sách ảnh",
           "poolNoCandidatesDetail": "Không có tài khoản ứng viên cho yêu cầu này. Hãy kiểm tra mô hình được yêu cầu và trạng thái tải tài khoản.",
           "poolScopeMismatchDetail": "Không có ứng viên phù hợp với phạm vi tài khoản của khóa API này hoặc không nhận diện được ánh xạ tài khoản. Hãy kiểm tra tài khoản đã chọn và cấu hình mô hình.",
           "inspectBinding": "Kiểm tra liên kết",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Tài khoản liên kết này chưa được tải vào dịch vụ hiện tại. Hãy kiểm tra việc tải tài khoản và đồng bộ nhóm.",
           "boundAccountNotCandidateDetail": "Tài khoản liên kết này đã được tải nhưng không nằm trong nhóm ứng viên của yêu cầu này. Hãy kiểm tra mô hình, nhà cung cấp và loại yêu cầu.",
           "scopeUnknownDetail": "Chẩn đoán phạm vi chưa xác định được nguyên nhân cụ thể. Hãy kiểm tra liên kết và nhật ký dịch vụ.",
-          "poolBlockedDetail": "Lọc trong phạm vi: {{unavailable}} không khả dụng (ví dụ bị tắt, đang chờ hoặc lỗi xác thực), {{modelExcluded}} bị loại theo mô hình, {{imageBlocked}} bị chặn bởi chính sách ảnh. Hãy kiểm tra nguyên nhân theo tài khoản và cài đặt.",
+          "poolBlockedDetail": "Lọc trong phạm vi: {{unavailable}} không khả dụng (ví dụ bị tắt, đang chờ hoặc lỗi xác thực), {{modelExcluded}} bị loại theo mô hình, {{quotaReserved}} bị chặn do dự trữ hạn mức, {{imageBlocked}} bị chặn bởi chính sách ảnh. Hãy kiểm tra nguyên nhân theo tài khoản và cài đặt.",
           "poolUnknownDetail": "Chẩn đoán hiện tại chưa xác định được nguyên nhân cụ thể. Hãy kiểm tra phạm vi khóa API, cấu hình mô hình và nhật ký dịch vụ.",
           "clearHint": "Chỉ bản ghi chẩn đoán này bị xóa. Cài đặt, token và hạn mức không được sửa; yêu cầu thất bại lần nữa có thể tạo bản ghi mới.",
           "clearSuccess": "Đã xóa bản ghi chẩn đoán. Điều này không có nghĩa nhóm tài khoản đã phục hồi.",

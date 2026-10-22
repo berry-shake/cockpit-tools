@@ -55,6 +55,278 @@
       && usageBannerTypes.has(usage?.rate_limit_upsell?.banner_type);
   }
 
+  const liveQuota = {
+    client: null,
+    originalSetQueryData: null,
+    unsubscribe: null,
+    observer: null,
+    timer: null,
+    retries: 0,
+    rewriting: false,
+    raw: new WeakMap(),
+  };
+  const liveQuotaEnabled = () => root.__cockpitEnhancements?.apiService === true
+    && root.__cockpitEnhancements?.quotaCompat === true;
+  const isMainUsage = value => !!value && typeof value === 'object'
+    && !!value.rate_limit && typeof value.rate_limit.allowed === 'boolean';
+  const suppressUsageUpsell = value => usageBannerTypes.has(value?.rate_limit_upsell?.banner_type)
+    && value.rate_limit_upsell?.model_slug == null
+    && value.rate_limit_upsell?.blocked_model_slug == null;
+  function rewriteLiveUsage(value) {
+    if (!liveQuotaEnabled() || !isMainUsage(value)) return value;
+    let next = value;
+    if (value.rate_limit.allowed !== true || value.rate_limit.limit_reached === true) {
+      next = { ...next, rate_limit: { ...next.rate_limit, allowed: true, limit_reached: false } };
+    }
+    if (suppressUsageUpsell(value)) {
+      next = { ...next, rate_limit_upsell: null, rate_limit_reached_type: null };
+    }
+    if (next !== value) liveQuota.raw.set(next, liveQuota.raw.get(value) || value);
+    return next;
+  }
+  const trackedLiveUsage = value => rewriteLiveUsage(liveQuota.raw.get(value) || value);
+  const mainUsageQueries = client => client?.getQueryCache?.()?.findAll?.({ queryKey: ['rate-limit-status'] })
+    ?.filter?.(query => Array.isArray(query?.queryKey) && query.queryKey[1] !== 'image-generation') ?? [];
+
+  function findLiveQueryClient() {
+    if (liveQuota.client?.getQueryCache?.() && typeof liveQuota.client.setQueryData === 'function')
+      return liveQuota.client;
+    const looksLikeClient = value => !!value && typeof value.getQueryCache === 'function'
+      && typeof value.setQueryData === 'function';
+    const seen = new Set();
+    const stack = [];
+    for (const item of [root.document?.getElementById?.('root'), root.document?.body,
+      root.document?.documentElement]) {
+      if (!item) continue;
+      const key = Object.keys(item).find(name => name.startsWith('__reactContainer$')
+        || name.startsWith('__reactFiber$'));
+      if (!key) continue;
+      let fiber = item[key];
+      if (fiber?.stateNode?.current) fiber = fiber.stateNode.current;
+      stack.push(fiber);
+    }
+    let visited = 0;
+    while (stack.length && visited < 10000) {
+      const node = stack.pop();
+      if (!node || typeof node !== 'object' || seen.has(node)) continue;
+      seen.add(node);
+      visited++;
+      const candidates = [
+        node.memoizedProps?.client,
+        node.memoizedProps?.value,
+        node.stateNode,
+        node.memoizedState?.memoizedState,
+      ];
+      const found = candidates.find(looksLikeClient);
+      if (found) return found;
+      if (node.child) stack.push(node.child);
+      if (node.sibling) stack.push(node.sibling);
+    }
+    return null;
+  }
+
+  function patchLiveQueryClient(client) {
+    if (!client || client.__cockpitLiveQuotaClient) return client;
+    liveQuota.client = client;
+    liveQuota.originalSetQueryData = client.setQueryData;
+    client.setQueryData = function cockpitLiveSetQueryData(queryKey, updater, ...rest) {
+      if (!liveQuotaEnabled() || queryKey?.[0] !== 'rate-limit-status'
+        || queryKey?.[1] === 'image-generation') {
+        return liveQuota.originalSetQueryData.call(this, queryKey, updater, ...rest);
+      }
+      const next = typeof updater === 'function'
+        ? previous => rewriteLiveUsage(updater(liveQuota.raw.get(previous) || previous))
+        : rewriteLiveUsage(updater);
+      liveQuota.rewriting = true;
+      try {
+        return liveQuota.originalSetQueryData.call(this, queryKey, next, ...rest);
+      } finally {
+        liveQuota.rewriting = false;
+      }
+    };
+    Object.defineProperty(client, '__cockpitLiveQuotaClient', {
+      value: true, configurable: true,
+    });
+    const cache = client.getQueryCache?.();
+    if (cache?.subscribe) {
+      liveQuota.unsubscribe = cache.subscribe(event => {
+        if (liveQuota.rewriting || !liveQuotaEnabled()
+          || event?.query?.queryKey?.[0] !== 'rate-limit-status'
+          || event.query.queryKey[1] === 'image-generation') return;
+        const current = event.query.state?.data;
+        const next = trackedLiveUsage(current);
+        if (next !== current) {
+          liveQuota.rewriting = true;
+          try {
+            liveQuota.originalSetQueryData.call(client, event.query.queryKey, next);
+          } finally {
+            liveQuota.rewriting = false;
+          }
+        }
+      });
+    }
+    return client;
+  }
+
+  function rewriteCachedLiveUsage(client) {
+    let changed = 0;
+    for (const query of mainUsageQueries(client)) {
+      const current = query.state?.data;
+      const next = trackedLiveUsage(current);
+      if (next !== current) {
+        liveQuota.rewriting = true;
+        try {
+          liveQuota.originalSetQueryData?.call(client, query.queryKey, next);
+        } finally {
+          liveQuota.rewriting = false;
+        }
+        changed++;
+      }
+    }
+    return changed;
+  }
+
+  function refreshLiveComposers(plan) {
+    let refreshed = 0;
+    const tail = `||${plan.hardVariable}||${plan.guardVariable},`;
+    for (const item of root.document?.querySelectorAll?.('[data-codex-composer-root]') ?? []) {
+      let fiber = item[Object.keys(item).find(key => key.startsWith('__reactFiber$'))];
+      for (let depth = 0; fiber && depth < 100; depth++, fiber = fiber.return) {
+        if (typeof fiber.type !== 'function') continue;
+        const source = fiber.type.toString();
+        if (!source.includes('submitDisabled:') || !source.includes(tail)) continue;
+        const hooks = [];
+        for (let hook = fiber.memoizedState; hook; hook = hook.next) {
+          if (hook.memoizedState instanceof Set && hook.memoizedState.size === 0
+            && typeof hook.queue?.dispatch === 'function') hooks.push(hook);
+        }
+        if (hooks.length !== 1) continue;
+        hooks[0].queue.dispatch(new Set());
+        refreshed++;
+        break;
+      }
+    }
+    return refreshed;
+  }
+
+  function startLiveBannerObserver() {
+    if (liveQuota.observer || !root.document?.documentElement) return;
+    const hide = () => {
+      if (!liveQuotaEnabled()) return;
+      const text = root.document.body?.innerText || '';
+      if (!/Codex 和工作使用额度已用完|You[’']re out of Codex and Work usage/i.test(text))
+        return;
+      for (const aside of root.document.querySelectorAll?.('aside[role="status"]') ?? []) {
+        const content = aside.innerText || '';
+        if (!/Codex 和工作使用额度已用完|You[’']re out of Codex and Work usage/i.test(content))
+          continue;
+        aside.style.setProperty('display', 'none', 'important');
+        aside.setAttribute('data-cockpit-hidden-usage', 'true');
+      }
+    };
+    liveQuota.observer = new root.MutationObserver(hide);
+    liveQuota.observer.observe(root.document.documentElement, {
+      childList: true, subtree: true, characterData: true,
+    });
+    hide();
+  }
+
+  function installLiveQuotaGuard(plan) {
+    if (!liveQuotaEnabled()) return { ok: false, reason: 'disabled' };
+    startLiveBannerObserver();
+    const apply = () => {
+      const client = patchLiveQueryClient(findLiveQueryClient());
+      const changed = client ? rewriteCachedLiveUsage(client) : 0;
+      const refreshed = refreshLiveComposers(plan);
+      return { client: !!client, changed, refreshed };
+    };
+    let applied = apply();
+    if (!applied.client && liveQuota.retries < 20) {
+      root.clearTimeout?.(liveQuota.timer);
+      liveQuota.timer = root.setTimeout(() => {
+        liveQuota.retries++;
+        const next = apply();
+        if (next.client) liveQuota.retries = 20;
+        else if (liveQuota.retries < 20) installLiveQuotaGuard(plan);
+      }, 250);
+    }
+    const config = root.__cockpitEnhancements;
+    if (config) {
+      config.nativePatchMode = 'live-quota';
+      config.nativePatchFeatures = [false, true, false, true].map(Number).join('');
+      config.nativePatchRequestedFeatures = [config.nativeFast, config.quotaCompat,
+        config.apiKeyAuthVerified, config.apiService].map(Number).join('');
+      config.nativePatchState = 'active';
+      config.nativePatchReason = 'quota-breakpoint-armed';
+    }
+    return { ok: true, ...applied };
+  }
+
+  function disposeLiveQuotaGuard() {
+    liveQuota.observer?.disconnect();
+    liveQuota.observer = null;
+    root.clearTimeout?.(liveQuota.timer);
+    liveQuota.timer = null;
+    for (const aside of root.document?.querySelectorAll?.('[data-cockpit-hidden-usage="true"]') ?? []) {
+      aside.style.removeProperty('display');
+      aside.removeAttribute('data-cockpit-hidden-usage');
+    }
+    liveQuota.unsubscribe?.();
+    liveQuota.unsubscribe = null;
+    const client = liveQuota.client;
+    if (client) {
+      for (const query of mainUsageQueries(client)) {
+        const raw = liveQuota.raw.get(query.state?.data);
+        if (raw) liveQuota.originalSetQueryData?.call(client, query.queryKey, raw);
+      }
+      if (liveQuota.originalSetQueryData) client.setQueryData = liveQuota.originalSetQueryData;
+      delete client.__cockpitLiveQuotaClient;
+    }
+    liveQuota.client = null;
+    liveQuota.originalSetQueryData = null;
+  }
+
+  async function prepareLiveQuotaGate() {
+    if (!liveQuotaEnabled()) return { ok: false, reason: 'disabled' };
+    const read = async value => {
+      const response = await root.fetch(value, { cache: 'no-store' });
+      if (!response.ok) throw new Error('asset-unavailable');
+      return response.text();
+    };
+    try {
+      const entries = [...(root.document?.scripts ?? [])]
+        .map(script => script.src)
+        .filter(value => /^app:\/\/-\/assets\/index-[A-Za-z0-9_-]+\.js$/.test(value));
+      if (entries.length < 1 || entries.length > 4) return { ok: false, reason: 'unsupported-entry' };
+      const initialUrls = new Set();
+      for (const entry of entries) {
+        for (const match of (await read(entry))
+          .matchAll(/["'`]\.\/app-initial-[A-Za-z0-9_-]+\.js["'`]/g)) {
+          initialUrls.add(new URL(match[0].slice(1, -1), entry).href);
+        }
+      }
+      if (initialUrls.size !== 1) return { ok: false, reason: 'ambiguous-module' };
+      const initialUrl = [...initialUrls][0];
+      const initialSource = await read(initialUrl);
+      const contract = transform(initialSource, initialUrl);
+      if (!contract.ok) return { ok: false, reason: contract.diagnostics?.reason || 'quota-contract-failed' };
+      const primaryUrls = new Set(
+        [...initialSource.matchAll(/["'`]\.\/app-primary-[A-Za-z0-9_-]+\.js["'`]/g)]
+          .map(match => new URL(match[0].slice(1, -1), initialUrl).href),
+      );
+      if (primaryUrls.size !== 1) return { ok: false, reason: 'primary-module-not-unique' };
+      const primaryUrl = [...primaryUrls][0];
+      const primary = transformComposer(
+        await read(primaryUrl), primaryUrl, initialUrl, contract.diagnostics?.bindings,
+      );
+      if (!primary.ok || !primary.diagnostics?.location)
+        return { ok: false, reason: primary.diagnostics?.reason || 'quota-location-unavailable' };
+      return { ok: true, plan: primary.diagnostics.location };
+    } catch {
+      return { ok: false, reason: 'quota-location-failed' };
+    }
+  }
+
   const functionRange = (source, start) => root.__cockpitNativeFast?.functionRange(source, start);
   function transformSharedBanner(source) {
     // Both legacy and unified announcement paths call this initial-module
@@ -217,11 +489,29 @@
     const composerName = composer.match(new RegExp(`^function (${identifier})\\(`))?.[1];
     const withBanner = composerName && transformBanner(withProvider, composerName, host, settings);
     if (!withBanner) return failed('quota-banner-contract-mismatch');
-    return { ok: true, patchedSource: withBanner, diagnostics: { reason: 'ready' } };
+    let anchor = start + guards[0].index + guards[0][0].length;
+    while (anchor < source.length && /[\s,;]/.test(source[anchor])) anchor++;
+    const before = source.slice(0, anchor);
+    return {
+      ok: true,
+      patchedSource: withBanner,
+      diagnostics: {
+        reason: 'ready',
+        location: {
+          url,
+          lineNumber: before.split('\n').length - 1,
+          columnNumber: anchor - before.lastIndexOf('\n') - 1,
+          hardVariable: hard,
+          guardVariable: guard.blocked,
+          hostVariable: host,
+        },
+      },
+    };
   }
 
   const api = { enabledFor, wrapComposer, useBannerScope, shouldHideBanner,
-    getBannerContext: () => bannerContext, transform, transformComposer };
+    getBannerContext: () => bannerContext, transform, transformComposer,
+    prepareLiveQuotaGate, installLiveQuotaGuard, disposeLiveQuotaGuard };
   root.__cockpitQuotaCompat = api;
   if (typeof module === 'object' && module.exports) module.exports = api;
 })();

@@ -43,7 +43,12 @@ pub fn start_for_profile(
     }
     let startup = fresh_launch.then(|| Arc::new(fast::StartupReload::new()));
     tauri::async_runtime::spawn(run_profile(
-        profile, instance, port, startup, api_service, receiver,
+        profile,
+        instance,
+        port,
+        startup,
+        api_service,
+        receiver,
     ));
 }
 
@@ -174,7 +179,11 @@ fn safe_socket(value: &str, port: u16) -> bool {
         && url.path().starts_with("/devtools/page/")
 }
 
-async fn targets(client: &reqwest::Client, port: u16) -> Option<HashSet<String>> {
+async fn targets(
+    client: &reqwest::Client,
+    port: u16,
+    include_pending: bool,
+) -> Option<HashSet<String>> {
     let response = client
         .get(format!("http://127.0.0.1:{port}/json/list"))
         .send()
@@ -191,7 +200,9 @@ async fn targets(client: &reqwest::Client, port: u16) -> Option<HashSet<String>>
             .into_iter()
             .filter(|target| {
                 matches!(target.kind.as_str(), "page" | "webview")
-                    && target.url.starts_with("app://-/")
+                    && (target.url.starts_with("app://-/")
+                        || include_pending
+                            && (target.url.is_empty() || target.url == "about:blank"))
             })
             .filter_map(|target| target.socket.filter(|socket| safe_socket(socket, port)))
             .collect(),
@@ -222,6 +233,11 @@ async fn run_profile(
     api_service: bool,
     mut stop: watch::Receiver<bool>,
 ) {
+    // API-service launches use the live quota breakpoint path. Its TCP CDP
+    // endpoint becomes available after the first navigation, so a startup
+    // preload cannot win that race and must not trigger a renderer reload.
+    let preload_first =
+        cfg!(target_os = "windows") && startup.is_some() && !api_service;
     let Ok(client) = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(2))
@@ -230,6 +246,47 @@ async fn run_profile(
     else {
         return;
     };
+    if preload_first {
+        // The API-service binding is already verified by the launch transaction.
+        // Waiting for the keyring/profile reader here lets the page navigate
+        // before Chromium auto-attaches, which defeats first-document preload.
+        let preload_profile = if api_service {
+            Some(Profile {
+                quota_compat: true,
+                ..Profile::default()
+            })
+        } else {
+            profile_or_api_fallback(
+                tokio::task::spawn_blocking({
+                    let path = profile_dir.clone();
+                    move || read_profile(&path)
+                })
+                .await
+                .ok()
+                .and_then(Result::ok),
+                false,
+            )
+        };
+        if let Some(profile) = preload_profile {
+            let preload_stop = stop.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(error) = fast::preload_browser(
+                    port,
+                    profile.native_fast,
+                    profile.quota_compat,
+                    profile.api_key_auth_verified,
+                    api_service,
+                    preload_stop,
+                )
+                .await
+                {
+                    logger::log_warn(&format!(
+                        "[Codex enhancements] browser preload failed: {error}"
+                    ));
+                }
+            });
+        }
+    }
     let mut children: HashMap<String, Child> = HashMap::new();
     let mut retry_at: HashMap<String, Instant> = HashMap::new();
     let mut current = profile_or_api_fallback(None, api_service);
@@ -286,7 +343,7 @@ async fn run_profile(
         let Some(profile) = current.as_ref().filter(|profile| profile.active() || api_service) else {
             continue;
         };
-        let Some(available) = targets(&client, port).await else {
+        let Some(available) = targets(&client, port, preload_first).await else {
             continue;
         };
         let ended: Vec<_> = children
@@ -322,6 +379,7 @@ async fn run_profile(
                     profile.quota_compat,
                     profile.api_key_auth_verified,
                     api_service,
+                    preload_first,
                     startup,
                     receiver,
                 )

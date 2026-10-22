@@ -167,8 +167,8 @@
       "speed": "Débit de sortie",
       "cache": "Taux de cache",
       "cacheShort": "En cache",
-      "speedHint": "Débit de sortie pondéré des requêtes API valides récentes de cette conversation, hors attente de la première réponse. Affiche — si les requêtes ne peuvent pas être rattachées ou si les durées sont indisponibles.",
-      "cacheHint": "Part des jetons d’entrée récents servis depuis le cache, pondérée par le volume d’entrée.",
+      "speedHint": "Vitesse de sortie moyenne des requêtes valides de cette conversation, hors attente de la première réponse. Sans mesure : —.",
+      "cacheHint": "Taux moyen de succès du cache des requêtes valides de cette conversation, pondéré par les tokens d’entrée. Conservé après l’arrêt de la génération ; sans compteurs : —.",
       "aggregateHint": "Somme des pourcentages restants, sans pondération par capacité du forfait. Couleurs identiques à la vue des comptes : ≥80 % vert, ≥40 % jaune, ≥10 % orange, moins de 10 % rouge. Aucune couleur de quota pour les valeurs inconnues.",
       "waiting": "En attente des données d’utilisation",
       "refreshFailed": "Échec de l’actualisation du quota. Les résultats précédents sont conservés. Réessayez.",
@@ -225,7 +225,11 @@
       "avgLatency": "Latence moy.",
       "successRate": "Taux de réussite",
       "verifiedStatistics": "Stats vérifiées",
-      "excludedHistory": "{{count}} entrées d’historique sans preuve d’envoi sont exclues."
+      "excludedHistory": "{{count}} entrées d’historique sans preuve d’envoi sont exclues.",
+      "averageSpeed": "Débit moyen",
+      "serviceUnavailable": "Service API indisponible. Réessayez.",
+      "tierAdjusted": "Ajusté au mode standard",
+      "averageCache": "Taux moyen de cache"
     },
     "apiKeyAccount": "Compte API Key",
     "status": "État",
@@ -2351,6 +2355,9 @@
       "rule": "Solde court <= {{shortCycle}}% ou hebdomadaire <= {{weekly}}%"
     },
     "launchErrors": {
+      "sessionRestoreFailed": "La réparation des sessions a échoué et la restauration est incomplète. Démarrage arrêté ; vérifiez les journaux et les sauvegardes avant de réessayer.",
+      "sessionCheckTimeout": "Le contrôle des sessions a expiré. Démarrage arrêté ; réessayez ou consultez les journaux.",
+      "sessionFileTooLarge": "L’en-tête d’un fichier de session est trop volumineux. Démarrage arrêté ; consultez les journaux.",
       "bindingFailed": "Impossible de confirmer le compte associé. Démarrage arrêté ; réessayez de changer de compte.",
       "processScanFailed": "Impossible de vérifier les anciens processus en arrière-plan. Démarrage arrêté ; réessayez.",
       "proxyEntryFailed": "Impossible de démarrer le proxy configuré. Aucun autre itinéraire utilisé ; réessayez."
@@ -2753,7 +2760,8 @@
         "audioNotSupported": "Ce compte OAuth ne prend en charge que la transcription. Utilisez un fournisseur avec une API Key pour les autres fonctions audio.",
         "audioUnavailable": "Le transfert audio est indisponible.",
         "audioUpstreamFailed": "La requête audio au fournisseur a échoué.",
-        "modelNotAvailable": "Le modèle {{model}} n’est pas disponible pour cette API Key."
+        "modelNotAvailable": "Le modèle {{model}} n’est pas disponible pour cette API Key.",
+        "quotaReserved": "Le quota est réservé ou en cours de vérification. Réessayez dans un instant."
       },
       "testRateLimited": "Service joignable, mais l’amont est limité ou le quota est épuisé : {{detail}}.",
       "testHttpFailed": "Service joignable, mais la requête a renvoyé HTTP {{status}} : {{detail}}.",
@@ -2906,7 +2914,23 @@
         "imageGenerationConfirm": {
           "title": "Désactiver image_generation",
           "message": "Une fois activé, le service API retirera la déclaration d’outil image_generation dans la passerelle locale avant de transférer les conversations texte, afin d’éviter des erreurs comme « Image generation is not enabled ». gpt-image et les autres modèles d’image ne sont pas supprimés. Continuer ?"
-        }
+        },
+        "quotaReserveToggle": "Réserver le quota OAuth",
+        "quotaReserveDesc": "Le service API utilise ce compte OAuth uniquement tant que les quotas restants sur 5 heures et sur la semaine sont supérieurs aux valeurs réservées.",
+        "quotaReserveHourlyLabel": "Réserve 5 h",
+        "quotaReserveWeeklyLabel": "Réserve semaine",
+        "quotaReserveInvalid": "Saisissez un entier compris entre 1 et 100.",
+        "strictReserve": "Protection stricte",
+        "strictReserveDesc": "La réserve de quota est protégée automatiquement avec une marge de sécurité. Près du seuil, une seule requête par compte est autorisée, puis le quota à jour est confirmé. L’utilisation des autres clients reste inchangée.",
+        "strictNativeOnly": "La protection stricte exige le moteur Rust. Désactivez-la avant de passer à Go.",
+        "safetyMargin": "Marge de sécurité",
+        "safetyMarginUnit": "points de pourcentage",
+        "safetyMarginInvalid": "Saisissez un entier de 1 à 20.",
+        "quotaInFlight": "En cours : {{count}}",
+        "quotaWaiting": "Confirmation du quota en attente",
+        "quotaStale": "Quota indisponible",
+        "quotaProtected": "Réservé",
+        "quotaUpdated": "Mis à jour à {{time}}"
       },
       "customRoutingEdit": "Modifier le routage personnalisé",
       "customRoutingTitle": "Routage personnalisé",
@@ -3028,7 +3052,7 @@
           "poolUnavailable": "Aucun compte disponible dans le pool",
           "poolUnavailableDetail": "Aucun compte disponible n’a été sélectionné pour le modèle {{model}}",
           "poolUnattributedDetail": "Aucun diagnostic par compte n’a été reçu ; cette erreur ne peut donc être attribuée à un compte. Vérifiez le périmètre des comptes et la configuration des modèles de cette clé API.",
-          "poolDiagnosticDetail": "Modèle {{model}} : {{candidate}} candidats, {{scoped}} dans le périmètre, {{available}} disponibles, {{unavailable}} indisponibles, {{modelExcluded}} exclus par le modèle, {{imageBlocked}} bloqués par la politique d’image",
+          "poolDiagnosticDetail": "Modèle {{model}} : {{candidate}} candidats, {{scoped}} dans le périmètre, {{available}} disponibles, {{unavailable}} indisponibles, {{modelExcluded}} exclus par le modèle, {{quotaReserved}} réservés par quota, {{imageBlocked}} bloqués par la politique d’image",
           "poolNoCandidatesDetail": "Aucun compte candidat pour cette requête. Vérifiez le modèle demandé et le chargement des comptes.",
           "poolScopeMismatchDetail": "Aucun candidat ne correspond au périmètre de cette clé API, ou son association au compte est inconnue. Vérifiez les comptes sélectionnés et la configuration du modèle.",
           "inspectBinding": "Vérifier le lien",
@@ -3040,7 +3064,7 @@
           "boundAccountNotLoadedDetail": "Ce compte lié n’est pas chargé dans le service actuel. Vérifiez le chargement des comptes et la synchronisation du pool.",
           "boundAccountNotCandidateDetail": "Ce compte lié est chargé, mais ne figure pas parmi les candidats de cette requête. Vérifiez le modèle, le fournisseur et le type de requête.",
           "scopeUnknownDetail": "Ce diagnostic de périmètre ne précise pas la cause. Vérifiez les liens et les journaux du service.",
-          "poolBlockedDetail": "Filtrage du périmètre : {{unavailable}} indisponibles (désactivés, en pause ou en échec d’authentification, par exemple), {{modelExcluded}} exclus par modèle, {{imageBlocked}} bloqués par politique d’image. Vérifiez les raisons par compte et les paramètres.",
+          "poolBlockedDetail": "Filtrage du périmètre : {{unavailable}} indisponibles (désactivés, en pause ou en échec d’authentification, par exemple), {{modelExcluded}} exclus par modèle, {{quotaReserved}} bloqués par réserve de quota, {{imageBlocked}} bloqués par politique d’image. Vérifiez les raisons par compte et les paramètres.",
           "poolUnknownDetail": "Le diagnostic ne précise pas la cause. Vérifiez le périmètre de la clé API, la configuration du modèle et les journaux du service.",
           "clearHint": "L’effacement supprime uniquement ce diagnostic. Il ne répare ni paramètres, ni jetons, ni quota ; un nouvel échec peut créer un nouveau diagnostic.",
           "clearSuccess": "Diagnostic effacé. Cela ne signifie pas que le pool de comptes est rétabli.",

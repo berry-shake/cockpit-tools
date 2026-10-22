@@ -26,6 +26,7 @@ mod compat_options;
 pub mod contract;
 pub mod continuity_bridge;
 pub mod diagnostics;
+mod deadline;
 mod edge;
 mod events;
 pub(crate) mod execution;

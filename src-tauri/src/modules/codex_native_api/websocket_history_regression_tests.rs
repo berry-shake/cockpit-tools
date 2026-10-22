@@ -356,7 +356,7 @@ async fn http_sse_bridge_repairs_output_without_granting_cross_account_history_p
         );
         let source: ByteStream = stream::iter(vec![Ok(Bytes::from(wire))]).boxed();
         let mut messages = super::super::transport_bridge::sse_messages(source, 4096);
-        let mut collector = OutputCollector::new(4096);
+        let mut collector = OutputCollector::new();
         let mut repaired_terminal = false;
         while let Some(message) = messages.next().await {
             let tokio_tungstenite::tungstenite::Message::Text(text) = message.unwrap() else {
