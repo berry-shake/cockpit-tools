@@ -76,12 +76,27 @@ if (!process.versions.electron) {
       assert.equal(result.header.state.nativePatchState, 'unsupported');
       assert.equal(result.header.state.nativePatchReason, 'module-preload-failed');
       assert.equal(result.header.name, 'fixture-original-name');
-      assert.equal(result.unsupported.prepared.ok, false);
-      assert.equal(result.unsupported.fixture.access, null, 'unsupported quota must not activate partial Fast patches');
+      assert.equal(result.unsupported.prepared.ok, true);
+      assert.equal(result.unsupported.prepared.mode, 'fast-only');
+      assert.equal(result.unsupported.install.ok, true);
+      assert.deepEqual(result.unsupported.fixture.access, { granted: true });
+      assert.equal(result.unsupported.state.nativePatchState, 'active');
+      assert.equal(result.unsupported.state.nativePatchMode, 'fast-only');
+      assert.equal(result.unsupported.state.nativePatchFeatures, '1010');
+      assert.equal(result.unsupported.state.nativePatchRequestedFeatures, '1011');
+      assert.equal(result.unsupported.state.nativeQuotaPatchState, 'unsupported');
+      assert.equal(result.unsupported.state.nativePatchReason, 'fast-only-quota-unsupported');
+      assert.equal(result.unsupported.quotaInitialReady, false, 'discard every partial quota edit');
       assert.equal(result.unsupported.fixture.dictation, true, 'native dictation stays available even if quota adaptation is unsupported');
       assert.equal(result.unsupported.temporaryElements, 0);
       assert.equal(result.unsupported.name, 'fixture-original-name');
       assert.deepEqual(result.unsupported.moduleErrors, []);
+      assert.equal(result.invalidFast.prepared.ok, false, 'incomplete Fast contracts still fail closed');
+      assert.equal(result.invalidFast.prepared.reason, 'unsupported-gates');
+      assert.equal(result.invalidFast.fixture.access, null);
+      assert.equal(result.invalidFast.fixture.dictation, true);
+      assert.equal(result.invalidFast.name, 'fixture-original-name');
+      assert.equal(result.invalidFast.temporaryElements, 0);
       assert.equal(result.inlineScriptBlocked, true, 'the original CSP must still block an untrusted inline script');
       assert.equal(result.restored.access, null, 'removing the new-document script restores the unmodified module');
       assert.deepEqual(result.moduleErrors, []);
@@ -301,8 +316,8 @@ window.fixturePrimary={importUrl:import.meta.url};`;
     return {fixture:window.fixtureResult,state:window.__cockpitEnhancements,name:window.name};})()`);
   await evaluate("window.__cockpitNativeFast.cancelHandoff('header-nonce')");
   await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: headerRegistration.identifier });
-  // Unsupported quota adaptation must leave the entire native module intact,
-  // including its dictation capability, rather than install a partial mode.
+  // Quota failure now permits a completely validated Fast-only module. Execute
+  // the real handoff and verify that no partial quota transformation survives.
   const unsupportedMessagesStart = messages.length;
   headerCsp = false;
   files.set('/assets/app-primary-fixture.js', ['text/javascript', primaryModule.replace('submitDisabled:disabled', 'unsupportedDisabled:disabled')]);
@@ -310,16 +325,40 @@ window.fixturePrimary={importUrl:import.meta.url};`;
   await waitForModule();
   await evaluate(`window.name='fixture-original-name';${bootstrap}`);
   const unsupportedPrepared = await evaluate("window.__cockpitNativeFast.prepareHandoff('unsupported-nonce')");
-  assert.equal(unsupportedPrepared.ok, false, JSON.stringify(unsupportedPrepared));
-  const unsupported = await evaluate(`({fixture:window.fixtureResult,
-    state:window.__cockpitEnhancements,name:window.name,
+  assert.equal(unsupportedPrepared.ok, true, JSON.stringify(unsupportedPrepared));
+  assert.equal(unsupportedPrepared.mode, 'fast-only');
+  const fastOnlyRegistration = await send('Page.addScriptToEvaluateOnNewDocument', {
+    source: `${bootstrap};window.installResult=window.__cockpitNativeFast.consumeHandoff('unsupported-nonce');`,
+  });
+  await new Promise((resolve, reject) => {
+    window.webContents.once('did-finish-load', resolve);
+    evaluate("window.__cockpitNativeFast.reloadPreparedDocument('unsupported-nonce')").then(result => {
+      if (!result?.ok) reject(Error(JSON.stringify(result)));
+    }, reject);
+  });
+  await waitForModule();
+  const unsupported = await evaluate(`({fixture:window.fixtureResult,install:window.installResult,
+    state:window.__cockpitEnhancements,name:window.name,quotaInitialReady:window.__cockpitQuotaCompat.initialReady===true,
     temporaryElements:document.querySelectorAll('script[type=importmap],link[rel=modulepreload]').length})`);
   unsupported.prepared = unsupportedPrepared;
   unsupported.moduleErrors = messages.slice(unsupportedMessagesStart);
+  await evaluate("window.__cockpitNativeFast.cancelHandoff('unsupported-nonce')");
+  await send('Page.removeScriptToEvaluateOnNewDocument', { identifier: fastOnlyRegistration.identifier });
+  // A quota fallback must never admit a missing Fast gate.
+  const invalidNativeModule = nativeModule.replace('async readServiceTier(', 'async unsupportedTier(');
+  assert.notEqual(invalidNativeModule, nativeModule);
+  files.set('/assets/app-initial-fixture.js', ['text/javascript', invalidNativeModule]);
+  await window.loadURL('app://-/');
+  await waitForModule();
+  await evaluate(`window.name='fixture-original-name';${bootstrap}`);
+  const invalidPrepared = await evaluate("window.__cockpitNativeFast.prepareHandoff('invalid-fast-nonce')");
+  const invalidFast = await evaluate(`({fixture:window.fixtureResult,name:window.name,
+    temporaryElements:document.querySelectorAll('script[type=importmap],link[rel=modulepreload]').length})`);
+  invalidFast.prepared = invalidPrepared;
   console.log(resultPrefix + JSON.stringify({
     versions: { electron: process.versions.electron, chrome: process.versions.chrome, v8: process.versions.v8 },
     original, waiting: menuInspection, transientProgress, resumed, adapted, inlineScriptBlocked, restored, moduleErrors,
-    repeated, canceled, hostReload, header, unsupported, prepared, injectionBytes: injection.length,
+    repeated, canceled, hostReload, header, unsupported, invalidFast, prepared, injectionBytes: injection.length,
   }));
   window.destroy();
   app.exit(0);
