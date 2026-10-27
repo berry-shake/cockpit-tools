@@ -94,21 +94,71 @@ fn parse_semver_tuple(version: &str) -> Option<(u32, u32, u32)> {
     Some((major, minor, patch))
 }
 
-fn official_antigravity_version_for_cloud_code() -> String {
-    let version = crate::modules::wakeup_gateway::official_antigravity_app_version();
-    let trimmed = version.trim();
-    if trimmed.is_empty() {
-        return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
-    }
-    if let (Some(detected), Some(min_required)) = (
-        parse_semver_tuple(trimmed),
+fn resolve_cloud_code_version(
+    official_version: &str,
+    cached_installed_version: impl FnOnce() -> Option<String>,
+) -> String {
+    let installed;
+    let version = if official_version.trim().is_empty() {
+        installed = cached_installed_version().unwrap_or_default();
+        installed.trim()
+    } else {
+        official_version.trim()
+    };
+    match (
+        parse_semver_tuple(version),
         parse_semver_tuple(DEFAULT_CLOUD_CODE_IDE_VERSION),
     ) {
-        if detected < min_required {
-            return DEFAULT_CLOUD_CODE_IDE_VERSION.to_string();
-        }
+        (Some(detected), Some(minimum)) if detected >= minimum => version.to_string(),
+        _ => DEFAULT_CLOUD_CODE_IDE_VERSION.to_string(),
     }
-    trimmed.to_string()
+}
+
+// Quota reads use cached metadata immediately; native process/file probes run off-thread.
+static VERSION_PROBE: std::sync::Mutex<(bool, Option<std::time::Instant>)> =
+    std::sync::Mutex::new((false, None));
+
+fn schedule_installed_version_probe() {
+    let Ok(mut state) = VERSION_PROBE.try_lock() else {
+        return;
+    };
+    if state.0
+        || state
+            .1
+            .is_some_and(|started| started.elapsed() < std::time::Duration::from_secs(60))
+    {
+        return;
+    }
+    *state = (true, Some(std::time::Instant::now()));
+    drop(state);
+    tauri::async_runtime::spawn(async {
+        let result = tauri::async_runtime::spawn_blocking(|| {
+            crate::commands::system::resolve_antigravity_installed_version_info_for_target(None)
+        })
+        .await;
+        if let Err(error) = result {
+            modules::logger::log_warn(&format!("[Quota] Installed version probe failed: {error}"));
+        }
+        if let Ok(mut state) = VERSION_PROBE.lock() {
+            state.0 = false;
+        }
+    });
+}
+
+fn official_antigravity_version_for_cloud_code() -> String {
+    resolve_cloud_code_version(
+        &crate::modules::wakeup_gateway::official_antigravity_app_version(),
+        || {
+            let cached =
+                crate::commands::system::get_cached_antigravity_installed_version_info_for_target(
+                    None,
+                );
+            if cached.is_none() {
+                schedule_installed_version_probe();
+            }
+            cached.map(|info| info.version)
+        },
+    )
 }
 
 fn load_code_assist_user_agent_os() -> &'static str {
@@ -1263,8 +1313,7 @@ fn is_summary_bucket(name: &str) -> bool {
             | "argon:weekly"
             | "gemini-argon-5h"
             | "argon:5h"
-    ) || (name.starts_with("gemini-argon-")
-        && (name.ends_with("-weekly") || name.ends_with("-5h")))
+    ) || (name.starts_with("gemini-argon-") && (name.ends_with("-weekly") || name.ends_with("-5h")))
 }
 
 /// Merge only real quota windows from this account's last successful summary.
@@ -1567,6 +1616,60 @@ pub async fn fetch_quota_with_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloud_code_version_uses_installed_metadata_when_wakeup_metadata_is_missing() {
+        assert_eq!(
+            resolve_cloud_code_version("", || Some("2.26.0".to_string())),
+            "2.26.0"
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_preserves_explicit_or_legacy_metadata_without_scanning() {
+        assert_eq!(
+            resolve_cloud_code_version(" 2.26.0\n", || {
+                panic!("installed metadata must not override the wakeup version")
+            }),
+            "2.26.0"
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_trims_installed_metadata() {
+        assert_eq!(
+            resolve_cloud_code_version(" \n", || Some(" 2.26.0.0\r\n".to_string())),
+            "2.26.0.0"
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_preserves_minimum_for_stale_or_invalid_metadata() {
+        assert_eq!(
+            resolve_cloud_code_version("1.23.3", || None),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+        assert_eq!(
+            resolve_cloud_code_version("", || Some("2.17.0".into())),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+        assert_eq!(
+            resolve_cloud_code_version("invalid", || None),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+    }
+
+    #[test]
+    fn cloud_code_version_keeps_compatibility_default_without_installed_metadata() {
+        assert_eq!(
+            resolve_cloud_code_version("", || None),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+        assert_eq!(
+            resolve_cloud_code_version("", || Some(" \n".to_string())),
+            DEFAULT_CLOUD_CODE_IDE_VERSION
+        );
+    }
 
     #[test]
     fn test_format_google_validation_url_empty_authuser() {
