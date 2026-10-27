@@ -523,7 +523,8 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   if (typeof raw === 'string') {
     const name = raw.trim();
     if (name) {
-      return name;
+      // The previous built-in label; migrate it to the current product name.
+      return fallbackPlatform === 'omp' && name === 'OMP' ? 'Oh My Pi' : name;
     }
   }
   if (fallbackPlatform === 'antigravity') {
@@ -542,7 +543,7 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
     return 'Zed';
   }
   if (fallbackPlatform === 'omp') {
-    return 'OMP';
+    return 'Oh My Pi';
   }
   if (fallbackPlatform === 'claude_manager') {
     return 'Claude';

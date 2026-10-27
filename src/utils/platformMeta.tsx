@@ -20,7 +20,7 @@ import { ZcodeIcon } from '../components/icons/ZcodeIcon';
 export function getPlatformLabel(platformId: PlatformId, _t: TFunction): string {
   switch (platformId) {
     case 'omp':
-      return 'OMP';
+      return 'Oh My Pi';
     case 'antigravity':
       return 'Antigravity';
     case 'antigravity_ide':

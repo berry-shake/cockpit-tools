@@ -3,21 +3,17 @@ type OmpIconProps = {
   size?: number;
 };
 
-// oh-my-pi/assets/icon.svg: retain the Pi + orange connector artwork;
-// use the surrounding text color for the Pi so it also works on light surfaces.
+// Oh My Pi mark, matching the icon used by cc-switch (src/icons/extracted/index.ts).
 export function OmpIcon({ className = '', size = 24 }: OmpIconProps) {
-  return <svg className={className} width={size} height={size} viewBox="0 0 120 90" fill="none" aria-hidden="true">
-    <g fill="currentColor">
-      <rect x="10" y="8" width="100" height="12" rx="2" />
-      <rect x="25" y="20" width="12" height="62" rx="2" />
-      <rect x="75" y="20" width="12" height="45" rx="2" />
-    </g>
-    <rect x="71" y="55" width="20" height="16" rx="3" fill="#f97316" />
-    <rect x="76" y="59" width="3" height="8" rx="1" fill="#0d0d0d" />
-    <rect x="82" y="59" width="3" height="8" rx="1" fill="#0d0d0d" />
-    <g fill="#f97316" opacity="0.8">
-      <circle cx="18" cy="14" r="2" />
-      <circle cx="102" cy="14" r="2" />
-    </g>
+  return <svg className={className} width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="omp-icon-gradient" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#ed4abf" />
+        <stop offset=".5" stopColor="#9b4dff" />
+        <stop offset="1" stopColor="#5ad8e6" />
+      </linearGradient>
+    </defs>
+    <rect width="64" height="64" rx="12" fill="#0f0a14" />
+    <path fill="url(#omp-icon-gradient)" d="M14 16h36v8H40v32h-8V24h-6v22h-8V24h-4z" />
   </svg>;
 }

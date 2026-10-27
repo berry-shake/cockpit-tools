@@ -49,18 +49,18 @@ export function OmpPage() {
   };
   const statusText = (account: OmpAccount) => ({
     current: t('omp.account.providerSelected', '本供应商已选'),
-    pool: t('omp.account.pool', 'OMP 自动选择'),
+    pool: t('omp.account.pool', 'Oh My Pi 自动选择'),
     standby: t('omp.account.standby', '待切换'),
     invalid: t('omp.account.invalid', '已停用 · 需重新登录'),
     trash: t('omp.account.trash', '回收站'),
   })[account.status];
 
   function confirmAction(account: OmpAccount, action: OmpAccountAction) {
-    const title = action === 'switch' ? t('omp.account.switchTitle', '切换 OMP 账号')
+    const title = action === 'switch' ? t('omp.account.switchTitle', '切换 Oh My Pi 账号')
       : action === 'trash' ? t('omp.account.trashTitle', '移入回收站') : t('omp.account.restoreTitle', '恢复账号');
     showModal({ title, description: action === 'switch'
-      ? t('omp.account.switchDescription', '将 {{account}} 设为 {{provider}} 的唯一启用账号。同一供应商的其他账号会保留为待切换，不影响其他供应商。建议重启已有 OMP 会话；环境变量中的 API Key 和其他 profile 不受影响。', { account: accountTitle(account), provider: account.provider })
-      : action === 'trash' ? t('omp.account.trashDescription', '停止在 OMP 中使用此账号，凭据保留在私密恢复文件中，可从回收站恢复。不会自动切换到其他账号。')
+      ? t('omp.account.switchDescription', '将 {{account}} 设为 {{provider}} 的唯一启用账号。同一供应商的其他账号会保留为待切换，不影响其他供应商。建议重启已有 Oh My Pi 会话；环境变量中的 API Key 和其他 profile 不受影响。', { account: accountTitle(account), provider: account.provider })
+      : action === 'trash' ? t('omp.account.trashDescription', '停止在 Oh My Pi 中使用此账号，凭据保留在私密恢复文件中，可从回收站恢复。不会自动切换到其他账号。')
         : t('omp.account.restoreDescription', '恢复到账号列表，不会自动启用。恢复后点击“切换”即可使用。'),
       actions: [
         { label: t('common.cancel', '取消'), variant: 'secondary' },
@@ -68,7 +68,7 @@ export function OmpPage() {
           await actOnOmpAccount(account.id, account.identity, action);
           try { await refresh(); } catch { setError(t('omp.account.reloadAfterWrite', '账号操作已完成，但列表刷新失败，请点击刷新确认当前状态。')); }
           setNotice(action === 'switch'
-            ? t('omp.account.switched', '已切换 OMP 原生账号。后续直接运行 omp 即可，Cockpit 无需常驻。建议重启已有会话。')
+            ? t('omp.account.switched', '已切换 Oh My Pi 原生账号。后续直接运行 omp 即可，Cockpit 无需常驻。建议重启已有会话。')
             : action === 'trash' ? t('omp.account.trashed', '已移入回收站，凭据仍可恢复。')
               : t('omp.account.restored', '账号已恢复，请检查账号状态后切换；原已失效的账号仍需重新登录。'));
         }) },
@@ -87,24 +87,24 @@ export function OmpPage() {
 
   return <div className="omp-page">
     <header className="omp-header">
-      <div><h1><OmpIcon size={28} /> OMP <span>{t('omp.account.management', '账号管理')}</span></h1>
+      <div><h1><OmpIcon size={28} /> Oh My Pi <span>{t('omp.account.management', '账号管理')}</span></h1>
         <p>{t('omp.account.subtitle', '独立账号 · 原生直连 · 一键切换')}</p></div>
       <div className="omp-header-actions">
         <button className="btn btn-secondary" disabled={busy} onClick={() => void run(refresh)}><RefreshCw size={16} className={busy ? 'spin' : ''} />{t('common.refresh', '刷新')}</button>
         <button className="btn btn-primary" disabled={busy} aria-expanded={adding} onClick={() => setAdding(!adding)}><Plus size={16} />{t('common.addAccount', '添加账号')}</button>
       </div>
     </header>
-    <div className="omp-info">{t('omp.account.providerExplanation', '账号按供应商独立切换，不存在跨供应商的全局“当前账号”。同一供应商启用多个账号时，由 OMP 自动选择；登录与刷新由 OMP 完成，不经过 Cockpit API 服务。')}</div>
+    <div className="omp-info">{t('omp.account.providerExplanation', '账号按供应商独立切换，不存在跨供应商的全局“当前账号”。同一供应商启用多个账号时，由 Oh My Pi 自动选择；登录与刷新由 Oh My Pi 完成，不经过 Cockpit API 服务。')}</div>
     {error && <div className="omp-error" role="alert">{error}</div>}
     {state?.warning && <div className="omp-error" role="alert">{state.warning}</div>}
     {notice && <div className="omp-notice" role="status">{notice}</div>}
 
     {adding && <section className="omp-panel omp-add-panel" aria-labelledby="omp-add-title">
-      <div className="omp-panel-heading"><h2 id="omp-add-title">{t('omp.account.addTitle', '添加 OMP 账号')}</h2><button className="btn btn-secondary" aria-label={t('common.close', '关闭')} onClick={() => setAdding(false)}><X size={16} /></button></div>
-      <p>{t('omp.account.loginHelp', '打开 OMP 原生登录流程，在终端选择供应商并完成浏览器授权。完成后点击“刷新”，新账号会出现在此列表，无需新建 profile 或选择工作目录。')}</p>
-      <label htmlFor="omp-executable">{t('omp.executable', 'OMP 可执行文件')}</label>
+      <div className="omp-panel-heading"><h2 id="omp-add-title">{t('omp.account.addTitle', '添加 Oh My Pi 账号')}</h2><button className="btn btn-secondary" aria-label={t('common.close', '关闭')} onClick={() => setAdding(false)}><X size={16} /></button></div>
+      <p>{t('omp.account.loginHelp', '打开 Oh My Pi 原生登录流程，在终端选择供应商并完成浏览器授权。完成后点击“刷新”，新账号会出现在此列表，无需新建 profile 或选择工作目录。')}</p>
+      <label htmlFor="omp-executable">{t('omp.executable', 'Oh My Pi 可执行文件')}</label>
       <div className="omp-path-row"><input id="omp-executable" value={executable} disabled={busy} placeholder="/Users/you/.bun/bin/omp" onChange={(e) => setExecutable(e.target.value)} />
-        <button className="btn btn-secondary" disabled={busy} aria-label={t('omp.chooseExecutable', '选择 OMP 可执行文件')} onClick={() => void run(async () => { const path = await open({ multiple: false }); if (typeof path === 'string') setExecutable(path); })}><FolderOpen size={16} /></button>
+        <button className="btn btn-secondary" disabled={busy} aria-label={t('omp.chooseExecutable', '选择 Oh My Pi 可执行文件')} onClick={() => void run(async () => { const path = await open({ multiple: false }); if (typeof path === 'string') setExecutable(path); })}><FolderOpen size={16} /></button>
         <button className="btn btn-primary" disabled={blocked || !state?.loginSupported || !executable.trim()} onClick={() => void run(async () => {
           await loginOmp(executable.trim());
           setNotice(t('omp.account.loginSent', '已向 Terminal 发送原生登录命令；尚未确认登录成功。请在终端完成授权，然后刷新账号列表。'));
@@ -142,7 +142,7 @@ export function OmpPage() {
         </div>
       </article>)}</div></section>)}
     </div>
-    {!visible.length && <div className="omp-empty">{busy ? t('common.loading', '加载中…') : search || provider ? t('omp.account.noMatches', '没有匹配的账号') : trash ? t('omp.account.emptyTrash', '回收站为空') : t('omp.account.noAccounts', '还没有 OMP 账号，点击“添加账号”开始登录。')}</div>}
+    {!visible.length && <div className="omp-empty">{busy ? t('common.loading', '加载中…') : search || provider ? t('omp.account.noMatches', '没有匹配的账号') : trash ? t('omp.account.emptyTrash', '回收站为空') : t('omp.account.noAccounts', '还没有 Oh My Pi 账号，点击“添加账号”开始登录。')}</div>}
     <footer className="omp-footnote"><p>{t('omp.account.storeNote', '仅管理默认 ~/.omp 账号库；不修改其他 profile、环境变量或供应商配置。已启用不代表已通过在线验证。')}</p><code>{state?.databasePath}</code></footer>
   </div>;
 }

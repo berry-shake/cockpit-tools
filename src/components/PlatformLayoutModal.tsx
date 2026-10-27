@@ -1383,7 +1383,7 @@ export function PlatformLayoutModal({
                         title={
                           isApiRelayEntry
                             ? t('platformLayout.apiRelayTrayDisabled', '中转站暂不支持菜单栏显示')
-                            : trayDisabled ? t('omp.noTray', 'OMP 的账号由 OMP 自己管理，暂不提供菜单栏账号列表') : undefined
+                            : trayDisabled ? t('omp.noTray', 'Oh My Pi 的账号由 Oh My Pi 自己管理，暂不提供菜单栏账号列表') : undefined
                         }
                       >
                         <input
