@@ -427,6 +427,8 @@ pub struct CodexLocalAccessProviderGatewayModelCapability {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessProviderGateway {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_scheme: Option<String>,
     pub base_url: String,
     pub api_key: String,
     pub upstream_model: String,
@@ -1084,6 +1086,12 @@ pub struct CodexLocalAccessServiceTierAdaptation {
 #[serde(rename_all = "camelCase")]
 pub struct CodexLocalAccessRequestAttempt {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_size: Option<crate::modules::codex_native_api::diagnostics::RequestSize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_request_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overload_retry: Option<crate::modules::codex_native_api::diagnostics::OverloadRetry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization_route: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization_fallback: Option<CodexLocalAccessAuthorizationFallbackTrace>,
@@ -1096,6 +1104,8 @@ pub struct CodexLocalAccessRequestAttempt {
     pub transport_error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transport_pool_retired: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transport_http1_fallback: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub upstream_http_version: Option<String>,
     #[serde(default)]

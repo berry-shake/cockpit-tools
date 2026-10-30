@@ -81,6 +81,7 @@ fn import_from_local_at_inner(codex_home: &Path) -> Result<CodexAccount, String>
             None,
             None,
             None,
+            None,
         );
     }
 
@@ -128,6 +129,7 @@ fn import_from_local_at_inner(codex_home: &Path) -> Result<CodexAccount, String>
             false,
             false,
             std::collections::HashMap::new(),
+            None,
             None,
             None,
             None,
@@ -188,6 +190,7 @@ fn import_account_struct(account: CodexAccount) -> Result<CodexAccount, String> 
             account.api_vision_routing_model.clone(),
             account.account_name.clone(),
             Some(account.api_model_context_windows.clone()),
+            account.api_auth_scheme.clone(),
         )?;
         let mut changed = false;
         if !account.api_image_generation_account_ids.is_empty()
@@ -1686,6 +1689,7 @@ async fn import_account_core_from_json_value(
                 None,
                 None,
                 None,
+                None,
             )?;
             apply_api_key_import_metadata(&mut account, &value);
             save_account(&account)?;
@@ -1801,6 +1805,7 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
                 None,
                 None,
                 None,
+                None,
             )?;
             if let Some(value) = raw_value.as_ref() {
                 apply_api_key_import_metadata(&mut account, value);
@@ -1841,6 +1846,7 @@ pub async fn import_from_json(json_content: &str) -> Result<Vec<CodexAccount>, S
                 false,
                 false,
                 std::collections::HashMap::new(),
+                None,
                 None,
                 None,
                 None,
