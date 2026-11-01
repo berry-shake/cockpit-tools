@@ -18,11 +18,15 @@ use tokio::{
 
 #[path = "codex_proxy_engine_delay.rs"]
 mod delay;
+#[path = "codex_proxy_engine_native.rs"]
+mod native;
 #[path = "codex_proxy_engine_process.rs"]
 mod process;
+use super::codex_proxy_subscription_parser::native as native_profile;
 pub(crate) use delay::validate_delay_url;
+pub(crate) use native::{native_request, start_native_inspection};
 
-pub const ENGINE_VERSION: &str = "1.19.31";
+pub const ENGINE_VERSION: &str = "1.19.33";
 const START_TIMEOUT: Duration = Duration::from_secs(8);
 static CHILDREN: LazyLock<Mutex<HashMap<uuid::Uuid, Weak<Mutex<Child>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -30,8 +34,11 @@ static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
 
 /// Isolate Mihomo's non-configuration working files from other clients and
 /// accounts. Proxy secrets are sent only through stdin.
-struct RuntimeDirectory(PathBuf);
+pub(crate) struct RuntimeDirectory(PathBuf);
 impl RuntimeDirectory {
+    pub(crate) fn path(&self) -> &Path {
+        &self.0
+    }
     async fn create() -> Result<Self, String> {
         tokio::time::timeout(
             Duration::from_secs(3),
@@ -78,6 +85,8 @@ impl Drop for RuntimeDirectory {
 /// Dropping a lease also kills the child, including cancellation during a probe.
 /// Long-lived account tunnels will keep a lease in the per-account runtime store.
 pub struct NodeTunnel {
+    provider_progress: Option<Arc<super::codex_proxy_engine_errors::ProviderProgress>>,
+    _dependencies: Vec<NodeTunnel>,
     error: Arc<AtomicU8>,
     error_readers: Vec<tokio::task::JoinHandle<()>>,
     child: Arc<Mutex<Child>>,
@@ -88,11 +97,13 @@ pub struct NodeTunnel {
     selection: Option<SelectionReader>,
     // Shared release lease prevents cleanup while the tunnel uses this engine.
     _engine_lease: Option<std::fs::File>,
-    _runtime_dir: RuntimeDirectory,
+    _runtime_dir: Arc<RuntimeDirectory>,
 }
 
 #[derive(Clone)]
 pub struct EngineController {
+    pub(crate) entry: String,
+    pub(crate) proxy_url: String,
     pub(crate) endpoint: String,
     pub(crate) secret: String,
     pub(crate) tunnel_id: uuid::Uuid,
@@ -151,6 +162,8 @@ fn request_route_observer(
 /// Clone before releasing the runtime lock; all HTTP work happens without that lock.
 #[derive(Clone)]
 pub struct SelectionReader {
+    entry: String,
+    native: bool,
     endpoint: String,
     secret: String,
     names: BTreeMap<String, String>,
@@ -243,10 +256,12 @@ impl SelectionReader {
     }
 
     pub async fn selected_node(&self) -> Result<Option<String>, String> {
-        Ok(self
-            .selected_tag()
-            .await?
-            .and_then(|(tag, _)| self.names.get(&tag).cloned()))
+        Ok(self.selected_tag().await?.and_then(|(tag, _)| {
+            self.names
+                .get(&tag)
+                .cloned()
+                .or_else(|| self.native.then_some(tag))
+        }))
     }
 
     /// Read the running engine's last health check for the selected leaf. Never
@@ -256,7 +271,12 @@ impl SelectionReader {
             let Some((tag, test_url)) = self.selected_tag().await? else {
                 return Ok(None);
             };
-            let Some(name) = self.names.get(&tag).cloned() else {
+            let Some(name) = self
+                .names
+                .get(&tag)
+                .cloned()
+                .or_else(|| self.native.then(|| tag.clone()))
+            else {
                 return Ok(None);
             };
             let history = async {
@@ -316,11 +336,16 @@ impl SelectionReader {
                 .timeout(Duration::from_secs(2))
                 .build()
                 .map_err(|_| "PROXY_STATUS_FAILED")?;
-            let mut tag = "account-node".to_owned();
+            let mut tag = self.entry.clone();
+            if tag.is_empty() {
+                return Ok(None);
+            }
             let mut test_url = None;
             for _ in 0..=16 {
                 let Some(members) = self.groups.get(&tag) else {
-                    return Ok(self.names.contains_key(&tag).then_some((tag, test_url)));
+                    return Ok(
+                        (self.native || self.names.contains_key(&tag)).then_some((tag, test_url))
+                    );
                 };
                 let mut response = client
                     .get(format!(
@@ -356,7 +381,7 @@ impl SelectionReader {
                 if now.is_empty() {
                     return Ok(None);
                 }
-                if !members.iter().any(|member| member == now) {
+                if !self.native && !members.iter().any(|member| member == now) {
                     return Err("PROXY_STATUS_FAILED".into());
                 }
                 tag = now.to_owned();
@@ -369,6 +394,17 @@ impl SelectionReader {
 }
 
 impl NodeTunnel {
+    pub(crate) fn native_provider_failed(&self, kind: &str, name: &str) -> bool {
+        self.provider_progress
+            .as_ref()
+            .is_some_and(|p| p.failed(kind, name))
+    }
+    pub(crate) fn native_directory(&self) -> &Path {
+        &self._runtime_dir.0
+    }
+    pub(crate) fn native_directory_lease(&self) -> Arc<RuntimeDirectory> {
+        self._runtime_dir.clone()
+    }
     pub fn failure(&self, fallback: String) -> String {
         super::codex_proxy_engine_errors::code(self.error.load(Ordering::Relaxed))
             .unwrap_or(&fallback)
@@ -480,11 +516,14 @@ pub fn shutdown_all() {
 }
 
 fn request_child_stop(child: &Mutex<Child>, id: uuid::Uuid) {
-    let mut child = child.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut child = child
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Err(error) = child.start_kill() {
         super::logger::log_warn(&format!(
             "[ProxyEngine] stop_failed: tunnel_id={id}, kind={:?}, os_code={:?}",
-            error.kind(), error.raw_os_error()
+            error.kind(),
+            error.raw_os_error()
         ));
     }
 }
@@ -626,15 +665,15 @@ pub(crate) async fn verify_version_with_timeout(
     binary: &Path,
     timeout: Duration,
 ) -> Result<(), String> {
-    let output = tokio::time::timeout(
-        timeout,
-        async {
-            let mut command = command(binary);
-            command.arg("-v").stdin(Stdio::null()).stdout(Stdio::piped());
-            let (child, _process_lifetime) = process::spawn(&mut command)?;
-            child.wait_with_output().await
-        },
-    )
+    let output = tokio::time::timeout(timeout, async {
+        let mut command = command(binary);
+        command
+            .arg("-v")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped());
+        let (child, _process_lifetime) = process::spawn(&mut command)?;
+        child.wait_with_output().await
+    })
     .await
     .map_err(|_| {
         super::logger::log_warn(&format!(
@@ -682,6 +721,9 @@ fn configuration(
     username: &str,
     password: &str,
 ) -> Result<Value, String> {
+    if let Some((profile, target, _)) = native_profile::from_outbound(&outbound)? {
+        return native_profile::configuration(&profile, &target, port, username, password);
+    }
     let (proxies, groups) = super::codex_proxy_catalog_binding::runtime_parts(outbound)?;
     Ok(json!({
         "mixed-port": port, "bind-address": "127.0.0.1", "allow-lan": false,
@@ -850,6 +892,20 @@ async fn start_with_binary_options(
     unified_delay: bool,
 ) -> Result<NodeTunnel, String> {
     network.validate()?;
+    let startup_timeout = if outbound["inspection"] == true
+        || outbound
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item["inspection"] == true))
+    {
+        Duration::from_secs(35)
+    } else {
+        START_TIMEOUT
+    };
+    let outbound = native_profile::resolve(outbound).await?;
+    let (outbound, dependencies) =
+        tokio::time::timeout(START_TIMEOUT, native::dependencies(binary, outbound))
+            .await
+            .map_err(|_| "PROXY_ENGINE_TIMEOUT")??;
     if SHUTTING_DOWN.load(Ordering::SeqCst) {
         return Err("PROXY_ENGINE_STOPPED".into());
     }
@@ -866,8 +922,8 @@ async fn start_with_binary_options(
     .map_err(|_| "PROXY_ENGINE_START_FAILED")?;
     super::codex_proxy_engine_install::verify_managed(binary).await?;
     verify_version(binary).await?;
-    tokio::time::timeout(
-        START_TIMEOUT,
+    let mut tunnel = tokio::time::timeout(
+        startup_timeout,
         start_inner(
             binary,
             outbound,
@@ -879,7 +935,9 @@ async fn start_with_binary_options(
         ),
     )
     .await
-    .map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())?
+    .map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())??;
+    tunnel._dependencies = dependencies;
+    Ok(tunnel)
 }
 
 async fn start_inner(
@@ -891,6 +949,36 @@ async fn start_inner(
     network: super::codex_proxy_network::NetworkOptions,
     unified_delay: bool,
 ) -> Result<NodeTunnel, String> {
+    let native = native_profile::from_outbound(&outbound)?;
+    let provider_progress = native.as_ref().map(|(p, _, _)| {
+        Arc::new(super::codex_proxy_engine_errors::ProviderProgress::new(
+            &p.config,
+        ))
+    });
+    let entry = native
+        .as_ref()
+        .map(|(p, t, _)| {
+            if t["name"] == "GLOBAL" || (t["rules"] == true && p.config["mode"] == "global") {
+                "GLOBAL".into()
+            } else if t["rules"] == true {
+                String::new()
+            } else {
+                p.entry()
+            }
+        })
+        .unwrap_or_else(|| "account-node".into());
+    let names = native
+        .as_ref()
+        .filter(|(p, _, _)| !p.names.is_empty())
+        .map(|(p, t, _)| {
+            let mut names = p.names.clone();
+            names.insert(
+                entry.clone(),
+                t["name"].as_str().unwrap_or(&p.rules_name).to_owned(),
+            );
+            names
+        })
+        .or(names);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|_| "PROXY_ENGINE_START_FAILED")?;
@@ -921,7 +1009,7 @@ async fn start_inner(
         "allow-origins": ["http://cockpit.invalid"], "allow-private-network": false
     });
     let selection = if let Some(names) = names {
-        let groups = config["proxy-groups"]
+        let mut groups: BTreeMap<String, Vec<String>> = config["proxy-groups"]
             .as_array()
             .ok_or("PROXY_ENGINE_START_FAILED")?
             .iter()
@@ -936,7 +1024,18 @@ async fn start_inner(
                 ))
             })
             .collect();
+        if let Some((profile, target, _)) = &native {
+            groups.extend(profile.members.clone());
+            if !entry.is_empty() && entry != "GLOBAL" {
+                groups.insert(
+                    entry.clone(),
+                    vec![target["name"].as_str().unwrap_or("REJECT").to_owned()],
+                );
+            }
+        }
         Some(SelectionReader {
+            entry: entry.clone(),
+            native: native.is_some(),
             endpoint: format!("http://{address}"),
             secret: secret.clone(),
             names,
@@ -946,19 +1045,29 @@ async fn start_inner(
     } else {
         None
     };
+    let readiness_config = config.clone();
     let config = serde_json::to_vec(&config).map_err(|_| "PROXY_ENGINE_START_FAILED")?;
     drop(listener);
     drop(controller_listener);
-    let runtime_dir = RuntimeDirectory::create().await?;
+    let runtime_dir = Arc::new(RuntimeDirectory::create().await?);
+    if let Some((profile, _, _)) = &native {
+        native_profile::restore(profile, runtime_dir.clone()).await?;
+    }
     // Do not send configuration until the child is owned by its Windows job.
-    let (mut child, process_lifetime) =
-        process::spawn(&mut runtime_command(binary, &runtime_dir.0)).map_err(|error| {
-            super::logger::log_warn(&format!(
-                "[ProxyEngine] protected process spawn failed (kind={:?}, os_code={:?})",
-                error.kind(), error.raw_os_error()
-            ));
-            "PROXY_ENGINE_START_FAILED"
-        })?;
+    let mut command = runtime_command(binary, &runtime_dir.0);
+    if let Some((profile, _, _)) = &native {
+        if !profile.resource_directory.is_empty() {
+            command.env("SAFE_PATHS", &profile.resource_directory);
+        }
+    }
+    let (mut child, process_lifetime) = process::spawn(&mut command).map_err(|error| {
+        super::logger::log_warn(&format!(
+            "[ProxyEngine] protected process spawn failed (kind={:?}, os_code={:?})",
+            error.kind(),
+            error.raw_os_error()
+        ));
+        "PROXY_ENGINE_START_FAILED"
+    })?;
     let mut stdin = child.stdin.take().ok_or("PROXY_ENGINE_START_FAILED")?;
     let error = Arc::new(AtomicU8::new(0));
     let mut error_readers = Vec::new();
@@ -971,24 +1080,28 @@ async fn start_inner(
     ));
     let child = Arc::new(Mutex::new(child));
     if let Some(stdout) = stdout {
-        error_readers.push(super::codex_proxy_engine_errors::read(
+        error_readers.push(super::codex_proxy_engine_errors::read_with_providers(
             stdout,
             error.clone(),
             id,
             "stdout",
             Some(Arc::downgrade(&child)),
+            provider_progress.clone(),
         ));
     }
     if let Some(stderr) = stderr {
-        error_readers.push(super::codex_proxy_engine_errors::read(
+        error_readers.push(super::codex_proxy_engine_errors::read_with_providers(
             stderr,
             error.clone(),
             id,
             "stderr",
             Some(Arc::downgrade(&child)),
+            provider_progress.clone(),
         ));
     }
     let tunnel = NodeTunnel {
+        provider_progress,
+        _dependencies: Vec::new(),
         error,
         error_readers,
         child,
@@ -997,6 +1110,12 @@ async fn start_inner(
         _engine_lease: engine_lease,
         _runtime_dir: runtime_dir,
         controller: EngineController {
+            entry: entry.clone(),
+            proxy_url: if desktop {
+                format!("http://127.0.0.1:{port}")
+            } else {
+                format!("socks5h://{username}:{password}@127.0.0.1:{port}")
+            },
             endpoint: format!("http://{address}"),
             secret,
             tunnel_id: id,
@@ -1029,10 +1148,15 @@ async fn start_inner(
             // An exited child may be observed before its final diagnostic is drained.
             // Wait only for the bounded readers, without holding the child/runtime lock.
             let _ = tokio::time::timeout(Duration::from_millis(100), async {
-                while tunnel.error_readers.iter().any(|reader| !reader.is_finished()) {
+                while tunnel
+                    .error_readers
+                    .iter()
+                    .any(|reader| !reader.is_finished())
+                {
                     tokio::time::sleep(Duration::from_millis(2)).await;
                 }
-            }).await;
+            })
+            .await;
             return Err(tunnel.failure("PROXY_ENGINE_START_FAILED".into()));
         }
         if let Ok(Ok(mut socket)) = tokio::time::timeout(
@@ -1063,6 +1187,31 @@ async fn start_inner(
             })
             .await;
             if matches!(authenticated, Ok(Ok(true))) && tunnel.is_running() {
+                if let Some((_, _, selections)) = &native {
+                    native_profile::wait_providers(&tunnel, &readiness_config, false).await?;
+                    for (group, selected) in selections {
+                        let path = format!("proxies/{}", urlencoding::encode(group));
+                        // The socket can be ready before native providers. Wait
+                        // for the saved member under the outer startup deadline.
+                        loop {
+                            if !tunnel.is_running() {
+                                return Err("PROXY_ENGINE_START_FAILED".into());
+                            }
+                            if let Ok(metadata) =
+                                native_request(&tunnel.controller, &path, None).await
+                            {
+                                if metadata["all"].as_array().is_some_and(|all| {
+                                    all.iter().any(|name| name.as_str() == Some(selected))
+                                }) {
+                                    break;
+                                }
+                            }
+                            tokio::time::sleep(Duration::from_millis(50)).await;
+                        }
+                        native_request(&tunnel.controller, &path, Some(json!({"name":selected})))
+                            .await?;
+                    }
+                }
                 return Ok(tunnel);
             }
         }
@@ -1077,11 +1226,15 @@ mod tests {
     #[test]
     fn request_route_observer_contains_only_leaf_names_and_private_controller_metadata() {
         let controller = EngineController {
+            entry: "account-node".into(),
+            proxy_url: String::new(),
             endpoint: "http://127.0.0.1:56789".into(),
             secret: "private-controller-secret".into(),
             tunnel_id: uuid::Uuid::nil(),
         };
         let selection = SelectionReader {
+            entry: "account-node".into(),
+            native: false,
             endpoint: controller.endpoint.clone(),
             secret: controller.secret.clone(),
             measured: Default::default(),
@@ -1145,6 +1298,8 @@ mod tests {
     #[test]
     fn request_route_observer_without_selection_does_not_invent_a_leaf() {
         let controller = EngineController {
+            entry: "account-node".into(),
+            proxy_url: String::new(),
             endpoint: "http://127.0.0.1:56789".into(),
             secret: "private-controller-secret".into(),
             tunnel_id: uuid::Uuid::nil(),
@@ -1232,6 +1387,8 @@ mod tests {
             }
         });
         let reader = SelectionReader {
+            entry: "account-node".into(),
+            native: false,
             endpoint,
             secret: "test-secret".into(),
             measured: Default::default(),
@@ -1250,12 +1407,12 @@ mod tests {
     #[test]
     fn version_requires_mihomo_identity_and_exact_release() {
         assert!(version_matches(
-            b"Mihomo Meta v1.19.31 darwin arm64 with go1.26\n"
+            b"Mihomo Meta v1.19.33 darwin arm64 with go1.26\n"
         ));
-        assert!(!version_matches(b"sing-box version 1.19.31\n"));
-        assert!(!version_matches(b"Mihomo Meta v1.19.310 darwin arm64\n"));
-        assert!(!version_matches(b"Mihomo Meta v1.19.31-alpha\n"));
-        assert!(!version_matches(b"1.19.31"));
+        assert!(!version_matches(b"sing-box version 1.19.33\n"));
+        assert!(!version_matches(b"Mihomo Meta v1.19.330 darwin arm64\n"));
+        assert!(!version_matches(b"Mihomo Meta v1.19.33-alpha\n"));
+        assert!(!version_matches(b"1.19.33"));
     }
 
     #[test]
@@ -1303,6 +1460,8 @@ mod tests {
             }
         });
         let reader = SelectionReader {
+            entry: "account-node".into(),
+            native: false,
             endpoint,
             secret: "local-secret".into(),
             measured: Default::default(),
@@ -1472,7 +1631,7 @@ mod tests {
     fn test_engine() -> PathBuf {
         std::env::var_os("COCKPIT_TEST_MIHOMO")
             .map(PathBuf::from)
-            .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.31 executable")
+            .expect("Set COCKPIT_TEST_MIHOMO to a checksum-verified Mihomo 1.19.33 executable")
     }
 
     #[tokio::test]
@@ -1482,7 +1641,10 @@ mod tests {
         verify_version(&binary).await.unwrap();
         let directory = RuntimeDirectory::create().await.unwrap();
         let mut command = runtime_command(&binary, &directory.0);
-        assert_eq!(command.as_std().get_current_dir(), Some(directory.0.as_path()));
+        assert_eq!(
+            command.as_std().get_current_dir(),
+            Some(directory.0.as_path())
+        );
         let (mut child, _process_lifetime) = process::spawn(&mut command).unwrap();
         let stdin = child.stdin.take().unwrap();
         // Before job assignment/configuration, the engine must wait for input.
@@ -1495,8 +1657,15 @@ mod tests {
             .expect("unconfigured engine did not exit after stdin closed")
             .unwrap();
         assert!(!output.status.success());
-        let diagnostic = format!("{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
-        assert!(diagnostic.contains("config.yaml"), "expected missing private config: {diagnostic}");
+        let diagnostic = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            diagnostic.contains("config.yaml"),
+            "expected missing private config: {diagnostic}"
+        );
         assert!(!directory.0.join("config.yaml").exists());
     }
 
@@ -1655,22 +1824,52 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires a verified Mihomo binary; synthetic config checks only"]
     async fn real_engine_accepts_native_protocol_matrix() {
-        use super::super::{codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser};
+        use super::super::{
+            codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser,
+        };
         let binary = test_engine();
         verify_version(&binary).await.unwrap();
-        let catalog = parser::parse(include_str!("../../tests/fixtures/native-proxy-compatibility.json")).unwrap();
+        let catalog = parser::parse(include_str!(
+            "../../tests/fixtures/native-proxy-compatibility.json"
+        ))
+        .unwrap();
         let directory = RuntimeDirectory::create().await.unwrap();
         let mut checked = 0;
-        for id in catalog.nodes.iter().map(|n| &n.id).chain(catalog.groups.iter().map(|g| &g.id)) {
-            let raw = binding::encode("fixture", "fixture", id, &catalog, &BTreeMap::new()).unwrap();
-            let config = configuration(json!(binding::outbounds(&raw).unwrap()), 12345, "fixture", "fixture").unwrap();
-            let mut child = command(&binary).args(["-t", "-f", "-"]).arg("-d").arg(&directory.0).spawn().unwrap();
+        for id in catalog
+            .nodes
+            .iter()
+            .map(|n| &n.id)
+            .chain(catalog.groups.iter().map(|g| &g.id))
+        {
+            let raw =
+                binding::encode("fixture", "fixture", id, &catalog, &BTreeMap::new()).unwrap();
+            let config = configuration(
+                json!(binding::outbounds(&raw).unwrap()),
+                12345,
+                "fixture",
+                "fixture",
+            )
+            .unwrap();
+            let mut child = command(&binary)
+                .args(["-t", "-f", "-"])
+                .arg("-d")
+                .arg(&directory.0)
+                .spawn()
+                .unwrap();
             tokio::time::timeout(Duration::from_secs(5), async {
                 let mut stdin = child.stdin.take().unwrap();
-                stdin.write_all(&serde_json::to_vec(&config).unwrap()).await.unwrap();
+                stdin
+                    .write_all(&serde_json::to_vec(&config).unwrap())
+                    .await
+                    .unwrap();
                 drop(stdin);
-                assert!(child.wait().await.unwrap().success(), "rejected fixture index {checked}");
-            }).await.expect("native matrix check deadline");
+                assert!(
+                    child.wait().await.unwrap().success(),
+                    "rejected fixture index {checked}"
+                );
+            })
+            .await
+            .expect("native matrix check deadline");
             checked += 1;
         }
         assert_eq!(checked, 16);
@@ -1679,21 +1878,45 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires a verified Mihomo binary; invalid configs never reach a node"]
     async fn real_engine_reports_configuration_errors_without_disabling_catalog_nodes() {
-        use super::super::{codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser};
+        use super::super::{
+            codex_proxy_catalog_binding as binding, codex_proxy_subscription_parser as parser,
+        };
         let binary = test_engine();
         for (proxy, expected) in [
-            (json!({"name":"fixture", "type":"fixture-unknown", "server":"localhost", "port":443}), "PROXY_UNSUPPORTED_PROTOCOL"),
-            (json!({"name":"fixture", "type":"vmess", "server":"localhost", "port":443,
-                "uuid":"11111111-2222-3333-4444-555555555555", "cipher":false}), "PROXY_ENGINE_CONFIG_INVALID"),
-            (json!({"name":"fixture", "type":"wireguard", "server":"localhost", "port":51820,
-                "ip":"10.0.0.2", "private-key":"not-base64", "public-key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}), "PROXY_ENGINE_CONFIG_INVALID"),
+            (
+                json!({"name":"fixture", "type":"fixture-unknown", "server":"localhost", "port":443}),
+                "PROXY_UNSUPPORTED_PROTOCOL",
+            ),
+            (
+                json!({"name":"fixture", "type":"vmess", "server":"localhost", "port":443,
+                "uuid":"11111111-2222-3333-4444-555555555555", "cipher":false}),
+                "PROXY_ENGINE_CONFIG_INVALID",
+            ),
+            (
+                json!({"name":"fixture", "type":"wireguard", "server":"localhost", "port":51820,
+                "ip":"10.0.0.2", "private-key":"not-base64", "public-key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}),
+                "PROXY_ENGINE_CONFIG_INVALID",
+            ),
         ] {
             let catalog = parser::parse(&json!({"proxies":[proxy]}).to_string()).unwrap();
-            assert!(catalog.nodes[0].error.is_none(), "configuration semantics belong to the engine");
-            let raw = binding::encode("fixture", "fixture", &catalog.nodes[0].id, &catalog, &BTreeMap::new()).unwrap();
+            assert!(
+                catalog.nodes[0].error.is_none(),
+                "configuration semantics belong to the engine"
+            );
+            let raw = binding::encode(
+                "fixture",
+                "fixture",
+                &catalog.nodes[0].id,
+                &catalog,
+                &BTreeMap::new(),
+            )
+            .unwrap();
             let result = start_with_binary(&binary, json!(binding::outbounds(&raw).unwrap())).await;
             assert_eq!(result.err().as_deref(), Some(expected));
-            assert!(catalog.nodes[0].error.is_none(), "runtime failure must not disable the catalog entry");
+            assert!(
+                catalog.nodes[0].error.is_none(),
+                "runtime failure must not disable the catalog entry"
+            );
         }
     }
 
@@ -1831,7 +2054,10 @@ mod tests {
             outbound
         };
         let host = native["server"].as_str()?;
-        let port = native.get("server_port").or_else(|| native.get("port"))?.as_u64()?;
+        let port = native
+            .get("server_port")
+            .or_else(|| native.get("port"))?
+            .as_u64()?;
         Some((host, u16::try_from(port).ok().filter(|port| *port > 0)?))
     }
 
@@ -1841,11 +2067,16 @@ mod tests {
             "proxies":[{"name":"fixture", "type":"trojan", "server":"fixture.invalid", "port":443,
                 "password":"synthetic-secret"}]
         }).to_string()).unwrap();
-        assert_eq!(diagnostic_node_endpoint(catalog.nodes[0].outbound.as_ref().unwrap()),
-            Some(("fixture.invalid", 443)));
-        assert_eq!(diagnostic_node_endpoint(&json!({
-            "type":"trojan", "server":"fixture.invalid", "server_port":8443
-        })), Some(("fixture.invalid", 8443)));
+        assert_eq!(
+            diagnostic_node_endpoint(catalog.nodes[0].outbound.as_ref().unwrap()),
+            Some(("fixture.invalid", 443))
+        );
+        assert_eq!(
+            diagnostic_node_endpoint(&json!({
+                "type":"trojan", "server":"fixture.invalid", "server_port":8443
+            })),
+            Some(("fixture.invalid", 8443))
+        );
         for value in [
             json!({"type":"mihomo"}),
             json!({"type":"mihomo", "proxy":{"server":"fixture.invalid", "port":0}}),

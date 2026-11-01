@@ -627,6 +627,8 @@ experimental_bearer_token = "agt_codex_test"
             excluded_models: Vec::new(),
             token_limit: None,
             token_used: 0,
+            budget: Default::default(),
+            budget_usage: Default::default(),
             enabled: true,
             created_at: 0,
             updated_at: 0,
@@ -2142,4 +2144,24 @@ experimental_bearer_token = "agt_codex_test"
 
         fs::remove_dir_all(profile_dir).expect("cleanup fixture");
         fs::remove_dir_all(gateway_profile_dir).expect("cleanup fixture");
+    }
+
+    #[test]
+    fn takeover_restore_does_not_revive_retired_speed_catalog() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = crate::modules::codex_model_catalog_capabilities::FILE_NAME;
+        let current = "model_provider = 'codex_local_access'\nmodel_catalog_json = 'cockpit-model-catalog.json'\n";
+        for reference in [legacy.to_string(), dir.path().join(legacy).to_string_lossy().into_owned()] {
+            let backup = format!("model_catalog_json = '{reference}'\n[profiles.old]\nmodel_catalog_json = '{reference}'\n[profiles.custom]\nmodel_catalog_json = 'user.json'\n");
+            let restored = super::restore_profile_config_toml_from_takeover_backup(
+                dir.path(), Some(current), Some(&backup),
+            ).unwrap().unwrap();
+            let doc = restored.parse::<Document>().unwrap();
+            assert!(doc.get("model_catalog_json").is_none());
+            assert!(!restored.contains(legacy));
+            let custom = super::restore_profile_config_toml_from_takeover_backup(
+                dir.path(), Some(current), Some("model_catalog_json = 'user.json'\n"),
+            ).unwrap().unwrap();
+            assert!(custom.contains("user.json"));
+        }
     }

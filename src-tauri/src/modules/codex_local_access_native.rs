@@ -71,6 +71,7 @@ async fn ensure_native_gateway_locked(
         .map_err(|_| "NATIVE_API_INVALID_ADDRESS".to_string())?;
     let path = native_global_identity_path()?;
     let options = native_api::Options {
+        shared_continuation_references: true,
         session_identity_mapping_enabled: collection.session_identity_mapping_enabled,
         request_timeout: Duration::from_millis(
             collection
@@ -478,6 +479,7 @@ fn native_caller_key<'a>(
             "API key token limit reached",
         ));
     }
+    check_key_budget(key, now_ms(), false)?;
     Ok(Some(key))
 }
 
@@ -589,7 +591,8 @@ fn native_image_allows(collection: &CodexLocalAccessCollection, account: &CodexA
     {
         CodexLocalAccessImageGenerationPolicy::Enabled => true,
         CodexLocalAccessImageGenerationPolicy::Disabled => false,
-        CodexLocalAccessImageGenerationPolicy::Inherit => !account.is_api_key_auth(),
+        CodexLocalAccessImageGenerationPolicy::Inherit => !account.is_api_key_auth()
+            || crate::modules::codex_remote_service::for_routing_account(account).is_some_and(|remote| remote.capabilities.hosted_images),
     }
 }
 
@@ -652,6 +655,11 @@ fn native_model_for_key(
     Ok(canonical.to_string())
 }
 
+fn native_device_restriction_applies(account: &CodexAccount) -> bool {
+    !account.is_api_key_auth() && !account.is_web_session_auth()
+        && !account.is_agent_identity_auth() && !native_is_chatgpt_plan_account(account)
+}
+
 fn native_eligible(account: &CodexAccount) -> bool {
     !account.is_web_session_auth()
         && !account.requires_reauth
@@ -694,6 +702,14 @@ async fn native_load_accounts(
         let _permit = permit;
         ids.iter()
             .filter_map(|id| codex_account::load_account(id))
+            .map(|mut account| {
+                if let Some(remote) = crate::modules::codex_remote_service::for_account(&account) {
+                    for model in remote.image_models {
+                        if !account.api_model_catalog.contains(&model) { account.api_model_catalog.push(model); }
+                    }
+                }
+                account
+            })
             .collect()
     })
     .await
@@ -858,8 +874,31 @@ impl native_contract::Host for NativeHostBridge {
                     })
                 })
                 .ok_or_else(|| native_error(401, "invalid_api_key", "Invalid API key"))?;
+            restore_key_budget(self, &caller).await?;
+            let collection = self.collection().await?;
             native_caller_key(&collection, &caller)?;
             Ok(caller)
+        })
+    }
+
+    fn authorize_management<'a>(&'a self, bearer: &'a str) -> futures_util::future::BoxFuture<'a, Result<native_contract::Caller, native_contract::ServiceError>> {
+        Box::pin(async move {
+            let collection = self.collection().await?;
+            let key = collection.api_keys.iter().find(|key| native_key_matches(&key.key, bearer))
+                .ok_or_else(|| native_error(401, "invalid_api_key", "Invalid API key"))?;
+            let caller = native_contract::Caller { id: key.id.clone(), label: key.label.clone() };
+            restore_key_budget(self, &caller).await?;
+            Ok(caller)
+        })
+    }
+
+    fn caller_permit<'a>(&'a self, caller: &'a native_contract::Caller) -> futures_util::future::BoxFuture<'a, Result<Option<Arc<dyn Send + Sync>>, native_contract::ServiceError>> {
+        Box::pin(async move {
+            usage_log_admission()?;
+            let collection = self.collection().await?;
+            let key = native_caller_key(&collection, caller)?;
+            let key_permit=key.map(acquire_key_concurrency).transpose()?;
+            Ok(Some(usage_caller_permit(key_permit)?))
         })
     }
 
@@ -1340,6 +1379,20 @@ impl native_contract::Host for NativeHostBridge {
                 )
                 .await
             };
+            if current && official_feedback && report.official_registration_id.is_none() && self.account_overrides.is_empty() {
+                let restricted = !report.success && report.error_message.as_deref()
+                    .is_some_and(crate::modules::codex_device_restrictions::explicit_message);
+                if report.success || restricted {
+                    if let Ok(accounts) = self.load_accounts(vec![report.account_id.clone()]).await {
+                        if let Some(account) = accounts.first().filter(|a| native_device_restriction_applies(a)) {
+                            let started = crate::modules::codex_device_restrictions::now()
+                                .saturating_sub(report.elapsed.as_millis().min(i64::MAX as u128) as i64);
+                            crate::modules::codex_device_restrictions::observe_account(account,
+                                crate::modules::codex_device_restrictions::API, "api_response", started, restricted).await;
+                        }
+                    }
+                }
+            }
             if current && official_feedback {
                 self.record_failure_cooldown(&report);
                 self.record_soft_binding_result(&report).await;
@@ -1371,7 +1424,10 @@ impl native_contract::Host for NativeHostBridge {
                     })
                     .unwrap_or(CodexLocalAccessRequestKind::Text),
             };
-            let usage = report.usage.as_ref().map(native_usage_capture);
+            let usage = report.usage.as_ref().filter(|usage| {
+                ["input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens"].iter()
+                    .any(|field| usage.get(*field).is_some_and(|value| !value.is_null()))
+            }).map(native_usage_capture);
             if let Err(error) = record_request_stats_with_meta(
                 (!report.account_id.is_empty()).then_some(report.account_id.as_str()),
                 None,
