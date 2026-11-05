@@ -112,10 +112,17 @@ for (const mode of ['interrupt', 'natural-exit']) {
 test('an immediately orphaned app is found by its real session token, leaving an untagged app running', { skip: process.platform === 'win32', timeout: 10000 }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cockpit-dev-orphan-test-'));
   const executable = path.join(dir, 'cockpit-tools');
-  fs.copyFileSync('/bin/sleep', executable);
-  fs.chmodSync(executable, 0o755);
-  // A relocated Apple platform binary needs a local signature before it can run reliably.
-  if (process.platform === 'darwin') execFileSync('codesign', ['--force', '--sign', '-', executable], { stdio: 'ignore' });
+  if (process.platform === 'darwin') {
+    // Relocated Apple platform binaries can crash even after ad-hoc signing.
+    // Use a native fixture so this test exercises ownership, not system binary relocation.
+    execFileSync('xcrun', ['clang', '-x', 'c', '-', '-o', executable], {
+      input: '#include <unistd.h>\nint main(void) { sleep(30); return 0; }\n',
+    });
+    execFileSync('codesign', ['--force', '--sign', '-', executable], { stdio: 'ignore' });
+  } else {
+    fs.copyFileSync('/bin/sleep', executable);
+    fs.chmodSync(executable, 0o755);
+  }
   const unrelated = spawn(executable, ['30'], { stdio: 'ignore' });
   const pidFile = path.join(dir, 'orphan.pid');
   const cliFile = path.join(dir, 'cli.cjs');
