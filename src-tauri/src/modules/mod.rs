@@ -65,6 +65,7 @@ pub mod codex_proxy_probe;
 pub mod codex_proxy_runtime;
 pub(crate) mod codex_model_catalog;
 pub mod codex_quota;
+pub(crate) mod codex_reset_automation;
 pub(crate) mod codex_quota_sync;
 pub(crate) mod codex_quota_refresh_scheduler;
 pub(crate) mod codex_session_display;
