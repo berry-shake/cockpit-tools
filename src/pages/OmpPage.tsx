@@ -52,12 +52,12 @@ export function OmpPage() {
     pool: t('omp.account.pool', 'Oh My Pi 自动选择'),
     standby: t('omp.account.standby', '待切换'),
     invalid: t('omp.account.invalid', '已停用 · 需重新登录'),
-    trash: t('omp.account.trash', '回收站'),
+    trash: t('common.recycleBin.title', '回收站'),
   })[account.status];
 
   function confirmAction(account: OmpAccount, action: OmpAccountAction) {
     const title = action === 'switch' ? t('omp.account.switchTitle', '切换 Oh My Pi 账号')
-      : action === 'trash' ? t('omp.account.trashTitle', '移入回收站') : t('omp.account.restoreTitle', '恢复账号');
+      : action === 'trash' ? t('common.recycleBin.move', '移入回收站') : t('omp.account.restoreTitle', '恢复账号');
     showModal({ title, description: action === 'switch'
       ? t('omp.account.switchDescription', '将 {{account}} 设为 {{provider}} 的唯一启用账号。同一供应商的其他账号会保留为待切换，不影响其他供应商。建议重启已有 Oh My Pi 会话；环境变量中的 API Key 和其他 profile 不受影响。', { account: accountTitle(account), provider: account.provider })
       : action === 'trash' ? t('omp.account.trashDescription', '停止在 Oh My Pi 中使用此账号，凭据保留在私密恢复文件中，可从回收站恢复。不会自动切换到其他账号。')
@@ -87,11 +87,11 @@ export function OmpPage() {
 
   return <div className="omp-page">
     <header className="omp-header">
-      <div><h1><OmpIcon size={28} /> Oh My Pi <span>{t('omp.account.management', '账号管理')}</span></h1>
+      <div><h1><OmpIcon size={28} /> Oh My Pi <span>{t('accounts.title', '账号管理')}</span></h1>
         <p>{t('omp.account.subtitle', '独立账号 · 原生直连 · 一键切换')}</p></div>
       <div className="omp-header-actions">
         <button className="btn btn-secondary" disabled={busy} onClick={() => void run(refresh)}><RefreshCw size={16} className={busy ? 'spin' : ''} />{t('common.refresh', '刷新')}</button>
-        <button className="btn btn-primary" disabled={busy} aria-expanded={adding} onClick={() => setAdding(!adding)}><Plus size={16} />{t('common.addAccount', '添加账号')}</button>
+        <button className="btn btn-primary" disabled={busy} aria-expanded={adding} onClick={() => setAdding(!adding)}><Plus size={16} />{t('common.shared.addAccount', '添加账号')}</button>
       </div>
     </header>
     <div className="omp-info">{t('omp.account.providerExplanation', '账号按供应商独立切换，不存在跨供应商的全局“当前账号”。同一供应商启用多个账号时，由 Oh My Pi 自动选择；登录与刷新由 Oh My Pi 完成，不经过 Cockpit API 服务。')}</div>
@@ -114,15 +114,15 @@ export function OmpPage() {
     </section>}
 
     <div className="omp-toolbar">
-      <label className="omp-search"><Search size={16} /><input aria-label={t('omp.account.search', '搜索账号')} placeholder={t('omp.account.searchPlaceholder', '搜索邮箱、账号或供应商…')} value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+      <label className="omp-search"><Search size={16} /><input aria-label={t('pelican.search', '搜索账号')} placeholder={t('omp.account.searchPlaceholder', '搜索邮箱、账号或供应商…')} value={search} onChange={(e) => setSearch(e.target.value)} /></label>
       <SingleSelectDropdown className="omp-provider-filter" menuClassName="omp-provider-menu"
         ariaLabel={t('omp.account.providerFilter', '供应商筛选')} value={provider} onChange={setProvider}
         options={[{ value: '', label: t('omp.account.allProviders', '全部供应商') }, ...providers.map((p) => ({ value: p, label: p }))]} />
-      <button className="btn btn-secondary" aria-label={layout === 'cards' ? t('omp.account.listView', '列表视图') : t('omp.account.cardView', '卡片视图')} onClick={() => setLayout(layout === 'cards' ? 'list' : 'cards')}>{layout === 'cards' ? <List size={17} /> : <LayoutGrid size={17} />}</button>
+      <button className="btn btn-secondary" aria-label={layout === 'cards' ? t('common.shared.view.list', '列表视图') : t('common.shared.view.grid', '卡片视图')} onClick={() => setLayout(layout === 'cards' ? 'list' : 'cards')}>{layout === 'cards' ? <List size={17} /> : <LayoutGrid size={17} />}</button>
       <button className="btn btn-secondary" aria-pressed={hideEmail} onClick={() => setHideEmail(!hideEmail)}>{hideEmail ? <Eye size={16} /> : <EyeOff size={16} />}{hideEmail ? t('omp.account.showIdentity', '显示账号') : t('omp.account.hideIdentity', '隐藏账号')}</button>
     </div>
-    <div className="omp-tabs"><button className={!trash ? 'selected' : ''} aria-pressed={!trash} onClick={() => setTrash(false)}>{t('omp.account.all', '全部账号')} <span>{accounts.filter((a) => a.status !== 'trash').length}</span></button>
-      <button className={trash ? 'selected' : ''} aria-pressed={trash} onClick={() => setTrash(true)}><Trash2 size={15} />{t('omp.account.recycleBin', '回收站')} <span>{accounts.filter((a) => a.status === 'trash').length}</span></button></div>
+    <div className="omp-tabs"><button className={!trash ? 'selected' : ''} aria-pressed={!trash} onClick={() => setTrash(false)}>{t('settings.general.autoSwitchAccountScopeAll', '全部账号')} <span>{accounts.filter((a) => a.status !== 'trash').length}</span></button>
+      <button className={trash ? 'selected' : ''} aria-pressed={trash} onClick={() => setTrash(true)}><Trash2 size={15} />{t('common.recycleBin.title', '回收站')} <span>{accounts.filter((a) => a.status === 'trash').length}</span></button></div>
     <div className={`omp-account-groups ${layout}`} aria-busy={busy}>
       {groups.map((group) => <section className="omp-provider-group" key={group.name} aria-label={group.name}>
         <div className="omp-group-heading"><h2>{group.name}</h2><span>{group.accounts.length}</span></div>
@@ -135,14 +135,14 @@ export function OmpPage() {
         <div className="omp-account-actions">
           <span className={`omp-badge ${account.status}`}>{account.status === 'current' && <Check size={13} />}{statusText(account)}</span>
           {account.status === 'trash'
-          ? <button className="btn btn-secondary" disabled={blocked} onClick={() => confirmAction(account, 'restore')}><RotateCcw size={15} />{t('omp.account.restore', '恢复')}</button>
+          ? <button className="btn btn-secondary" disabled={blocked} onClick={() => confirmAction(account, 'restore')}><RotateCcw size={15} />{t('common.recycleBin.restore', '恢复')}</button>
           : <>
-            <button className="btn btn-secondary omp-switch-button" disabled={blocked || account.status === 'current' || account.status === 'invalid'} onClick={() => confirmAction(account, 'switch')}><ArrowRightLeft size={15} />{t('omp.account.switch', '切换')}</button>
-            <button className="btn btn-secondary omp-trash-button" disabled={blocked} title={t('omp.account.trashTitle', '移入回收站')} aria-label={t('omp.account.trashTitle', '移入回收站')} onClick={() => confirmAction(account, 'trash')}><Trash2 size={15} /></button></>}
+            <button className="btn btn-secondary omp-switch-button" disabled={blocked || account.status === 'current' || account.status === 'invalid'} onClick={() => confirmAction(account, 'switch')}><ArrowRightLeft size={15} />{t('dashboard.switch', '切换')}</button>
+            <button className="btn btn-secondary omp-trash-button" disabled={blocked} title={t('common.recycleBin.move', '移入回收站')} aria-label={t('common.recycleBin.move', '移入回收站')} onClick={() => confirmAction(account, 'trash')}><Trash2 size={15} /></button></>}
         </div>
       </article>)}</div></section>)}
     </div>
-    {!visible.length && <div className="omp-empty">{busy ? t('common.loading', '加载中…') : search || provider ? t('omp.account.noMatches', '没有匹配的账号') : trash ? t('omp.account.emptyTrash', '回收站为空') : t('omp.account.noAccounts', '还没有 Oh My Pi 账号，点击“添加账号”开始登录。')}</div>}
+    {!visible.length && <div className="omp-empty">{busy ? t('common.loading', '加载中…') : search || provider ? t('common.shared.noMatch.title', '没有匹配的账号') : trash ? t('common.recycleBin.empty', '回收站为空') : t('omp.account.noAccounts', '还没有 Oh My Pi 账号，点击“添加账号”开始登录。')}</div>}
     <footer className="omp-footnote"><p>{t('omp.account.storeNote', '仅管理默认 ~/.omp 账号库；不修改其他 profile、环境变量或供应商配置。已启用不代表已通过在线验证。')}</p><code>{state?.databasePath}</code></footer>
   </div>;
 }

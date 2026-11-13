@@ -1,8 +1,7 @@
 //! Routing-mode transitions use loopback sockets only; no desktop is launched.
 use super::*;
 
-async fn connect_target(entry: &str, port: u16) -> TcpStream {
-    let entry_port = url::Url::parse(entry).unwrap().port().unwrap();
+async fn connect_target(entry_port: u16, port: u16) -> TcpStream {
     let mut client = TcpStream::connect((Ipv4Addr::LOCALHOST, entry_port))
         .await
         .unwrap();
@@ -54,7 +53,7 @@ async fn disabling_proxy_preserves_entry_and_live_connection_but_new_connections
         )
         .unwrap();
         let entry = ensure(&account.id).await.unwrap().unwrap();
-        let mut existing = connect_target(&entry, port).await;
+        let mut existing = connect_target(entry, port).await;
         existing.write_all(b"before").await.unwrap();
         let mut bytes = [0; 6];
         existing.read_exact(&mut bytes).await.unwrap();
@@ -65,14 +64,30 @@ async fn disabling_proxy_preserves_entry_and_live_connection_but_new_connections
             .unwrap();
         assert!(saved.egress_proxy_disabled);
         assert!(saved.egress_proxy_url.is_none());
-        assert!(codex_account::load_account(&account.id).unwrap().egress_proxy_disabled);
-        assert!(ensure(&account.id).await.unwrap().is_none(), "new launches leave the old local entry behind");
-        assert_eq!(codex_proxy_runtime::status(&account.id).await.unwrap().proxy_source, "disabled");
-        assert!(codex_proxy_runtime::desktop_target(&account.id).await.unwrap().is_none());
+        assert!(
+            codex_account::load_account(&account.id)
+                .unwrap()
+                .egress_proxy_disabled
+        );
+        assert!(
+            ensure(&account.id).await.unwrap().is_none(),
+            "new launches leave the old local entry behind"
+        );
+        assert_eq!(
+            codex_proxy_runtime::status(&account.id)
+                .await
+                .unwrap()
+                .proxy_source,
+            "disabled"
+        );
+        assert!(codex_proxy_runtime::desktop_target(&account.id)
+            .await
+            .unwrap()
+            .is_none());
         existing.write_all(b"after!").await.unwrap();
         existing.read_exact(&mut bytes).await.unwrap();
         assert_eq!(&bytes, b"after!", "existing connection retains its route");
-        let mut fresh = connect_target(&entry, port).await;
+        let mut fresh = connect_target(entry, port).await;
         fresh.read_exact(&mut bytes).await.unwrap();
         assert_eq!(
             &bytes, b"direct",
@@ -116,8 +131,18 @@ async fn disabled_mode_can_be_saved_and_started_with_unreadable_shared_config() 
         .unwrap();
     assert!(saved.egress_proxy_disabled);
     assert!(ensure(&account.id).await.unwrap().is_none());
-    assert!(codex_proxy_runtime::save_binding_with_mode(account.id.clone(), Some("http://127.0.0.1:9".into()), true).await.is_err());
-    assert!(codex_account::load_account(&account.id).unwrap().egress_proxy_disabled);
+    assert!(codex_proxy_runtime::save_binding_with_mode(
+        account.id.clone(),
+        Some("http://127.0.0.1:9".into()),
+        true
+    )
+    .await
+    .is_err());
+    assert!(
+        codex_account::load_account(&account.id)
+            .unwrap()
+            .egress_proxy_disabled
+    );
 }
 
 #[tokio::test]

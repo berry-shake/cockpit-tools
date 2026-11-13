@@ -141,7 +141,8 @@ fn candidate_ports(account_id: &str, recorded: Option<u16>) -> impl Iterator<Ite
         .unwrap_or_else(|| preferred_port(account_id));
     let offset = u32::from(start - PORT_RANGE_START);
     let mut seen = HashSet::new();
-    (0..PORT_ATTEMPTS).map(u32::from)
+    (0..PORT_ATTEMPTS)
+        .map(u32::from)
         .chain((1..=PORT_SCATTER_ATTEMPTS).map(|step| u32::from(step) * PORT_SCATTER_STRIDE))
         .map(move |step| PORT_RANGE_START + ((offset + step) % u32::from(PORT_RANGE_SIZE)) as u16)
         .filter(move |port| seen.insert(*port))
@@ -169,7 +170,9 @@ impl PortRegistry {
     }
 
     fn reserved_for_other(&self, account_id: &str, port: u16) -> bool {
-        self.ports.iter().any(|(owner, reserved)| owner != account_id && *reserved == port)
+        self.ports
+            .iter()
+            .any(|(owner, reserved)| owner != account_id && *reserved == port)
     }
 }
 
@@ -239,7 +242,8 @@ async fn install(account_id: &str, path: Option<&Path>) -> Result<(TcpListener, 
         Some(path) => {
             let path = path.to_path_buf();
             registry_io(move || read_registry_checked(&path))
-                .await.ok_or("PROXY_ENTRY_PORT_UNAVAILABLE")??
+                .await
+                .ok_or("PROXY_ENTRY_PORT_UNAVAILABLE")??
         }
         None => PortRegistry::default(),
     };
@@ -252,7 +256,9 @@ async fn install(account_id: &str, path: Option<&Path>) -> Result<(TcpListener, 
         if registry.reserved_for_other(account_id, port) {
             continue;
         }
-        let Some(listener) = bind_owned_port(account_id, port).await else { continue };
+        let Some(listener) = bind_owned_port(account_id, port).await else {
+            continue;
+        };
         persist_port(path, account_id, port).await;
         return Ok((listener, port));
     }
@@ -263,7 +269,10 @@ async fn install(account_id: &str, path: Option<&Path>) -> Result<(TcpListener, 
 /// Retain the successfully bound socket; probing then rebinding would reopen a race.
 async fn bind_owned_port(account_id: &str, port: u16) -> Option<TcpListener> {
     let mut owners = PORT_OWNERS.lock().await;
-    if owners.iter().any(|(owner, owned)| owner != account_id && *owned == port) {
+    if owners
+        .iter()
+        .any(|(owner, owned)| owner != account_id && *owned == port)
+    {
         return None;
     }
     let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).ok()?;
@@ -311,10 +320,10 @@ async fn route_port(account_id: &str) -> Option<u16> {
     ROUTES.lock().await.get(account_id).copied()
 }
 
-/// Returns the same loopback URL for an account throughout this host process, and the
+/// Returns the same loopback port for an account throughout this host process, and the
 /// recorded port after a host restart. The entry only needs to be installed once per
 /// process; each connection resolves the current binding on its own.
-pub async fn ensure(account_id: &str) -> Result<Option<String>, String> {
+pub async fn ensure(account_id: &str) -> Result<Option<u16>, String> {
     let account_id = account_id.trim();
     if account_id.is_empty() {
         return Ok(None);
@@ -344,7 +353,7 @@ async fn ensure_for_account(
     account: &CodexAccount,
     unified_active: bool,
     path: Option<&Path>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<u16>, String> {
     if !codex_account_proxy::eligible(account) {
         return Ok(None);
     }
@@ -367,6 +376,7 @@ pub(crate) async fn ensure_account_entry(account_id: &str) -> Result<String, Str
     )
     .await
     .map_err(|_| "PROXY_ENGINE_TIMEOUT".to_string())?
+    .map(entry_url)
 }
 
 /// Synchronous, read-only manifest lookup; never creates or waits for a listener.
@@ -378,7 +388,7 @@ pub(crate) fn prepared_url(account_id: &str) -> Result<String, String> {
         .ok_or_else(|| "PROXY_RUNTIME_NOT_READY".to_string())
 }
 
-async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<String, String> {
+async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<u16, String> {
     let start = entry_start_lock(account_id).await;
     let _start = start.lock().await;
     let existing = ROUTES.lock().await.get(account_id).copied();
@@ -386,7 +396,7 @@ async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<String, S
         if entry_status(account_id)
             .is_some_and(|status| status.state == "listening" && status.port == Some(port))
         {
-            return Ok(entry_url(port));
+            return Ok(port);
         }
     }
     let (listener, port) = match install(account_id, path).await {
@@ -398,7 +408,7 @@ async fn ensure_route(account_id: &str, path: Option<&Path>) -> Result<String, S
     };
     spawn_listener(account_id, port, listener);
     ROUTES.lock().await.insert(account_id.to_owned(), port);
-    Ok(entry_url(port))
+    Ok(port)
 }
 
 fn spawn_listener(account_id: &str, port: u16, listener: TcpListener) {
@@ -532,7 +542,12 @@ async fn handle_connection(
     let request = observed_entry.request();
     let upstream = tokio::time::timeout(CONNECT_TIMEOUT, async {
         diagnostic.phase("resolve_route");
-        let target = resolve_desktop_target(account_id).await?;
+        let direct_hosts = super::config::get_codex_proxy_direct_hosts();
+        let target = if super::codex_proxy_direct_hosts::matches(&direct_hosts, &destination.host) {
+            None
+        } else {
+            resolve_desktop_target(account_id).await?
+        };
         diagnostic.route(
             target
                 .as_ref()

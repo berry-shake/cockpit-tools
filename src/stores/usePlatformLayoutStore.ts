@@ -1,10 +1,9 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { ALL_PLATFORM_IDS, PlatformId, supportsPlatformTray } from '../types/platform';
-import { persistPlatformLayout } from '../utils/uiPreferences';
+import { persistPlatformLayout, readPlatformLayout } from '../utils/uiPreferences';
 import { CLASSIC_SIDEBAR_ENTRY_LIMIT } from './useSideNavLayoutStore';
 
-const PLATFORM_LAYOUT_STORAGE_KEY = 'agtools.platform_layout.v1';
 const LEGACY_TRAY_CORE_IDS: PlatformId[] = ['antigravity', 'codex', 'github-copilot', 'windsurf'];
 const TRAY_MIGRATED_PLATFORM_IDS: PlatformId[] = [
   'antigravity_ide',
@@ -300,9 +299,9 @@ function createDefaultTraeSuiteGroup(): PlatformLayoutGroup {
     iconPlatformId: 'trae',
     childConfigs: [
       { platformId: 'trae', name: 'Trae' },
-      { platformId: 'trae_solo', name: 'TRAE SOLO' },
+      { platformId: 'trae_solo', name: 'TraeWork' },
       { platformId: 'trae_cn', name: 'Trae CN' },
-      { platformId: 'trae_solo_cn', name: 'TRAE SOLO CN' },
+      { platformId: 'trae_solo_cn', name: 'TraeWork CN' },
     ],
   };
 }
@@ -537,8 +536,10 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
   if (typeof raw === 'string') {
     const name = raw.trim();
     if (name) {
-      // The previous built-in label; migrate it to the current product name.
-      return fallbackPlatform === 'omp' && name === 'OMP' ? 'Oh My Pi' : name;
+      // Preserve the fork's OMP name migration alongside upstream TRAE branding.
+      return fallbackPlatform === 'omp' && name === 'OMP'
+        ? 'Oh My Pi'
+        : normalizeLegacyTraeBrand(name, fallbackPlatform);
     }
   }
   if (fallbackPlatform === 'antigravity') {
@@ -581,18 +582,25 @@ function normalizeGroupName(raw: unknown, fallbackPlatform: PlatformId): string 
     return 'Trae';
   }
   if (fallbackPlatform === 'trae_solo') {
-    return 'TRAE SOLO';
+    return 'TraeWork';
   }
   if (fallbackPlatform === 'trae_cn') {
     return 'Trae CN';
   }
   if (fallbackPlatform === 'trae_solo_cn') {
-    return 'TRAE SOLO CN';
+    return 'TraeWork CN';
   }
   if (fallbackPlatform === 'grok') {
     return 'Grok CLI';
   }
   return fallbackPlatform.charAt(0).toUpperCase() + fallbackPlatform.slice(1);
+}
+
+function normalizeLegacyTraeBrand(name: string, platformId: PlatformId): string {
+  const legacyName = name.replace(/\u200b$/, '');
+  if (platformId === 'trae_solo' && legacyName === 'TRAE SOLO') return 'TraeWork';
+  if (platformId === 'trae_solo_cn' && legacyName === 'TRAE SOLO CN') return 'TraeWork CN';
+  return name;
 }
 
 function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string | undefined {
@@ -609,7 +617,7 @@ function normalizeGroupChildName(raw: unknown, platformId: PlatformId): string |
   if (platformId === 'claude_manager' && (value === 'Claude' || value === 'Claude CLI')) {
     return 'Claude';
   }
-  return value;
+  return normalizeLegacyTraeBrand(value, platformId);
 }
 
 function normalizeGroupChildConfigs(
@@ -1179,7 +1187,7 @@ function normalizeStateData(
 
 function loadPersistedState(): NormalizedLayoutStateData {
   try {
-    const raw = localStorage.getItem(PLATFORM_LAYOUT_STORAGE_KEY);
+    const raw = readPlatformLayout();
     if (!raw) {
       const defaultGroups = defaultPlatformGroups();
       const defaultOrder = defaultPlatformOrder();
@@ -1873,7 +1881,7 @@ export const usePlatformLayoutStore = create<PlatformLayoutState>((set, get) => 
 if (typeof window !== 'undefined') {
   window.addEventListener('agtools:platform-layout-hydrated', () => {
     // Hydration can finish after the store module has initialized. Reload the
-    // durable value once so a stale WebView cache cannot win after upgrades.
+    // committed value after hydration or a successful configuration restore.
     usePlatformLayoutStore.setState(loadPersistedState());
     usePlatformLayoutStore.getState().syncTrayLayout();
   });

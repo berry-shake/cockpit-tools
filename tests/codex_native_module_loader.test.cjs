@@ -83,7 +83,7 @@ if (!process.versions.electron) {
       assert.equal(result.unsupported.state.nativePatchState, 'active');
       assert.equal(result.unsupported.state.nativePatchMode, 'fast-only');
       assert.equal(result.unsupported.state.nativePatchFeatures, '1010');
-      assert.equal(result.unsupported.state.nativePatchRequestedFeatures, '1011');
+      assert.equal(result.unsupported.state.nativePatchRequestedFeatures, '1110');
       assert.equal(result.unsupported.state.nativeQuotaPatchState, 'unsupported');
       assert.equal(result.unsupported.state.nativePatchReason, 'fast-only-quota-unsupported');
       assert.equal(result.unsupported.quotaInitialReady, false, 'discard every partial quota edit');
@@ -323,12 +323,15 @@ window.fixturePrimary={importUrl:import.meta.url};`;
   files.set('/assets/app-primary-fixture.js', ['text/javascript', primaryModule.replace('submitDisabled:disabled', 'unsupportedDisabled:disabled')]);
   await window.loadURL('app://-/');
   await waitForModule();
-  await evaluate(`window.name='fixture-original-name';${bootstrap}`);
+  // API Service now adapts incoming quota state without patching the composer.
+  // Exercise optional composer fallback with the supported mixed OAuth/API mode.
+  const mixedBootstrap = `window.__cockpitEnhancements={nativeFast:true,quotaCompat:true,apiService:false,apiKeyAuthVerified:true,owner:'loader-test'};${runtime}`;
+  await evaluate(`window.name='fixture-original-name';${mixedBootstrap}`);
   const unsupportedPrepared = await evaluate("window.__cockpitNativeFast.prepareHandoff('unsupported-nonce')");
   assert.equal(unsupportedPrepared.ok, true, JSON.stringify(unsupportedPrepared));
   assert.equal(unsupportedPrepared.mode, 'fast-only');
   const fastOnlyRegistration = await send('Page.addScriptToEvaluateOnNewDocument', {
-    source: `${bootstrap};window.installResult=window.__cockpitNativeFast.consumeHandoff('unsupported-nonce');`,
+    source: `${mixedBootstrap};window.installResult=window.__cockpitNativeFast.consumeHandoff('unsupported-nonce');`,
   });
   await new Promise((resolve, reject) => {
     window.webContents.once('did-finish-load', resolve);

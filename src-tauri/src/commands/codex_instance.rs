@@ -35,6 +35,9 @@ use super::codex_instance_routing::{
 };
 use super::codex_instance_start_runtime::{stop_runtime_for_start, StartRuntimeState};
 
+#[path = "codex_instance_profile_switch.rs"]
+pub(crate) mod profile_switch;
+
 pub(crate) const DEFAULT_INSTANCE_ID: &str = "__default__";
 const CODEX_INSTANCE_LAUNCH_PROGRESS_EVENT: &str = "codex:instance-launch-progress";
 static CODEX_INSTANCE_STARTS_IN_PROGRESS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
@@ -485,6 +488,8 @@ async fn apply_launch_speed_after_auth(
     speed: CodexAppSpeed,
 ) -> Result<(), String> {
     let profile_dir = profile_dir.to_path_buf();
+    let api_service_binding =
+        bind_account_id.is_some_and(modules::codex_instance::is_api_service_bind_account_id);
     let account_id = bind_account_id.map(|id| {
         modules::codex_instance::parse_provider_gateway_bind_account_id(id)
             .unwrap_or_else(|| id.to_string())
@@ -492,19 +497,31 @@ async fn apply_launch_speed_after_auth(
     tauri::async_runtime::spawn_blocking(move || {
         modules::codex_model_catalog_capabilities::prepare_managed_catalog(&profile_dir)?;
         // DeepSeek deliberately removes service_tier as an unsupported option.
-        if account_id.as_deref().and_then(modules::codex_account::load_account)
-            .is_some_and(|account| modules::codex_account::is_deepseek_account(&account)) {
+        if account_id
+            .as_deref()
+            .and_then(modules::codex_account::load_account)
+            .is_some_and(|account| modules::codex_account::is_deepseek_account(&account))
+        {
             return Ok(());
         }
-        modules::codex_speed::write_app_speed_for_dir(&profile_dir, speed.clone())?;
-        if let Err(error) = modules::codex_app_enhancements::prepare_native_fast_for_profile(&profile_dir) {
+        let speed = if api_service_binding {
+            modules::codex_speed::resolve_app_speed_for_launch(&profile_dir, speed)?
+        } else {
+            speed
+        };
+        modules::codex_speed::write_app_speed_for_launch(&profile_dir, speed.clone())?;
+        if let Err(error) =
+            modules::codex_app_enhancements::prepare_native_fast_for_profile(&profile_dir)
+        {
             if speed == CodexAppSpeed::Ultrafast {
                 return Err(format!("无法准备超高速请求能力: {error}"));
             }
             modules::logger::log_warn(&format!("[Codex Speed] {error}"));
         }
         Ok(())
-    }).await.map_err(|error| error.to_string())?
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 async fn restore_mixed_model_gateway_when_disabled(
@@ -697,9 +714,15 @@ async fn apply_bound_account_to_initialized_profile(
             )
             .await?;
         }
-        inject_bound_account_to_profile(profile_dir, account_id, false).await?;
-        ensure_provider_gateway_for_bind_account(profile_dir, bind_account_id, model_routing)
-            .await?;
+        let provider_binding = profile_switch::provider_binding_for_switch(account_id);
+        let projected_binding = provider_binding.as_deref().unwrap_or(account_id);
+        inject_bound_account_to_profile(profile_dir, projected_binding, false).await?;
+        if modules::codex_instance::parse_provider_gateway_bind_account_id(projected_binding)
+            .is_none()
+        {
+            ensure_provider_gateway_for_bind_account(profile_dir, bind_account_id, model_routing)
+                .await?;
+        }
     } else {
         modules::codex_local_access::cleanup_provider_gateway_profile_model_overrides(profile_dir)?;
         modules::codex_local_access::stop_provider_gateways_for_profile(profile_dir).await;
@@ -781,7 +804,7 @@ async fn repair_session_visibility_for_selected_instance(
     instance_name: &str,
     data_dir: &Path,
     launch_mode: &InstanceLaunchMode,
-) -> Result<bool, String> {
+) -> Result<(bool, Option<String>), String> {
     let instance_id = instance_id.to_string();
     let instance_name = instance_name.to_string();
     let data_dir = data_dir.to_path_buf();
@@ -793,11 +816,14 @@ async fn repair_session_visibility_for_selected_instance(
             &data_dir,
             launch_desktop,
         )
-        .map(|summary| !summary.local_project_recovery_deferred)
+        .map(|summary| (
+            !summary.local_project_recovery_deferred,
+            summary.local_project_recovery_deferred_message,
+        ))
         .or_else(|error| {
             if modules::codex_session_visibility::can_defer_launch_snapshot_error(&error) {
                 modules::logger::log_warn(&format!("[Codex Start] session maintenance deferred before writes: instance_id={instance_id}, error={error}"));
-                return Ok(false);
+                return Ok((false, None));
             }
             Err(format!(
                 "同步修复当前 Codex 实例的历史会话可见性失败 ({} / {}): {}",
@@ -865,33 +891,78 @@ mod tests {
             std::fs::create_dir_all(&dir).unwrap();
             std::fs::write(dir.join("config.toml"), "model = 'fixture-model'\n").unwrap();
             store.instances.push(InstanceProfile {
-                id: id.to_string(), name: id.to_string(),
+                id: id.to_string(),
+                name: id.to_string(),
                 user_data_dir: dir.to_string_lossy().to_string(),
-                working_dir: None, extra_args: String::new(), bind_account_id: None,
-                model_routing: None, launch_mode: InstanceLaunchMode::App,
-                app_speed: CodexAppSpeed::Standard, created_at: 1,
-                last_launched_at: None, last_pid: None,
+                working_dir: None,
+                extra_args: String::new(),
+                bind_account_id: None,
+                model_routing: None,
+                launch_mode: InstanceLaunchMode::App,
+                app_speed: CodexAppSpeed::Standard,
+                created_at: 1,
+                last_launched_at: None,
+                last_pid: None,
             });
         }
         modules::codex_instance::save_instance_store(&store).unwrap();
-        for speed in [CodexAppSpeed::Ultrafast, CodexAppSpeed::Fast, CodexAppSpeed::Standard] {
+        for speed in [
+            CodexAppSpeed::Ultrafast,
+            CodexAppSpeed::Fast,
+            CodexAppSpeed::Standard,
+        ] {
             codex_update_instance(
-                "target".to_string(), None, None, None,
-                Some(Some("fixture-account".to_string())), None, None, None,
-                Some(speed.clone()), None, Some(true),
-            ).await.unwrap();
+                "target".to_string(),
+                None,
+                None,
+                None,
+                Some(Some("fixture-account".to_string())),
+                None,
+                None,
+                None,
+                Some(speed.clone()),
+                None,
+                Some(true),
+            )
+            .await
+            .unwrap();
             let reloaded = modules::codex_instance::load_instance_store().unwrap();
-            let target = reloaded.instances.iter().find(|item| item.id == "target").unwrap();
+            let target = reloaded
+                .instances
+                .iter()
+                .find(|item| item.id == "target")
+                .unwrap();
             assert_eq!(target.bind_account_id.as_deref(), Some("fixture-account"));
             assert_eq!(target.app_speed, speed);
-            assert_eq!(reloaded.instances.iter().find(|item| item.id == "other").unwrap().app_speed, CodexAppSpeed::Standard);
+            assert_eq!(
+                reloaded
+                    .instances
+                    .iter()
+                    .find(|item| item.id == "other")
+                    .unwrap()
+                    .app_speed,
+                CodexAppSpeed::Standard
+            );
             let dir = env.root.join("target");
             // Simulate a credential/provider projection restoring the old config.
             // No auth files, real accounts, client processes or model calls are used.
-            std::fs::write(dir.join("config.toml"), "model = 'fixture-model'\nservice_tier = 'default'\n").unwrap();
-            apply_launch_speed_after_auth(&dir, None, target.app_speed.clone()).await.unwrap();
-            assert_eq!(modules::codex_speed::get_app_speed_config_for_dir(&dir).unwrap().speed, speed);
-            assert!(std::fs::read_to_string(dir.join("config.toml")).unwrap().contains("fixture-model"));
+            std::fs::write(
+                dir.join("config.toml"),
+                "model = 'fixture-model'\nservice_tier = 'default'\n",
+            )
+            .unwrap();
+            apply_launch_speed_after_auth(&dir, None, target.app_speed.clone())
+                .await
+                .unwrap();
+            assert_eq!(
+                modules::codex_speed::get_app_speed_config_for_dir(&dir)
+                    .unwrap()
+                    .speed,
+                speed
+            );
+            assert!(std::fs::read_to_string(dir.join("config.toml"))
+                .unwrap()
+                .contains("fixture-model"));
         }
     }
 
@@ -1152,6 +1223,7 @@ mod tests {
             display_name: "GPT-5".to_string(),
             reasoning_efforts: None,
             default_reasoning_effort: None,
+            ultra_reasoning_effort: None,
             context_window: None,
             auto_compact_token_limit: None,
         }]
@@ -1645,6 +1717,8 @@ fn build_launch_command_text(
         }
 
         let mut codex_cmd = String::new();
+        #[cfg(target_os = "macos")]
+        codex_cmd.push_str(&terminal::macos_loopback_bypass_prefix());
         codex_cmd.push_str("CODEX_HOME=");
         codex_cmd.push_str(&posix_shell_quote(&context.user_data_dir));
         codex_cmd.push(' ');
@@ -1733,7 +1807,9 @@ pub async fn codex_get_instance_defaults() -> Result<modules::instance::Instance
 }
 
 #[tauri::command]
-pub async fn codex_list_instances(fresh: Option<bool>) -> Result<Vec<CodexInstanceProfileView>, String> {
+pub async fn codex_list_instances(
+    fresh: Option<bool>,
+) -> Result<Vec<CodexInstanceProfileView>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let store = modules::codex_instance::load_instance_store()?;
         let default_dir = modules::codex_instance::get_default_codex_home()?;
@@ -1755,7 +1831,8 @@ pub async fn codex_list_instances(fresh: Option<bool>) -> Result<Vec<CodexInstan
                 );
                 let running = resolved_pid.is_some();
                 let initialized = is_profile_initialized(&instance.user_data_dir);
-                let mut view = CodexInstanceProfileView::from_profile(instance, running, initialized);
+                let mut view =
+                    CodexInstanceProfileView::from_profile(instance, running, initialized);
                 view.last_pid = resolved_pid;
                 view
             })
@@ -1777,7 +1854,9 @@ pub async fn codex_list_instances(fresh: Option<bool>) -> Result<Vec<CodexInstan
         ));
 
         Ok(result)
-    }).await.map_err(|error| format!("Codex status worker failed: {error}"))?
+    })
+    .await
+    .map_err(|error| format!("Codex status worker failed: {error}"))?
 }
 
 #[tauri::command]
@@ -1785,34 +1864,25 @@ pub async fn codex_get_instance_quick_config(
     instance_id: String,
     api_service_preview: Option<bool>,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
-    let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
-    let api_service_instance = api_service_preview.unwrap_or(false)
-        || (instance_id != DEFAULT_INSTANCE_ID && {
-            modules::codex_instance::load_instance_store()
-                .ok()
-                .and_then(|store| {
-                    store
-                        .instances
-                        .into_iter()
-                        .find(|item| item.id == instance_id)
-                })
-                .and_then(|instance| instance.bind_account_id)
-                .is_some_and(|account_id| {
-                    modules::codex_instance::is_api_service_bind_account_id(&account_id)
-                })
-        });
     tauri::async_runtime::spawn_blocking(move || {
-        let mut config = modules::codex_account::read_quick_config_from_config_toml(&base_dir)?;
+        let target = resolve_codex_instance_start_target(&instance_id)?;
+        let base_dir = &target.user_data_dir;
+        let binding = target.bind_account_id.as_deref();
+        let api_service_instance = api_service_preview.unwrap_or(false)
+            || (!target.is_default
+                && binding.is_some_and(modules::codex_instance::is_api_service_bind_account_id));
+        let mut config = modules::codex_account::read_quick_config_from_config_toml(base_dir)?;
         if api_service_instance {
             // 启动预览属于 API 服务时，清单直接按账号池能力计算，
             // 这样实例尚未接管也能看到本次真正会渲染的模型。
             if let Some(models) =
-                modules::codex_local_access::api_service_preview_model_definitions(&base_dir)
+                modules::codex_local_access::api_service_preview_model_definitions(base_dir)
             {
                 config.experimental_model_catalog_models = models
                     .into_iter()
                     .map(|model| {
-                        config.experimental_model_catalog_models
+                        config
+                            .experimental_model_catalog_models
                             .iter()
                             .find(|saved| saved.model_id == model.model_id)
                             .cloned()
@@ -1820,8 +1890,30 @@ pub async fn codex_get_instance_quick_config(
                     })
                     .collect();
             }
+        } else if !target
+            .model_routing
+            .as_ref()
+            .is_some_and(|routing| routing.enabled)
+        {
+            if let Some(account) = binding
+                .and_then(|id| {
+                    let provider_id =
+                        modules::codex_instance::parse_provider_gateway_bind_account_id(id);
+                    modules::codex_account::load_account(provider_id.as_deref().unwrap_or(id))
+                })
+                .filter(|account| {
+                    account.is_api_key_auth()
+                        && modules::codex_local_access::account_requires_provider_gateway(account)
+                })
+            {
+                modules::codex_local_access::apply_provider_gateway_catalog_reset_defaults(
+                    base_dir,
+                    &account,
+                    &mut config,
+                )?;
+            }
         }
-        if let Some(draft) = read_pending_model_catalog(&base_dir)? {
+        if let Some(draft) = read_pending_model_catalog(base_dir)? {
             draft.apply_to_view(&mut config);
         }
         Ok(config)
@@ -1843,6 +1935,14 @@ pub async fn codex_save_instance_context_management(
     .map_err(|error| format!("保存 Codex 实例上下文管理开关后台任务失败: {}", error))?
 }
 
+fn instance_catalog_used_by_api_service(target: &CodexInstanceStartTarget) -> bool {
+    target.is_default
+        || target
+            .bind_account_id
+            .as_deref()
+            .is_some_and(modules::codex_instance::is_api_service_bind_account_id)
+}
+
 #[tauri::command]
 pub async fn codex_save_instance_quick_config(
     instance_id: String,
@@ -1854,7 +1954,9 @@ pub async fn codex_save_instance_quick_config(
     >,
     experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
-    let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
+    let target = resolve_codex_instance_start_target(&instance_id)?;
+    let affects_api_service = instance_catalog_used_by_api_service(&target);
+    let base_dir = target.user_data_dir;
     let saved = tauri::async_runtime::spawn_blocking(move || {
         let saved = modules::codex_account::save_quick_config_for_base_dir_with_default(
             &base_dir,
@@ -1864,12 +1966,16 @@ pub async fn codex_save_instance_quick_config(
             experimental_model_catalog_models,
             experimental_model_catalog_default_model_id,
         )?;
-        modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        if affects_api_service && experimental_model_catalog_enabled.is_some() {
+            modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        }
         Ok::<crate::models::codex::CodexQuickConfig, String>(saved)
     })
     .await
     .map_err(|error| format!("保存 Codex 实例快捷配置后台任务失败: {}", error))??;
-    modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    if affects_api_service && experimental_model_catalog_enabled.is_some() {
+        modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    }
     Ok(saved)
 }
 
@@ -1880,7 +1986,9 @@ pub async fn codex_save_instance_model_catalog(
     experimental_model_catalog_models: Vec<crate::models::codex::CodexExperimentalModelDefinition>,
     experimental_model_catalog_default_model_id: Option<String>,
 ) -> Result<crate::models::codex::CodexQuickConfig, String> {
-    let base_dir = resolve_instance_base_dir(instance_id.as_str())?;
+    let target = resolve_codex_instance_start_target(&instance_id)?;
+    let affects_api_service = instance_catalog_used_by_api_service(&target);
+    let base_dir = target.user_data_dir;
     if read_pending_model_catalog(&base_dir)?.is_some() {
         return save_pending_model_catalog(
             &base_dir,
@@ -1896,12 +2004,16 @@ pub async fn codex_save_instance_model_catalog(
             experimental_model_catalog_models,
             experimental_model_catalog_default_model_id,
         )?;
-        modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        if affects_api_service {
+            modules::codex_local_access::refresh_api_service_experimental_model_ids();
+        }
         Ok::<crate::models::codex::CodexQuickConfig, String>(saved)
     })
     .await
     .map_err(|error| format!("保存 Codex 实例可见模型后台任务失败: {}", error))??;
-    modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    if affects_api_service {
+        modules::codex_local_access::trigger_gateway_reload_in_background("实验模型目录已更新");
+    }
     Ok(saved)
 }
 
@@ -2280,12 +2392,15 @@ pub async fn codex_preview_session_import(
 pub async fn codex_validate_session_import_paths(
     cwd_mappings: std::collections::HashMap<String, String>,
 ) -> Result<std::collections::HashMap<String, String>, String> {
-    tokio::time::timeout(std::time::Duration::from_secs(5),
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
         tauri::async_runtime::spawn_blocking(move || {
             modules::codex_session_import_paths::validate_target_paths(&cwd_mappings)
         }),
-    ).await.map_err(|_| "验证项目目录超时，请重试".to_string())?
-        .map_err(|error| format!("验证项目目录失败: {}", error))
+    )
+    .await
+    .map_err(|_| "验证项目目录超时，请重试".to_string())?
+    .map_err(|error| format!("验证项目目录失败: {}", error))
 }
 
 #[tauri::command]
@@ -2366,8 +2481,16 @@ pub async fn codex_create_instance(
     app_speed: Option<CodexAppSpeed>,
 ) -> Result<CodexInstanceProfileView, String> {
     let params = modules::codex_instance::CreateInstanceParams {
-        name, user_data_dir, working_dir, extra_args: extra_args.unwrap_or_default(),
-        bind_account_id, model_routing, copy_source_instance_id, init_mode, launch_mode, app_speed,
+        name,
+        user_data_dir,
+        working_dir,
+        extra_args: extra_args.unwrap_or_default(),
+        bind_account_id,
+        model_routing,
+        copy_source_instance_id,
+        init_mode,
+        launch_mode,
+        app_speed,
     };
     let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let worker_cancelled = cancelled.clone();
@@ -2375,7 +2498,9 @@ pub async fn codex_create_instance(
         let mut params = params;
         let effective_launch_mode = params.launch_mode.clone().unwrap_or_default();
         params.model_routing = validate_instance_model_routing(
-            params.bind_account_id.as_deref(), &effective_launch_mode, params.model_routing.as_ref(),
+            params.bind_account_id.as_deref(),
+            &effective_launch_mode,
+            params.model_routing.as_ref(),
         )?;
         modules::codex_instance::create_instance_with_cancellation(params, &worker_cancelled)
     });
@@ -2666,14 +2791,22 @@ pub async fn codex_delete_instance(instance_id: String) -> Result<(), String> {
     if instance_id == DEFAULT_INSTANCE_ID {
         return Err("默认实例不可删除".to_string());
     }
-    let instance = modules::codex_instance::load_instance_store()?
-        .instances
-        .into_iter()
-        .find(|instance| instance.id == instance_id)
-        .ok_or("实例不存在")?;
-    if modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
-        .is_some()
-    {
+    let operation = CodexInstanceStartGuard::acquire(&instance_id)?;
+    let lookup_id = instance_id.clone();
+    let (instance, running) = tauri::async_runtime::spawn_blocking(move || {
+        let instance = modules::codex_instance::load_instance_store()?
+            .instances
+            .into_iter()
+            .find(|instance| instance.id == lookup_id)
+            .ok_or("实例不存在")?;
+        let running =
+            modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
+                .is_some();
+        Ok::<_, String>((instance, running))
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+    if running {
         codex_stop_instance(instance_id.clone()).await?;
     } else {
         modules::codex_local_access::stop_provider_gateways_for_profile(Path::new(
@@ -2681,7 +2814,12 @@ pub async fn codex_delete_instance(instance_id: String) -> Result<(), String> {
         ))
         .await;
     }
-    modules::codex_instance::delete_instance(&instance_id)
+    tauri::async_runtime::spawn_blocking(move || {
+        let _operation = operation;
+        modules::codex_instance::delete_instance(&instance_id)
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// 执行默认实例和多开实例共用的完整启动事务。
@@ -2823,8 +2961,11 @@ async fn codex_start_instance_internal(
     );
     if let Some(account_id) = oauth_account_id.as_deref() {
         if launch_mode_uses_desktop_runtime(&launch_target.launch_mode) {
-            modules::codex_device_restrictions::ensure_allowed(account_id,
-                modules::codex_device_restrictions::DESKTOP).await?;
+            modules::codex_device_restrictions::ensure_allowed(
+                account_id,
+                modules::codex_device_restrictions::DESKTOP,
+            )
+            .await?;
         }
 
         if skip_failed_step == Some("checkAccount") {
@@ -3018,7 +3159,12 @@ async fn codex_start_instance_internal(
         ));
         // Auth/provider restoration can restore a previous service_tier. Apply
         // the selected speed afterwards, before the gateway reads its defaults.
-        apply_launch_speed_after_auth(&default_dir, default_bind_account_id.as_deref(), default_settings.app_speed.clone()).await?;
+        apply_launch_speed_after_auth(
+            &default_dir,
+            default_bind_account_id.as_deref(),
+            default_settings.app_speed.clone(),
+        )
+        .await?;
         let refreshed_oauth_account = oauth_account_id
             .as_deref()
             .and_then(modules::codex_account::load_account);
@@ -3082,19 +3228,6 @@ async fn codex_start_instance_internal(
                 .and_then(launch_credential_kind_for_bind_account_id),
         );
         log_launch_credential_change("before-start-default", &launch_credential_change);
-        if skip_default_bind_account_injection {
-            modules::logger::log_info(
-                "[Codex Thread Sync] before-start-default: skipped on prepared-profile fast path",
-            );
-        } else {
-            let thread_sync_started = Instant::now();
-            sync_codex_threads_across_idle_instances("before-start-default").await;
-            modules::logger::log_info(&format!(
-                "[Codex Start] default thread sync phase finished: elapsed_ms={}, total_ms={}",
-                thread_sync_started.elapsed().as_millis(),
-                flow_started.elapsed().as_millis()
-            ));
-        }
         let sanitize_started = Instant::now();
         if should_skip_launch_step(skip_failed_step, "writeProfile") {
             modules::logger::log_warn("[Codex Start] 用户选择跳过配置清理步骤");
@@ -3110,7 +3243,7 @@ async fn codex_start_instance_internal(
         if should_skip_launch_step(skip_failed_step, "writeProfile") {
             modules::logger::log_warn("[Codex Start] 用户选择跳过会话可见性修复步骤");
         } else {
-            let repaired = repair_session_visibility_for_selected_instance(
+            let (repaired, detail) = repair_session_visibility_for_selected_instance(
                 DEFAULT_INSTANCE_ID,
                 "默认实例",
                 &default_dir,
@@ -3119,8 +3252,17 @@ async fn codex_start_instance_internal(
             .await
             .map_err(|error| format!("Codex 启动已取消: {}", error))?;
             if !repaired {
-                emit_codex_instance_launch_step(&app, emit_launch_progress, &launch_target,
-                    "writeProfile", "warning", 80, serde_json::json!({ "sessionMaintenanceDeferred": true }));
+                emit_codex_instance_launch_step(
+                    &app,
+                    emit_launch_progress,
+                    &launch_target,
+                    "writeProfile",
+                    "warning",
+                    80,
+                    serde_json::json!({
+                        "sessionMaintenanceDeferred": true, "projectRecoveryDeferredMessage": detail
+                    }),
+                );
             }
             ensure_codex_instance_start_not_cancelled(&instance_id)?;
         }
@@ -3171,7 +3313,8 @@ async fn codex_start_instance_internal(
             modules::codex_app_injection::build_launch_args(&extra_args, cdp_enabled)?;
         let launch_proxy = modules::codex_instance::resolve_egress_proxy_for_bind_account(
             default_bind_account_id.as_deref(),
-        ).await?;
+        )
+        .await?;
         launch_proxy.append_electron_args(&mut injection_plan.args);
         emit_codex_instance_launch_step(
             &app,
@@ -3344,7 +3487,12 @@ async fn codex_start_instance_internal(
         inject_started.elapsed().as_millis(),
         flow_started.elapsed().as_millis()
     ));
-    apply_launch_speed_after_auth(instance_dir, instance.bind_account_id.as_deref(), instance.app_speed.clone()).await?;
+    apply_launch_speed_after_auth(
+        instance_dir,
+        instance.bind_account_id.as_deref(),
+        instance.app_speed.clone(),
+    )
+    .await?;
     let refreshed_oauth_account = oauth_account_id
         .as_deref()
         .and_then(modules::codex_account::load_account);
@@ -3410,14 +3558,6 @@ async fn codex_start_instance_internal(
             .and_then(launch_credential_kind_for_bind_account_id),
     );
     log_launch_credential_change("before-start-instance", &launch_credential_change);
-    let thread_sync_started = Instant::now();
-    sync_codex_threads_across_idle_instances("before-start-instance").await;
-    modules::logger::log_info(&format!(
-        "[Codex Start] instance thread sync phase finished: instance_id={}, elapsed_ms={}, total_ms={}",
-        instance.id,
-        thread_sync_started.elapsed().as_millis(),
-        flow_started.elapsed().as_millis()
-    ));
     let sanitize_started = Instant::now();
     if should_skip_launch_step(skip_failed_step, "writeProfile") {
         modules::logger::log_warn("[Codex Start] 用户选择跳过配置清理步骤");
@@ -3434,14 +3574,26 @@ async fn codex_start_instance_internal(
     if should_skip_launch_step(skip_failed_step, "writeProfile") {
         modules::logger::log_warn("[Codex Start] 用户选择跳过会话可见性修复步骤");
     } else {
-        let repaired = repair_session_visibility_for_selected_instance(
-            &instance.id, &instance.name, instance_dir, &instance.launch_mode,
+        let (repaired, detail) = repair_session_visibility_for_selected_instance(
+            &instance.id,
+            &instance.name,
+            instance_dir,
+            &instance.launch_mode,
         )
-            .await
-            .map_err(|error| format!("Codex 启动已取消: {}", error))?;
+        .await
+        .map_err(|error| format!("Codex 启动已取消: {}", error))?;
         if !repaired {
-            emit_codex_instance_launch_step(&app, emit_launch_progress, &launch_target,
-                "writeProfile", "warning", 80, serde_json::json!({ "sessionMaintenanceDeferred": true }));
+            emit_codex_instance_launch_step(
+                &app,
+                emit_launch_progress,
+                &launch_target,
+                "writeProfile",
+                "warning",
+                80,
+                serde_json::json!({
+                    "sessionMaintenanceDeferred": true, "projectRecoveryDeferredMessage": detail
+                }),
+            );
         }
         ensure_codex_instance_start_not_cancelled(&instance_id)?;
     }
@@ -3496,7 +3648,8 @@ async fn codex_start_instance_internal(
         modules::codex_app_injection::build_launch_args(&extra_args, cdp_enabled)?;
     let launch_proxy = modules::codex_instance::resolve_egress_proxy_for_bind_account(
         instance.bind_account_id.as_deref(),
-    ).await?;
+    )
+    .await?;
     launch_proxy.append_electron_args(&mut injection_plan.args);
     emit_codex_instance_launch_step(
         &app,
@@ -3840,16 +3993,17 @@ pub async fn codex_stop_instance(instance_id: String) -> Result<CodexInstancePro
             .map_err(|error| error.to_string())??;
     }
     modules::codex_app_injection::stop_for_profile(Path::new(&instance.user_data_dir));
-    if modules::process::resolve_codex_pid(instance.last_pid, Some(&instance.user_data_dir))
-        .is_some()
-    {
-        let target_home = instance.user_data_dir.clone();
-        tauri::async_runtime::spawn_blocking(move || {
+    let target_home = instance.user_data_dir.clone();
+    let last_pid = instance.last_pid;
+    tauri::async_runtime::spawn_blocking(move || {
+        if modules::process::resolve_codex_pid(last_pid, Some(&target_home)).is_some() {
             modules::process::close_codex_instances(&[target_home], 20)
-        })
-        .await
-        .map_err(|error| error.to_string())??;
-    }
+        } else {
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())??;
     modules::codex_local_access::stop_provider_gateways_for_profile(Path::new(
         &instance.user_data_dir,
     ))

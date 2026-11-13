@@ -1,8 +1,10 @@
+import { hydrateDurableUiSettings } from './utils/durableUiSettings';
 import { CodexAccountServiceHost } from './components/codex/CodexAccountServiceHost';
 import { AppBackground } from './components/AppBackground';
+import { LinuxWindowTitlebar } from './components/layout/LinuxWindowTitlebar';
 import { CodexPathRecoveryDialog } from './components/codex/CodexPathRecoveryDialog';
 import { recoverLegacyCodexPath } from './utils/codexPathRecoveryEvents';
-import { listenSafely as listen } from "./utils/tauriEventListener";
+import { listenSafely as listen, subscribeTauriEvent } from "./utils/tauriEventListener";
 import {
   Suspense,
   lazy,
@@ -50,6 +52,7 @@ import { useCursorAccountStore } from './stores/useCursorAccountStore';
 import { useGrokAccountStore } from './stores/useGrokAccountStore';
 import { useCodebuddyAccountStore } from './stores/useCodebuddyAccountStore';
 import { useCodebuddyCnAccountStore } from './stores/useCodebuddyCnAccountStore';
+import { formatQoderError } from './utils/qoderErrors';
 import { useQoderAccountStore } from './stores/useQoderAccountStore';
 import { useTraeAccountStore } from './stores/useTraeAccountStore';
 import { useWorkbuddyAccountStore } from './stores/useWorkbuddyAccountStore';
@@ -58,7 +61,7 @@ import { useZedAccountStore } from './stores/useZedAccountStore';
 import { useSideNavLayoutStore } from './stores/useSideNavLayoutStore';
 import { usePlatformLayoutStore } from './stores/usePlatformLayoutStore';
 import { initializeClassicSidebar } from './utils/classicSidebarStartup';
-import { getAntigravityRuntimeTarget, resolveAntigravityStartupTarget, setAntigravityRuntimeTarget } from './utils/antigravityRuntimeTarget';
+import { antigravityAppPathTarget, getAntigravityRuntimeTarget, normalizeAntigravityRuntimeTarget, resolveAntigravityStartupTarget, setAntigravityRuntimeTarget } from './utils/antigravityRuntimeTarget';
 import { useTopRightAdStore } from './stores/useTopRightAdStore';
 import { useSponsorStore } from './stores/useSponsorStore';
 import { useRemoteConfigStore } from './stores/useRemoteConfigStore';
@@ -85,7 +88,7 @@ import {
   UPDATE_CHECK_RETRY_DELAYS_MS,
   UPDATE_DOWNLOAD_RETRY_DELAYS_MS,
 } from './utils/updaterRetry';
-import { loadWakeupOfficialLsVersionMode } from './utils/wakeupOfficialLsVersion';
+import { initializeAntigravityWakeupState } from './services/antigravityWakeupStateService';
 import { UpdatePromptPolicy } from './utils/updatePromptPolicy';
 import { createUpdaterDownloadProgress } from './utils/updaterDownloadProgress';
 import {
@@ -99,10 +102,11 @@ import {
   USER_MEMORY_FLAGS,
 } from './utils/userMemory';
 import {
-  clearLegacyWorkbuddyAutoCheckinLogs,
-  getWorkbuddyAutoCheckinConfig,
-  migrateWorkbuddyAutoCheckinConfigAsync,
+  getWorkbuddyAutoCheckinConfigAsync,
+  stageWorkbuddyAutoCheckinLegacyLogs,
 } from './services/workbuddyAutoCheckinService';
+import { getMinimaxCodeAutoCheckinConfigAsync } from './services/minimaxCodeAutoCheckinService';
+import { getTraeAutoCheckinConfigAsync } from './services/traeAutoCheckinService';
 import { prepareCodexLocalAccessForRestart } from './services/codexLocalAccessService';
 import { applyReducedMotion } from './utils/reducedMotion';
 import { initLocalTimeZone } from './utils/localTimeZone';
@@ -117,6 +121,8 @@ import {
   UI_SCALE_DEFAULT,
 } from './utils/uiScale';
 import {
+  ACCOUNTS_CHANGED_EVENT,
+  type AccountSyncEventPayload,
   emitActivePlatformFocus,
   resolvePlatformIdFromPage,
 } from './utils/accountSyncEvents';
@@ -389,6 +395,7 @@ interface GeneralConfigLanguage {
 interface GeneralConfig extends GeneralConfigTheme, GeneralConfigLanguage {
   opencode_app_path: string;
   antigravity_app_path: string;
+  antigravity_legacy_app_path: string;
   codex_app_path: string;
   codex_launch_on_switch: boolean;
   top_right_ad_visible?: boolean;
@@ -456,9 +463,6 @@ function isClaudeWindowsAppLaunchTarget(value: string): boolean {
   return trimmed.startsWith('shell:appsfolder\\') || trimmed.startsWith('shell:appsfolder/');
 }
 
-const WAKEUP_ENABLED_KEY = 'agtools.wakeup.enabled';
-const TASKS_STORAGE_KEY = 'agtools.wakeup.tasks';
-const WAKEUP_FORCE_DISABLE_MIGRATION_KEY = 'agtools.wakeup.migration.force_disable_0_8_14';
 
 function isTraePlatformApp(app: string): app is 'trae' | 'trae_solo' | 'trae_cn' | 'trae_solo_cn' {
   return app === 'trae' || app === 'trae_solo' || app === 'trae_cn' || app === 'trae_solo_cn';
@@ -758,6 +762,7 @@ function isWindowsPlatform(): boolean {
 
 function MainApp() {
   const { t } = useTranslation();
+  const isLinux = /^linux\b/i.test(navigator.platform);
   const sideNavLayoutMode = useSideNavLayoutStore((state) => state.mode);
   const sideNavClassicCollapsed = useSideNavLayoutStore((state) => state.classicCollapsed);
   const sideNavClassicFirstSyncDone = useSideNavLayoutStore((state) => state.classicFirstSyncDone);
@@ -792,6 +797,11 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
+    void import('./services/mfaRecoveryService')
+      .then(({ startMfaRecovery }) => startMfaRecovery())
+      .then(() => import('./services/apiKeyFunVault'))
+      .then(({ initializeApiKeyFunVault }) => initializeApiKeyFunVault())
+      .catch(() => console.warn('[Storage] Could not initialize saved credentials'));
     void hydrateUserMemory().then((memory) => {
       const store = useSideNavLayoutStore.getState();
       if (
@@ -800,7 +810,7 @@ function MainApp() {
       ) {
         store.setHideClassicSwitchPrompt(true);
       }
-    });
+    }).catch(error => console.warn('[User memory]', error));
   }, []);
 
   useEffect(() => {
@@ -861,13 +871,15 @@ function MainApp() {
   }, [page]);
   const [showUpdateNotification, setShowUpdateNotification] = useState(false);
   const [updateNotificationKey, setUpdateNotificationKey] = useState(0);
-  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [closeDialogTrayVisible, setCloseDialogTrayVisible] = useState<boolean | null>(null);
   const [showLogViewer, setShowLogViewer] = useState(false);
   const [showPlatformLayoutModal, setShowPlatformLayoutModal] = useState(false);
   const [platformLayoutRequestedGroupId, setPlatformLayoutRequestedGroupId] = useState<string | null>(null);
   const [showBreakout, setShowBreakout] = useState(false);
   const [hasBreakoutSession, setHasBreakoutSession] = useState(false);
   const [appPathMissing, setAppPathMissing] = useState<AppPathMissingDetail | null>(null);
+  const antigravityRecoveryTarget = normalizeAntigravityRuntimeTarget(appPathMissing?.retry?.runtimeTarget);
+  const antigravityRecoveryApp = antigravityAppPathTarget(antigravityRecoveryTarget);
   const [appPathSetting, setAppPathSetting] = useState(false);
   const [appPathDetecting, setAppPathDetecting] = useState(false);
   const [appPathDraft, setAppPathDraft] = useState('');
@@ -1311,11 +1323,13 @@ function MainApp() {
       return;
     }
     let current = true;
-    void initializeClassicSidebar({
-      isCurrent: () => current,
+    void hydrateDurableUiSettings().then(() => initializeClassicSidebar({
+      isCurrent: () => current
+        && useSideNavLayoutStore.getState().mode === 'classic'
+        && !useSideNavLayoutStore.getState().classicFirstSyncDone,
       initialize: syncSidebarEntriesFromDashboard,
       markInitialized: markSideNavClassicFirstSyncDone,
-    });
+    })).catch(error => console.warn('[Sidebar] failed to read saved preferences:', error));
     return () => { current = false; };
   }, [
     sideNavLayoutMode,
@@ -2241,29 +2255,9 @@ function MainApp() {
   }, []);
 
   useEffect(() => {
-    const syncWakeupStateOnStartup = async () => {
-      let officialLsVersionMode = loadWakeupOfficialLsVersionMode();
-      try {
-        // 一次性迁移：升级到该版本后先将唤醒总开关置为关闭，用户仍可手动再开启
-        if (localStorage.getItem(WAKEUP_FORCE_DISABLE_MIGRATION_KEY) !== '1') {
-          localStorage.setItem(WAKEUP_ENABLED_KEY, 'false');
-          localStorage.setItem(WAKEUP_FORCE_DISABLE_MIGRATION_KEY, '1');
-        }
-        const enabled = localStorage.getItem(WAKEUP_ENABLED_KEY) === 'true';
-        const tasksRaw = localStorage.getItem(TASKS_STORAGE_KEY);
-        const tasks = tasksRaw ? JSON.parse(tasksRaw) : [];
-        officialLsVersionMode = loadWakeupOfficialLsVersionMode();
-        await invoke('wakeup_sync_state', {
-          enabled,
-          tasks,
-          officialLsVersionMode,
-          runStartupTasks: true,
-        });
-      } catch (error) {
-        console.error('唤醒任务状态同步失败:', error);
-      }
-    };
-    void syncWakeupStateOnStartup();
+    void initializeAntigravityWakeupState().catch((error) => {
+      console.error('唤醒任务状态初始化失败:', error);
+    });
   }, []);
 
   useEffect(() => {
@@ -2304,12 +2298,12 @@ function MainApp() {
     };
   }, []);
 
-  // 将旧版本保存在 WebView localStorage 中的设置迁移到 Rust 后台调度器。
+  // 启动时把可读的旧 WebView 签到配置交给后台调度器。
   useEffect(() => {
-    clearLegacyWorkbuddyAutoCheckinLogs();
-    void migrateWorkbuddyAutoCheckinConfigAsync(getWorkbuddyAutoCheckinConfig()).catch((err) => {
-      console.warn('[WorkbuddyAutoCheckin] 迁移旧版自动签到配置失败:', err);
-    });
+    void getWorkbuddyAutoCheckinConfigAsync();
+    void stageWorkbuddyAutoCheckinLegacyLogs().catch(() => {});
+    void getMinimaxCodeAutoCheckinConfigAsync();
+    void getTraeAutoCheckinConfigAsync();
   }, []);
 
   // Check for updates on startup
@@ -2867,23 +2861,7 @@ function MainApp() {
     const handleWakeupResult = (payload: WakeupTaskResultPayload) => {
       if (!payload || typeof payload.taskId !== 'string') return;
 
-      // 更新任务的最后运行时间
-      const tasksRaw = localStorage.getItem(TASKS_STORAGE_KEY);
-      if (tasksRaw) {
-        try {
-          const tasks = JSON.parse(tasksRaw) as Array<{ id: string; lastRunAt?: number }>;
-          const nextTasks = tasks.map((task) =>
-            task.id === payload.taskId ? { ...task, lastRunAt: payload.lastRunAt } : task
-          );
-          localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(nextTasks));
-        } catch (error) {
-          console.error('更新唤醒任务时间失败:', error);
-        }
-      }
-
-      // 历史记录已由后端写入文件，这里只需通知前端刷新
       window.dispatchEvent(new CustomEvent('wakeup-task-result', { detail: payload }));
-      window.dispatchEvent(new Event('wakeup-tasks-updated'));
     };
 
     listen<WakeupTaskResultPayload>('wakeup://task-result', (event) => {
@@ -3167,6 +3145,8 @@ function MainApp() {
                 ? config.workbuddy_app_path
               : appPathMissing.app === 'zed'
                 ? config.zed_app_path
+              : antigravityRecoveryApp === 'antigravity_legacy'
+                ? config.antigravity_legacy_app_path
               : config.antigravity_app_path;
         if (active) {
           const normalizedPath = currentPath || '';
@@ -3183,7 +3163,7 @@ function MainApp() {
     return () => {
       active = false;
     };
-  }, [appPathMissing]);
+  }, [appPathMissing, antigravityRecoveryApp]);
 
   const handlePickMissingAppPath = async () => {
     if (appPathSetting) return;
@@ -3229,13 +3209,16 @@ function MainApp() {
       const app = appPathMissing.app;
       const retry = appPathMissing.retry;
       const antigravityInstanceStartCommand =
-        app === 'antigravity' && retry?.runtimeTarget !== 'antigravity_ide'
+        antigravityRecoveryApp === 'antigravity_legacy'
           ? 'antigravity_legacy_start_instance'
           : 'start_instance';
-      await invoke('set_app_path', { app, path });
+      await invoke('set_app_path', { app: app === 'antigravity' ? antigravityRecoveryApp : app, path });
       if (retry?.kind === 'switchAccount' && retry.accountId && app === 'zed') {
         await useZedAccountStore.getState().switchAccount(retry.accountId);
         setPage('zed');
+      } else if (retry?.kind === 'switchAccount' && retry.accountId && app === 'qoder') {
+        await useQoderAccountStore.getState().switchAccount(retry.accountId);
+        setPage('qoder');
       } else if (retry?.kind === 'switchAccount' && retry.accountId && app === 'claude') {
         await useClaudeAccountStore.getState().switchAccount(retry.accountId);
         await useClaudeAccountStore.getState().fetchCurrentAccountId();
@@ -3247,7 +3230,7 @@ function MainApp() {
         });
         await Promise.allSettled([
           useAccountStore.getState().fetchAccounts(),
-          useAccountStore.getState().fetchCurrentAccount(),
+          useAccountStore.getState().fetchCurrentAccount(antigravityRecoveryTarget),
         ]);
       } else if (retry?.kind === 'instance' && retry.instanceId) {
         if (app === 'codex') {
@@ -3315,19 +3298,14 @@ function MainApp() {
         return;
       }
       console.error('设置应用路径失败:', error);
-      setAppPathActionError(String(error));
+      setAppPathActionError(appPathMissing.app === 'qoder' ? formatQoderError(error) : String(error));
       setAppPathSetting(false);
     }
   };
 
   const handleResetMissingAppPath = async () => {
     if (!appPathMissing || appPathSetting || appPathDetecting) return;
-    const scanApp =
-      appPathMissing.app === 'antigravity' && appPathMissing.retry?.runtimeTarget !== 'antigravity_ide'
-        ? 'antigravity_legacy'
-        : appPathMissing.app === 'antigravity' && appPathMissing.retry?.runtimeTarget === 'antigravity_ide'
-          ? 'antigravity_ide'
-          : appPathMissing.app;
+    const scanApp = appPathMissing.app === 'antigravity' ? antigravityRecoveryApp : appPathMissing.app;
 
     if (isWindowsPlatform()) {
       setAppPathDetecting(true);
@@ -3353,11 +3331,7 @@ function MainApp() {
         }
         if (candidates.length === 0) {
           setAppPathScanError(
-            t(
-              'appPath.missing.scanEmptyGeneric',
-              '未检测到正在运行的 {{app}}，请先启动应用后重试，或手动选择路径。',
-              { app: appPathMissingAppName },
-            ),
+            t('appPath.missing.scanEmptyGeneric', { app: appPathMissingAppName }),
           );
         }
       } catch (error) {
@@ -3401,8 +3375,8 @@ function MainApp() {
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
 
-    listen('window:close_requested', () => {
-      setShowCloseDialog(true);
+    listen<boolean>('window:close_requested', ({ payload }) => {
+      setCloseDialogTrayVisible(payload);
     }).then((fn) => { unlisten = fn; });
 
     return () => {
@@ -3447,6 +3421,15 @@ function MainApp() {
       }
     };
   }, []);
+
+  useEffect(() => subscribeTauriEvent('cursor:index-recovered', () => {
+    void useCursorAccountStore.getState().fetchAccounts();
+  }), []);
+  useEffect(() => subscribeTauriEvent<AccountSyncEventPayload>(ACCOUNTS_CHANGED_EVENT, ({ payload }) => {
+    if (payload?.platformId === 'antigravity' && payload.reason === 'wakeup-quota-refresh') {
+      void useAccountStore.getState().fetchAccounts();
+    }
+  }), []);
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
@@ -3529,7 +3512,6 @@ function MainApp() {
     </div>
   );
 
-  const appPathMissingRuntimeTarget = appPathMissing?.retry?.runtimeTarget;
   const appPathMissingAppName = appPathMissing
     ? appPathMissing.app === 'codex'
       ? 'Codex'
@@ -3552,8 +3534,8 @@ function MainApp() {
               : isTraePlatformApp(appPathMissing.app)
                 ? 'Trae'
               : appPathMissing.app === 'workbuddy'
-                ? 'WorkBuddy'
-              : appPathMissing.app === 'antigravity' && appPathMissingRuntimeTarget === 'antigravity_ide'
+                ? t('workbuddy.desktopEdition')
+              : appPathMissing.app === 'antigravity' && antigravityRecoveryTarget === 'antigravity_ide'
                 ? 'Antigravity IDE'
                 : 'Antigravity'
     : '';
@@ -3589,7 +3571,7 @@ function MainApp() {
 
   return (
     <div
-      className={`app-container${isWindowsPlatform() ? ' app-container-windows' : ''}${sideNavLayoutMode === 'classic' ? ' app-container-side-nav-classic' : ''}${sideNavLayoutMode === 'classic' && sideNavClassicCollapsed ? ' app-container-side-nav-classic-collapsed' : ''}`}
+      className={`app-container${isWindowsPlatform() ? ' app-container-windows' : ''}${isLinux ? ' app-container-linux' : ''}${sideNavLayoutMode === 'classic' ? ' app-container-side-nav-classic' : ''}${sideNavLayoutMode === 'classic' && sideNavClassicCollapsed ? ' app-container-side-nav-classic-collapsed' : ''}`}
     >
       <AppBackground />
       {/* 更新通知：活跃状态时保持挂载，关闭后继续保留当前更新状态 */}
@@ -3640,9 +3622,9 @@ function MainApp() {
       <WindowsOperationDialog />
 
       {/* 关闭确认对话框 */}
-      {showCloseDialog && (
+      {closeDialogTrayVisible !== null && (
         <Suspense fallback={null}>
-          <CloseConfirmDialog onClose={() => setShowCloseDialog(false)} />
+          <CloseConfirmDialog trayVisible={closeDialogTrayVisible} onClose={() => setCloseDialogTrayVisible(null)} />
         </Suspense>
       )}
 
@@ -3830,12 +3812,9 @@ function MainApp() {
         </div>
       )}
       
-      {/* 顶部固定拖拽区域 */}
-      <div
-        className="drag-region"
-        data-tauri-drag-region
-        onMouseDown={handleDragStart}
-      />
+      {isLinux ? <LinuxWindowTitlebar /> : (
+        <div className="drag-region" data-tauri-drag-region onMouseDown={handleDragStart} />
+      )}
 
       {/* 左侧悬浮导航 */}
       <SideNav
@@ -3883,9 +3862,7 @@ function MainApp() {
 
       <div className="main-wrapper">
         {topRightAdVisible && visibleTopCenterPromoAds.length > 0 ? (
-          <div className="app-global-promo-layer" aria-hidden={false}>
-            <TopCenterPromoBanner ads={visibleTopCenterPromoAds} reserveWhenEmpty={false} />
-          </div>
+          <TopCenterPromoBanner ads={visibleTopCenterPromoAds} />
         ) : null}
         {/* overview 现在是合并后的账号总览页面 */}
         <Suspense fallback={suspenseFallback}>

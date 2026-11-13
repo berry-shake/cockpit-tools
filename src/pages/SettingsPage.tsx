@@ -1,3 +1,8 @@
+import {
+  hasActiveWakeupQuotaReset,
+  loadAntigravityWakeupState,
+  WAKEUP_TASKS_UPDATED,
+} from '../services/antigravityWakeupStateService';
 import { resolveCodexAccountDisplayName } from "../utils/codexAccountDisplayName";
 import { ALL_CODEX_AUTO_REFRESH_PLAN_KEYS, sanitizeCodexAutoRefreshPlanKeys } from '../utils/codexAutoRefreshPlanScope';
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -34,7 +39,8 @@ import { applyReducedMotion } from '../utils/reducedMotion';
 import {
   setClaudeQuotaDisplayRemainingEnabled,
 } from '../utils/claudeQuotaDisplayPreference';
-import { getSubscriptionTier } from '../utils/account';
+import { getAntigravityTierBadge, getSubscriptionTier } from '../utils/account';
+import { CodexAccountPlanBadge } from '../components/codex/CodexAccountPlanBadge';
 import type { Account } from '../types/account';
 import type { CodexAccount } from '../types/codex';
 import {
@@ -48,6 +54,7 @@ import {
   CURRENT_ACCOUNT_REFRESH_PLATFORMS,
   type CurrentAccountRefreshMinutesMap,
   type CurrentAccountRefreshPlatform,
+  CURRENT_ACCOUNT_REFRESH_PREFERENCES_CHANGED_EVENT,
   loadCurrentAccountRefreshMinutesMap,
   saveCurrentAccountRefreshMinutesMap,
   loadAccountRefreshOverrides,
@@ -155,10 +162,12 @@ interface GeneralConfig {
   close_behavior: 'ask' | 'minimize' | 'quit';
   minimize_behavior?: 'dock_and_tray' | 'tray_only';
   hide_dock_icon?: boolean;
+  show_tray_icon?: boolean;
   tray_icon_style?: 'template' | 'color';
   menu_bar_quota_enabled?: boolean;
   menu_bar_show_account_prefix?: boolean;
-  menu_bar_quota_platform?: PlatformId;
+  menu_bar_quota_platform?: MenuBarQuotaPlatform;
+  menu_bar_antigravity_metric?: string;
   floating_card_show_on_startup?: boolean;
   startup_minimized?: boolean;
   remember_main_window_state?: boolean;
@@ -170,6 +179,7 @@ interface GeneralConfig {
   auto_import_from_local_enabled?: boolean;
   opencode_app_path: string;
   antigravity_app_path: string;
+  antigravity_legacy_app_path: string;
   codex_app_path: string;
   claude_app_path: string;
   claude_app_scan_roots: string;
@@ -275,6 +285,7 @@ interface GeneralConfig {
 
 type AppPathTarget =
   | 'antigravity'
+  | 'antigravity_legacy'
   | 'codex'
   | 'claude'
   | 'vscode'
@@ -313,6 +324,8 @@ const UNLOCK_FIREWORKS_VISIBLE_MS = 6000;
 const AUTO_SWITCH_SCOPE_ALL_ACCOUNTS: AutoSwitchAccountScopeMode = 'all_accounts';
 const AUTO_SWITCH_SCOPE_SELECTED_ACCOUNTS: AutoSwitchAccountScopeMode = 'selected_accounts';
 const SETTINGS_PAGE_CONFIG_UPDATE_SOURCE_PREFIX = 'settings-page';
+export type MenuBarQuotaPlatform = PlatformId | "claude_cli";
+
 const FALLBACK_PLATFORM_SETTINGS_ORDER: Record<PlatformId, number> = {
   antigravity: 0,
   antigravity_ide: 1,
@@ -500,9 +513,10 @@ export function useSettingsPageController() {
     { value: 'id', label: 'Bahasa Indonesia' },
   ];
 
-  const menuBarQuotaPlatformOptions: Array<{ value: PlatformId; label: string }> = [
+  const menuBarQuotaPlatformOptions: Array<{ value: MenuBarQuotaPlatform; label: string }> = [
     { value: 'codex', label: 'Codex' },
-    { value: 'claude_manager', label: 'Claude' },
+    { value: 'claude_manager', label: t('claude.subPlatform.desktop') },
+    { value: 'claude_cli', label: t('claude.subPlatform.cli') },
     { value: 'antigravity', label: 'Antigravity' },
     { value: 'github-copilot', label: 'GitHub Copilot' },
     { value: 'windsurf', label: 'Windsurf' },
@@ -514,9 +528,9 @@ export function useSettingsPageController() {
     { value: 'qoder', label: 'Qoder' },
     { value: 'zcode', label: 'ZCode' },
     { value: 'trae', label: 'Trae' },
-    { value: 'trae_solo', label: 'TRAE SOLO' },
+    { value: 'trae_solo', label: t('nav.traeSolo') },
     { value: 'trae_cn', label: 'Trae CN' },
-    { value: 'trae_solo_cn', label: 'TRAE SOLO CN' },
+    { value: 'trae_solo_cn', label: t('nav.traeSoloCn') },
     { value: 'workbuddy', label: 'WorkBuddy' },
     { value: 'zed', label: 'Zed' },
   ];
@@ -552,14 +566,17 @@ export function useSettingsPageController() {
   const [closeBehavior, setCloseBehavior] = useState<'ask' | 'minimize' | 'quit'>('ask');
   const [minimizeBehavior, setMinimizeBehavior] = useState<'dock_and_tray' | 'tray_only'>('dock_and_tray');
   const [hideDockIcon, setHideDockIcon] = useState(false);
+  const [showTrayIcon, setShowTrayIcon] = useState(true);
   const [trayIconStyle, setTrayIconStyle] = useState<'template' | 'color'>('template');
   const [menuBarQuotaEnabled, setMenuBarQuotaEnabled] = useState(false);
   const [menuBarShowAccountPrefix, setMenuBarShowAccountPrefix] = useState(true);
-  const [menuBarQuotaPlatform, setMenuBarQuotaPlatform] = useState<PlatformId>('codex');
+  const [menuBarQuotaPlatform, setMenuBarQuotaPlatform] = useState<MenuBarQuotaPlatform>('codex');
+  const [menuBarAntigravityMetric, setMenuBarAntigravityMetric] = useState('');
+  const [menuBarAntigravityMetricDraft, setMenuBarAntigravityMetricDraft] = useState('');
   const [menuBarQuotaModalOpen, setMenuBarQuotaModalOpen] = useState(false);
   const [menuBarQuotaModalMode, setMenuBarQuotaModalMode] = useState<'enable' | 'edit'>('enable');
   const [menuBarQuotaDraftPlatform, setMenuBarQuotaDraftPlatform] =
-    useState<PlatformId>('codex');
+    useState<MenuBarQuotaPlatform>('codex');
   const [menuBarQuotaDraftShowPrefix, setMenuBarQuotaDraftShowPrefix] = useState(true);
   const [floatingCardShowOnStartup, setFloatingCardShowOnStartup] = useState(false);
   const [startupMinimized, setStartupMinimized] = useState(false);
@@ -576,6 +593,7 @@ export function useSettingsPageController() {
   const [errorReportingSaving, setErrorReportingSaving] = useState(false);
   const [opencodeAppPath, setOpencodeAppPath] = useState('');
   const [antigravityAppPath, setAntigravityAppPath] = useState('');
+  const [antigravityLegacyAppPath, setAntigravityLegacyAppPath] = useState('');
   const [codexAppPath, setCodexAppPath] = useState('');
   const [codexOAuthAppVersion, setCodexOAuthAppVersion] = useState('');
   const [codexLaunchCandidates, setCodexLaunchCandidates] = useState<AppLaunchCandidate[]>([]);
@@ -621,7 +639,7 @@ export function useSettingsPageController() {
     Record<CurrentAccountRefreshPlatform, boolean>
   >(() => buildDefaultCurrentAccountRefreshCustomModeMap());
   const [accountOverrides, setAccountOverrides] = useState<AccountRefreshOverrides>(
-    loadAccountRefreshOverrides(),
+    loadAccountRefreshOverrides,
   );
   const [accountLevelRefreshCustomMode, setAccountLevelRefreshCustomMode] = useState<
     Record<string, boolean>
@@ -752,7 +770,6 @@ export function useSettingsPageController() {
   const generalConfigLoadInFlightRef = useRef(false);
   const hasHydratedGeneralConfigRef = useRef(false);
   const persistedGeneralPayloadRef = useRef<Record<string, unknown> | null>(null);
-  const currentAccountRefreshPersistReadyRef = useRef(false);
   
   const [appVersion, setAppVersion] = useState('');
   const [updateChecking, setUpdateChecking] = useState(false);
@@ -792,9 +809,11 @@ export function useSettingsPageController() {
             : disabledReason === 'tos_violation'
               ? 'TOS_VIOLATION'
               : getSubscriptionTier(account.quota);
+        const badge = getAntigravityTierBadge(account.quota);
         return {
           id: account.id,
           label: account.email,
+          badge: <span className={`tier-badge ${badge.className}`}>{badge.label}</span>,
           searchableText: account.email,
           tags: account.tags || [],
           type,
@@ -807,6 +826,7 @@ export function useSettingsPageController() {
       codexAccounts.map((account) => ({
         id: account.id,
         label: resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")),
+        badge: <CodexAccountPlanBadge account={account} />,
         searchableText: [resolveCodexAccountDisplayName(account, t("common.apiKeyAccount")), account.email, account.api_base_url].join(" "),
         tags: account.tags || [],
       })),
@@ -963,13 +983,14 @@ export function useSettingsPageController() {
   const [reportActualPort, setReportActualPort] = useState<number | null>(null);
   const [reportDefaultPort, setReportDefaultPort] = useState(18081);
   const [reportToken, setReportToken] = useState('');
+  const [reportActiveToken, setReportActiveToken] = useState('');
   const [globalProxyEnabled, setGlobalProxyEnabled] = useState(false);
   const [globalProxyUrl, setGlobalProxyUrl] = useState('');
   const [globalProxyNoProxy, setGlobalProxyNoProxy] = useState('');
-  const reportPreviewPort = reportActualPort ?? (parseInt(reportPort, 10) || reportDefaultPort);
-  const reportPreviewToken = encodeURIComponent((reportToken || 'your-token').trim() || 'your-token');
-  const reportRawPreviewUrl = `http://<当前IP>:${reportPreviewPort}/report?token=${reportPreviewToken}`;
-  const reportRenderedPreviewUrl = `${reportRawPreviewUrl}&render=true`;
+  const reportRawPreviewUrl = reportActualPort && reportActiveToken
+    ? `http://127.0.0.1:${reportActualPort}/report?token=${encodeURIComponent(reportActiveToken)}`
+    : '';
+  const reportRenderedPreviewUrl = reportRawPreviewUrl ? `${reportRawPreviewUrl}&render=true` : '';
   const [needsRestart, setNeedsRestart] = useState(false);
   const [networkSaving, setNetworkSaving] = useState(false);
   
@@ -1121,10 +1142,12 @@ export function useSettingsPageController() {
       close_behavior: closeBehavior,
       minimize_behavior: minimizeBehavior,
       hide_dock_icon: hideDockIcon,
+      show_tray_icon: showTrayIcon,
       tray_icon_style: isMacOS ? trayIconStyle : undefined,
       menu_bar_quota_enabled: isMacOS ? menuBarQuotaEnabled : undefined,
       menu_bar_show_account_prefix: isMacOS ? menuBarShowAccountPrefix : undefined,
       menu_bar_quota_platform: isMacOS ? menuBarQuotaPlatform : undefined,
+      menu_bar_antigravity_metric: isMacOS ? menuBarAntigravityMetric : undefined,
       floating_card_show_on_startup: floatingCardShowOnStartup,
       startup_minimized: startupMinimized,
       remember_main_window_state: rememberMainWindowState,
@@ -1135,6 +1158,7 @@ export function useSettingsPageController() {
       auto_import_from_local_enabled: autoImportFromLocalEnabled,
       opencode_app_path: opencodeAppPath,
       antigravity_app_path: antigravityAppPath,
+      antigravity_legacy_app_path: antigravityLegacyAppPath,
       codex_app_path: codexAppPath,
       codex_oauth_app_version: codexOAuthAppVersion.trim(),
       claude_app_path: claudeAppPath,
@@ -1357,10 +1381,12 @@ export function useSettingsPageController() {
     closeBehavior,
     minimizeBehavior,
     hideDockIcon,
+    showTrayIcon,
     trayIconStyle,
     menuBarQuotaEnabled,
     menuBarShowAccountPrefix,
     menuBarQuotaPlatform,
+    menuBarAntigravityMetric,
     isMacOS,
     floatingCardShowOnStartup,
     startupMinimized,
@@ -1382,6 +1408,7 @@ export function useSettingsPageController() {
     uiScale,
     opencodeAppPath,
     antigravityAppPath,
+    antigravityLegacyAppPath,
     codexAppPath,
     claudeAppPath,
     claudeAppScanRoots,
@@ -1472,23 +1499,20 @@ export function useSettingsPageController() {
   ]);
 
   useEffect(() => {
-    if (!generalLoaded) {
-      return;
-    }
-
-    if (!currentAccountRefreshPersistReadyRef.current) {
-      currentAccountRefreshPersistReadyRef.current = true;
-      return;
-    }
-
-    const payload = CURRENT_ACCOUNT_REFRESH_PLATFORMS.reduce((result, platform) => {
-      const raw = Number.parseInt(currentAccountRefreshMinutes[platform], 10);
-      result[platform] = Number.isNaN(raw) ? 1 : raw;
-      return result;
-    }, {} as Partial<Record<CurrentAccountRefreshPlatform, number>>);
-    saveCurrentAccountRefreshMinutesMap(payload);
-    dispatchSettingsConfigUpdated(configUpdateSource);
-  }, [configUpdateSource, generalLoaded, currentAccountRefreshMinutes]);
+    const reload = () => {
+      const saved = toCurrentAccountRefreshMinutesStringMap(loadCurrentAccountRefreshMinutesMap());
+      setCurrentAccountRefreshMinutes(previous => {
+        const next = { ...saved };
+        for (const platform of CURRENT_ACCOUNT_REFRESH_PLATFORMS) {
+          if (currentAccountRefreshCustomMode[platform]) next[platform] = previous[platform];
+        }
+        return next;
+      });
+      setAccountOverrides(loadAccountRefreshOverrides());
+    };
+    window.addEventListener(CURRENT_ACCOUNT_REFRESH_PREFERENCES_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(CURRENT_ACCOUNT_REFRESH_PREFERENCES_CHANGED_EVENT, reload);
+  }, [currentAccountRefreshCustomMode]);
 
   useEffect(() => {
     const handleLanguageUpdated = (event: Event) => {
@@ -1570,60 +1594,21 @@ export function useSettingsPageController() {
     updateRemindersLoaded,
   ]);
 
-  // 检测配额重置任务状态
   useEffect(() => {
+    let disposed = false;
     const checkResetTasks = () => {
-      try {
-        // 检查唤醒总开关
-        const wakeupEnabledRaw = localStorage.getItem('agtools.wakeup.enabled');
-        const wakeupEnabled = wakeupEnabledRaw === 'true';
-        
-        // 如果总开关关闭，不需要限制
-        if (!wakeupEnabled) {
-          setHasActiveResetTasks(false);
-          return;
-        }
-        
-        // 检查是否有启用的配额重置任务
-        const tasksJson = localStorage.getItem('agtools.wakeup.tasks');
-        if (!tasksJson) {
-          setHasActiveResetTasks(false);
-          return;
-        }
-        
-        const tasks = JSON.parse(tasksJson);
-        const hasReset = Array.isArray(tasks) && tasks.some(
-          (task: any) => task.enabled && task.schedule?.wakeOnReset
-        );
-        setHasActiveResetTasks(hasReset);
-      } catch (error) {
-        console.error('检测配额重置任务失败:', error);
-        setHasActiveResetTasks(false);
-      }
+      void loadAntigravityWakeupState().then((state) => {
+        if (!disposed) setHasActiveResetTasks(hasActiveWakeupQuotaReset(state));
+      }).catch((error) => console.error('检测配额重置任务失败:', error));
     };
-    
-    // 初始检测
     checkResetTasks();
-    
-    // 监听存储变化
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'agtools.wakeup.tasks' || e.key === 'agtools.wakeup.enabled') {
-        checkResetTasks();
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    // 监听自定义事件（同一窗口内的任务变更）
-    const handleTasksUpdated = () => checkResetTasks();
-    window.addEventListener('wakeup-tasks-updated', handleTasksUpdated);
-    
+    window.addEventListener(WAKEUP_TASKS_UPDATED, checkResetTasks);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('wakeup-tasks-updated', handleTasksUpdated);
+      disposed = true;
+      window.removeEventListener(WAKEUP_TASKS_UPDATED, checkResetTasks);
     };
   }, []);
-  
+
   const applyTheme = (newTheme: string) => {
     if (newTheme === 'system') {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -1721,10 +1706,12 @@ export function useSettingsPageController() {
       setCloseBehavior(config.close_behavior || 'ask');
       setMinimizeBehavior(config.minimize_behavior || 'dock_and_tray');
       setHideDockIcon(Boolean(config.hide_dock_icon));
+      setShowTrayIcon(config.show_tray_icon ?? true);
       setTrayIconStyle(config.tray_icon_style === 'color' ? 'color' : 'template');
       setMenuBarQuotaEnabled(config.menu_bar_quota_enabled ?? false);
       setMenuBarShowAccountPrefix(config.menu_bar_show_account_prefix ?? true);
       setMenuBarQuotaPlatform(config.menu_bar_quota_platform ?? 'codex');
+      setMenuBarAntigravityMetric(config.menu_bar_antigravity_metric ?? '');
       setFloatingCardShowOnStartup(config.floating_card_show_on_startup ?? false);
       setStartupMinimized(config.startup_minimized ?? false);
       setRememberMainWindowState(config.remember_main_window_state ?? false);
@@ -1735,6 +1722,7 @@ export function useSettingsPageController() {
       setAutoImportFromLocalEnabled(config.auto_import_from_local_enabled ?? false);
       setOpencodeAppPath(config.opencode_app_path || '');
       setAntigravityAppPath(config.antigravity_app_path || '');
+      setAntigravityLegacyAppPath(config.antigravity_legacy_app_path || '');
       setCodexAppPath(config.codex_app_path || '');
       setCodexOAuthAppVersion(config.codex_oauth_app_version || '');
       setClaudeAppPath(config.claude_app_path || '');
@@ -1880,7 +1868,6 @@ export function useSettingsPageController() {
       setTraeSoloCnQuotaAlertThresholdCustomMode(false);
       setZedQuotaAlertThresholdCustomMode(false);
       setCursorQuotaAlertThresholdCustomMode(false);      setCurrentAccountRefreshCustomMode(buildDefaultCurrentAccountRefreshCustomModeMap());
-      currentAccountRefreshPersistReadyRef.current = false;
       // 同步语言
       changeLanguage(config.language);
       applyTheme(config.theme);
@@ -1924,6 +1911,7 @@ export function useSettingsPageController() {
       setReportActualPort(config.report_actual_port);
       setReportDefaultPort(config.report_default_port);
       setReportToken(config.report_token || '');
+      setReportActiveToken(config.report_enabled ? config.report_token.trim() : '');
       setGlobalProxyEnabled(Boolean(config.global_proxy_enabled));
       setGlobalProxyUrl(config.global_proxy_url || '');
       setGlobalProxyNoProxy(config.global_proxy_no_proxy || '');
@@ -2005,7 +1993,11 @@ export function useSettingsPageController() {
         return;
       }
 
-      const result = await invoke<boolean>('save_network_config', {
+      const result = await invoke<{
+        needsRestart: boolean;
+        reportActualPort: number | null;
+        reportError: string | null;
+      }>('save_network_config', {
         wsEnabled,
         wsPort: portNum,
         reportEnabled,
@@ -2016,8 +2008,12 @@ export function useSettingsPageController() {
         globalProxyNoProxy: normalizedGlobalProxyNoProxy,
       });
       
-      if (result) {
-        setNeedsRestart(true);
+      setReportActualPort(result.reportActualPort);
+      setReportActiveToken(reportEnabled ? normalizedToken : '');
+      if (result.needsRestart) setNeedsRestart(true);
+      if (result.reportError) {
+        alert(t('settings.network.reportApplyFailed', { error: result.reportError }));
+      } else if (result.needsRestart) {
         alert(t('settings.network.saveSuccessRestart'));
       } else {
         alert(t('settings.network.saveSuccess'));
@@ -2074,11 +2070,11 @@ export function useSettingsPageController() {
   const getTraeAppDisplayName = (target: TraeAppPathTarget) => {
     switch (target) {
       case 'trae_solo':
-        return 'TRAE SOLO';
+        return t('nav.traeSolo');
       case 'trae_cn':
         return 'Trae CN';
       case 'trae_solo_cn':
-        return 'TRAE SOLO CN';
+        return t('nav.traeSoloCn');
       case 'trae':
       default:
         return 'Trae';
@@ -2088,6 +2084,8 @@ export function useSettingsPageController() {
   const setAppPathForTarget = (target: AppPathTarget, path: string) => {
     if (target === 'antigravity') {
       setAntigravityAppPath(path);
+    } else if (target === 'antigravity_legacy') {
+      setAntigravityLegacyAppPath(path);
     } else if (target === 'codex') {
       setCodexAppPath(path);
       setCodexLaunchCandidates([]);
@@ -2128,6 +2126,8 @@ export function useSettingsPageController() {
   const getAppPathDisplayName = (target: AppPathTarget) => {
     switch (target) {
       case 'antigravity':
+        return 'Antigravity IDE';
+      case 'antigravity_legacy':
         return 'Antigravity';
       case 'codex':
         return 'ChatGPT / Codex';
@@ -2271,11 +2271,7 @@ export function useSettingsPageController() {
             setAppPathForTarget(target, candidates[0].target);
           }
         } else {
-          const message = t(
-            'appPath.missing.scanEmptyGeneric',
-            '未检测到正在运行的 {{app}}，请先启动应用后重试，或手动选择路径。',
-            { app: getAppPathDisplayName(target) },
-          );
+          const message = t('appPath.missing.scanEmptyGeneric', { app: getAppPathDisplayName(target) });
           if (target === 'codex') {
             setCodexAppScanError(message);
           } else {
@@ -2399,11 +2395,15 @@ export function useSettingsPageController() {
   const setCurrentAccountRefreshValue = (
     platform: CurrentAccountRefreshPlatform,
     value: string,
+    commit = true,
   ) => {
-    setCurrentAccountRefreshMinutes((prev) => ({
-      ...prev,
-      [platform]: value,
-    }));
+    setCurrentAccountRefreshMinutes((prev) => ({ ...prev, [platform]: value }));
+    if (commit) {
+      saveCurrentAccountRefreshMinutesMap({
+        ...loadCurrentAccountRefreshMinutesMap(),
+        [platform]: Number.parseInt(value, 10),
+      });
+    }
   };
 
   const setCurrentAccountRefreshCustomModeValue = (
@@ -2494,7 +2494,7 @@ export function useSettingsPageController() {
                   value={value}
                   placeholder={t('quickSettings.inputMinutes', '输入分钟数')}
                   onChange={(event) =>
-                    setCurrentAccountRefreshValue(platform, sanitizeNumberInput(event.target.value))
+                    setCurrentAccountRefreshValue(platform, sanitizeNumberInput(event.target.value), false)
                   }
                   onBlur={() => {
                     const normalized = normalizeNumberInput(value, 1, 999);
@@ -2528,6 +2528,7 @@ export function useSettingsPageController() {
                     setCurrentAccountRefreshValue(
                       platform,
                       value || String(CURRENT_ACCOUNT_REFRESH_PRESET_VALUES[0]),
+                      false,
                     );
                     return;
                   }
@@ -2670,23 +2671,20 @@ export function useSettingsPageController() {
       <div className="settings-row">
         <div className="row-label">
           <div className="row-title">
-            {t('settings.general.accountLevelRefreshTitle', '账号级刷新配置')}
+            {t('settings.general.accountLevelRefreshTitle')}
           </div>
           <div className="row-desc">
-            {t(
-              'settings.general.accountLevelRefreshDesc',
-              '为不同账号设置不同的自动刷新间隔，覆盖平台级默认值。',
-            )}
+            {t('settings.general.accountLevelRefreshDesc')}
           </div>
         </div>
         <div className="row-control">
           <details>
             <summary style={{ cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
               {hasAnyOverride
-                ? t('settings.general.accountLevelRefreshSummaryActive', '已配置 {{count}} 个账号', {
+                ? t('settings.general.accountLevelRefreshSummaryActive', {
                     count: Object.keys(platformOverrides).length,
                   })
-                : t('settings.general.accountLevelRefreshSummary', '展开配置')}
+                : t('settings.general.accountLevelRefreshSummary')}
             </summary>
             <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {accounts.map((account) => {
@@ -2769,10 +2767,10 @@ export function useSettingsPageController() {
                         }
                       >
                         <option value="inherit">
-                          {t('settings.general.accountLevelRefreshInherit', '继承平台设置')}
+                          {t('settings.general.accountLevelRefreshInherit')}
                         </option>
                         <option value="-1">
-                          {t('settings.general.accountLevelRefreshDisabled', '禁用')}
+                          {t('settings.general.autoRefreshDisabled', '禁用')}
                         </option>
                         <option value="1">1 {t('settings.general.minutes')}</option>
                         <option value="2">2 {t('settings.general.minutes')}</option>
@@ -3190,6 +3188,7 @@ export function useSettingsPageController() {
 
   const openMenuBarQuotaModal = (mode: 'enable' | 'edit') => {
     setMenuBarQuotaDraftPlatform(menuBarQuotaPlatform);
+    setMenuBarAntigravityMetricDraft(menuBarAntigravityMetric);
     setMenuBarQuotaDraftShowPrefix(menuBarShowAccountPrefix);
     setMenuBarQuotaModalMode(mode);
     setMenuBarQuotaModalOpen(true);
@@ -3201,6 +3200,7 @@ export function useSettingsPageController() {
 
   const handleConfirmMenuBarQuotaModal = () => {
     setMenuBarQuotaPlatform(menuBarQuotaDraftPlatform);
+    setMenuBarAntigravityMetric(menuBarAntigravityMetricDraft);
     setMenuBarShowAccountPrefix(menuBarQuotaDraftShowPrefix);
     setMenuBarQuotaEnabled(true);
     setMenuBarQuotaModalOpen(false);
@@ -3264,6 +3264,7 @@ export function useSettingsPageController() {
     actualPort,
     antigravityAccountGroups,
     antigravityAppPath,
+    antigravityLegacyAppPath,
     antigravityDualSwitchNoRestartEnabled,
     antigravityLaunchOnSwitch,
     antigravityScopeAccounts,
@@ -3420,6 +3421,8 @@ export function useSettingsPageController() {
     loadGeneralConfig,
     loadUpdateSettings,
     menuBarQuotaDraftPlatform,
+    menuBarAntigravityAccounts: antigravityAccounts,
+    menuBarAntigravityMetricDraft,
     menuBarQuotaDraftShowPrefix,
     menuBarQuotaEnabled,
     menuBarQuotaModalMode,
@@ -3482,6 +3485,7 @@ export function useSettingsPageController() {
     saveGrokCliPath,
     setActiveTab,
     setAntigravityAppPath,
+    setAntigravityLegacyAppPath,
     setAntigravityDualSwitchNoRestartEnabled,
     setAntigravityLaunchOnSwitch,
     setAppAutoLaunchEnabled,
@@ -3569,6 +3573,7 @@ export function useSettingsPageController() {
     setGrokSyncOfficialAuthOnSwitch,
     setHermesAuthOverwriteOnSwitch,
     setHideDockIcon,
+    setShowTrayIcon,
     setKiroAppPath,
     setKiroAutoRefresh,
     setKiroAutoRefreshCustomMode,
@@ -3583,6 +3588,7 @@ export function useSettingsPageController() {
     setMinimaxCodeQuotaAlertThresholdCustomMode,
     setLanguage,
     setMenuBarQuotaDraftPlatform,
+    setMenuBarAntigravityMetricDraft,
     setMenuBarQuotaDraftShowPrefix,
     setMenuBarQuotaEnabled,
     setOpenclawAuthOverwriteOnSwitch,
@@ -3703,6 +3709,7 @@ export function useSettingsPageController() {
     traeSoloQuotaAlertThresholdCustomMode,
     traeSoloQuotaAlertThresholdIsPreset,
     trayIconStyle,
+    showTrayIcon,
     uiScale,
     updateChecking,
     updateCheckMessage,

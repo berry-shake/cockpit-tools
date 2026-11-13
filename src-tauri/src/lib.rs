@@ -38,12 +38,38 @@ pub fn get_app_handle() -> Option<&'static tauri::AppHandle> {
 #[cfg(test)]
 mod tests {
     use super::{
-        has_enabled_periodic_account_refresh, should_apply_startup_minimized,
-        should_hide_startup_minimized_window, should_preserve_main_window_for_background_refresh,
+        configure_main_window_decorations, has_enabled_periodic_account_refresh,
+        should_apply_startup_minimized, should_hide_startup_minimized_window,
+        should_preserve_main_window_for_background_refresh,
         should_preserve_main_window_for_menu_bar_refresh,
         should_prevent_exit_after_main_window_destroyed, should_show_macos_dock,
     };
     use crate::modules::config::UserConfig;
+
+    #[test]
+    fn linux_main_window_uses_client_decorations_for_startup_and_recreation() {
+        let mut config = tauri::Config::default();
+        config.app.windows = vec![
+            tauri::utils::config::WindowConfig {
+                label: "main".into(),
+                decorations: true,
+                resizable: true,
+                ..Default::default()
+            },
+            tauri::utils::config::WindowConfig {
+                label: "other".into(),
+                decorations: true,
+                ..Default::default()
+            },
+        ];
+        configure_main_window_decorations(&mut config, false);
+        assert!(config.app.windows[0].decorations);
+        configure_main_window_decorations(&mut config, true);
+        let recreated = config.app.windows[0].clone();
+        assert!(!recreated.decorations);
+        assert!(recreated.resizable);
+        assert!(config.app.windows[1].decorations);
+    }
 
     #[test]
     fn startup_minimized_does_not_hide_when_disabled() {
@@ -115,14 +141,23 @@ mod tests {
 
     #[test]
     fn macos_close_to_tray_always_hides_dock() {
-        assert!(!should_show_macos_dock(false, false));
-        assert!(!should_show_macos_dock(false, true));
+        assert!(!should_show_macos_dock(false, false, true));
+        assert!(!should_show_macos_dock(false, true, true));
     }
 
     #[test]
     fn macos_visible_main_window_respects_dock_preference() {
-        assert!(should_show_macos_dock(true, false));
-        assert!(!should_show_macos_dock(true, true));
+        assert!(should_show_macos_dock(true, false, true));
+        assert!(!should_show_macos_dock(true, true, true));
+    }
+
+    #[test]
+    fn macos_keeps_dock_available_without_a_tray() {
+        for visible in [true, false] {
+            for hide_dock in [true, false] {
+                assert!(should_show_macos_dock(visible, hide_dock, false));
+            }
+        }
     }
 
     #[test]
@@ -190,6 +225,16 @@ mod tests {
     }
 
     #[test]
+    fn native_antigravity_refresh_does_not_require_a_windows_webview() {
+        let mut config = UserConfig::default();
+        disable_all_periodic_refresh(&mut config);
+        config.auto_refresh_minutes = 10;
+        assert!(!should_preserve_main_window_for_background_refresh(
+            false, true, false, &config
+        ));
+    }
+
+    #[test]
     fn periodic_refresh_does_not_change_non_windows_close_behavior() {
         let config = UserConfig::default();
         assert!(!should_preserve_main_window_for_background_refresh(
@@ -249,7 +294,11 @@ fn should_hide_startup_minimized_window(
     config: &modules::config::UserConfig,
     is_macos: bool,
 ) -> bool {
-    config.startup_minimized && is_macos
+    config.startup_minimized && is_macos && config.show_tray_icon
+}
+
+fn should_hide_dock_icon(config: &modules::config::UserConfig) -> bool {
+    config.show_tray_icon && config.hide_dock_icon
 }
 
 fn should_preserve_main_window_for_menu_bar_refresh(
@@ -263,13 +312,16 @@ fn should_apply_startup_minimized(tray_created: bool, is_macos: bool) -> bool {
     tray_created || !is_macos
 }
 
-fn should_show_macos_dock(main_window_visible: bool, hide_dock_icon: bool) -> bool {
-    main_window_visible && !hide_dock_icon
+fn should_show_macos_dock(
+    main_window_visible: bool,
+    hide_dock_icon: bool,
+    tray_available: bool,
+) -> bool {
+    !tray_available || (main_window_visible && !hide_dock_icon)
 }
 
 fn has_enabled_periodic_account_refresh(config: &modules::config::UserConfig) -> bool {
     [
-        config.auto_refresh_minutes,
         config.codex_auto_refresh_minutes,
         config.zed_auto_refresh_minutes,
         config.ghcp_auto_refresh_minutes,
@@ -345,25 +397,28 @@ pub(crate) fn apply_macos_activation_policy_for_window_state<R: tauri::Runtime>(
     main_window_visible: bool,
 ) {
     let config = modules::config::get_user_config();
-    let dock_visible = should_show_macos_dock(main_window_visible, config.hide_dock_icon);
-    let (policy, policy_label) = if dock_visible {
-        (ActivationPolicy::Regular, "visible")
+    let tray_available = config.show_tray_icon && app.tray_by_id(modules::tray::TRAY_ID).is_some();
+    let dock_visible =
+        should_show_macos_dock(main_window_visible, config.hide_dock_icon, tray_available);
+    if let Err(err) = set_macos_dock_policy(app, !dock_visible) {
+        logger::log_warn(&format!("[Window] 应用 macOS Dock 图标策略失败: {}", err));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn set_macos_dock_policy<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    hide_dock_icon: bool,
+) -> tauri::Result<()> {
+    let (policy, dock_visible, policy_label) = if hide_dock_icon {
+        (ActivationPolicy::Accessory, false, "hidden")
     } else {
-        (ActivationPolicy::Accessory, "hidden")
+        (ActivationPolicy::Regular, true, "visible")
     };
-
-    if let Err(err) = app.set_activation_policy(policy) {
-        logger::log_warn(&format!("[Window] 设置 macOS 激活策略失败: {}", err));
-    }
-
-    if let Err(err) = app.set_dock_visibility(dock_visible) {
-        logger::log_warn(&format!("[Window] 设置 macOS Dock 可见性失败: {}", err));
-    }
-
-    info!(
-        "[Window] 已应用 macOS Dock 图标策略: {}, main_window_visible={}",
-        policy_label, main_window_visible
-    );
+    app.set_activation_policy(policy)?;
+    app.set_dock_visibility(dock_visible)?;
+    info!("[Window] 已应用 macOS Dock 图标策略: {}", policy_label);
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -378,6 +433,19 @@ pub(crate) fn apply_macos_activation_policy<R: tauri::Runtime>(app: &tauri::AppH
 #[cfg(target_os = "macos")]
 pub(crate) fn hide_macos_dock_for_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     apply_macos_activation_policy_for_window_state(app, false);
+}
+
+fn apply_tray_visibility(app: &tauri::AppHandle, visible: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    if !visible {
+        set_macos_dock_policy(app, false).map_err(|err| err.to_string())?;
+    }
+    modules::tray::set_tray_visibility(app, visible)?;
+    #[cfg(target_os = "macos")]
+    if visible {
+        apply_macos_activation_policy(app);
+    }
+    Ok(())
 }
 
 fn handle_zcode_oauth_deep_links(args: &[String]) -> bool {
@@ -409,6 +477,19 @@ fn summarize_deep_link_args(args: &[String]) -> Vec<String> {
         .collect()
 }
 
+fn configure_main_window_decorations(config: &mut tauri::Config, is_linux: bool) {
+    if is_linux {
+        if let Some(main) = config
+            .app
+            .windows
+            .iter_mut()
+            .find(|window| window.label == "main")
+        {
+            main.decorations = false;
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     if let Some(code) = modules::codex_continuity_worker::try_run() {
@@ -429,6 +510,9 @@ pub fn run() {
         }
     }
 
+    // Tauri and the tray's window recreation both read this configuration.
+    let mut context = tauri::generate_context!();
+    configure_main_window_decorations(context.config_mut(), cfg!(target_os = "linux"));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -478,6 +562,7 @@ pub fn run() {
 
             // 存储全局 AppHandle
             let _ = APP_HANDLE.set(app.handle().clone());
+            modules::codex_quota_history::start_maintenance();
 
             // Restore geometry before applying the initial window state later in setup.
             if let Some(main) = app.get_webview_window("main") {
@@ -491,6 +576,29 @@ pub fn run() {
             // 启动时清理 WebKit LocalStorage WAL，防止无限膨胀
             std::thread::spawn(|| {
                 modules::webkit_cache_maintenance::checkpoint_webkit_localstorage();
+                modules::workbuddy_auto_checkin::schedule_log_migration();
+                modules::trae_auto_checkin::schedule_log_migration();
+                modules::minimax_code_auto_checkin::schedule_log_migration();
+                for result in [
+                    modules::wakeup_history::schedule_migration(),
+                    modules::account_groups_store::schedule_legacy_groups(),
+                    modules::account::schedule_index_migration(),
+                    modules::codex_account::schedule_codex_index_migration(),
+                    modules::instance_store::schedule_legacy_registries(),
+                    modules::provider_index_maintenance::schedule_all(),
+                    modules::cursor_account::schedule_index_migration(),
+                    modules::provider_current_state::schedule_migration(),
+                    modules::wakeup_verification::schedule_migration(),
+                    modules::codex_wakeup::schedule_history_migration(),
+                    modules::antigravity_switch_history::schedule_migration(),
+                ] {
+                    if let Err(error) = result {
+                        logger::log_warn(&format!("[LocalHistory] 无法启动历史迁移: {error}"));
+                    }
+                }
+                modules::kiro_account::schedule_identity_maintenance();
+                modules::windsurf_account::schedule_identity_maintenance();
+                modules::trae_account::schedule_identity_maintenance();
             });
 
             // 当前主线不再使用 platform-packages；启动时回收旧版本遗留的孤儿 adapter。
@@ -566,6 +674,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(modules::codex_proxy_catalog::auto_refresh_loop());
+            tauri::async_runtime::spawn(commands::account::auto_refresh::run(app.handle().clone()));
             tauri::async_runtime::spawn(modules::codex_reset_automation::run(app.handle().clone()));
             tauri::async_runtime::spawn(modules::codex_subscription_refresh::run());
             tauri::async_runtime::spawn(modules::codex_proxy_desktop_router::restore_on_startup());
@@ -577,7 +686,9 @@ pub fn run() {
 
             // 启动网页查询服务（网络服务配置中的独立模块）
             tauri::async_runtime::spawn(async {
-                modules::web_report::start_server().await;
+                if let Err(error) = modules::web_report::apply_server_config().await {
+                    logger::log_warn(&format!("[WebReport] {error}"));
+                }
             });
 
             tauri::async_runtime::spawn(modules::codex_model_catalog::initialize());
@@ -738,46 +849,45 @@ pub fn run() {
                 });
             }
 
-            // 创建骨架托盘（无账号文件 I/O，秒出）。macOS 只有在托盘可用后才
-            // 隐藏启动窗口，避免托盘创建失败时留下无法恢复的后台进程。
-            let tray_created = match modules::tray::create_tray_skeleton(app.handle()) {
-                Ok(_) => true,
-                Err(err) => {
-                    logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", err));
-                    false
+            // Only hide the initial macOS window after a usable tray exists.
+            let tray_created = if modules::config::get_user_config().show_tray_icon {
+                match modules::tray::create_tray_skeleton(app.handle()) {
+                    Ok(_) => true,
+                    Err(err) => {
+                        logger::log_error(&format!("[Tray] 创建骨架托盘失败: {}", err));
+                        false
+                    }
                 }
+            } else {
+                false
             };
-
             if should_apply_startup_minimized(tray_created, cfg!(target_os = "macos")) {
                 apply_startup_minimized(&app.handle());
             } else if modules::config::get_user_config().startup_minimized {
-                logger::log_warn("[Window] 托盘创建失败，保留主窗口以便恢复应用");
+                logger::log_warn("[Window] 无可用托盘，保留主窗口以便恢复应用");
             }
-
             #[cfg(target_os = "macos")]
             apply_macos_activation_policy(&app.handle());
 
-            #[cfg(target_os = "macos")]
-            {
+            if tray_created {
+                #[cfg(target_os = "macos")]
+                {
+                    let tray_app_handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(800));
+                        if let Err(err) = modules::tray::apply_tray_icon_style(&tray_app_handle) {
+                            logger::log_warn(&format!("[Tray] macOS 启动后重应用菜单栏图标样式失败: {}", err));
+                        }
+                    });
+                }
+                // Keep account-file I/O off the setup thread.
                 let tray_app_handle = app.handle().clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(800));
-                    if let Err(err) = modules::tray::apply_tray_icon_style(&tray_app_handle) {
-                        logger::log_warn(&format!(
-                            "[Tray] macOS 启动后重应用菜单栏图标样式失败: {}",
-                            err
-                        ));
+                    if let Err(err) = modules::tray::update_tray_menu(&tray_app_handle) {
+                        logger::log_error(&format!("[Tray] 后台更新托盘菜单失败: {}", err));
                     }
                 });
             }
-
-            // 后台线程加载完整托盘菜单（含账号数据）
-            let tray_app_handle = app.handle().clone();
-            std::thread::spawn(move || {
-                if let Err(e) = modules::tray::update_tray_menu(&tray_app_handle) {
-                    logger::log_error(&format!("[Tray] 后台更新托盘菜单失败: {}", e));
-                }
-            });
 
             if let Err(err) =
                 modules::floating_card_window::show_floating_card_window_on_startup(&app.handle())
@@ -816,6 +926,12 @@ pub fn run() {
                 match config.close_behavior {
                     CloseWindowBehavior::Minimize => {
                         api.prevent_close();
+                        if !config.show_tray_icon {
+                            if let Err(err) = window.minimize() {
+                                logger::log_warn(&format!("[Window] 最小化主窗口失败: {}", err));
+                            }
+                            return;
+                        }
                         let preserve_for_menu_bar =
                             should_preserve_main_window_for_menu_bar_refresh(
                                 cfg!(target_os = "macos"),
@@ -883,7 +999,7 @@ pub fn run() {
                     }
                     CloseWindowBehavior::Ask => {
                         api.prevent_close();
-                        let _ = window.emit("window:close_requested", ());
+                        let _ = window.emit("window:close_requested", config.show_tray_icon);
                         info!("[Window] 等待用户选择关闭行为");
                     }
                 }
@@ -935,6 +1051,8 @@ pub fn run() {
             commands::account::update_account_notes,
             commands::account::update_account_note,
             commands::account::fetch_account_note_mail_url,
+            commands::account::load_account_group_snapshot,
+            commands::account::seed_account_groups,
             commands::account::load_account_groups,
             commands::account::save_account_groups,
             commands::account::load_platform_account_groups,
@@ -959,6 +1077,7 @@ pub fn run() {
             commands::data_transfer::data_transfer_get_instance_store,
             commands::data_transfer::data_transfer_replace_instance_store,
             commands::provider_current::get_provider_current_account_id,
+            commands::provider_current::get_trae_current_accounts,
             // Claude Commands
             commands::claude::list_claude_accounts,
             commands::claude::delete_claude_account,
@@ -990,6 +1109,7 @@ pub fn run() {
             commands::claude::claude_execute_cli_launch_command,
             commands::claude::claude_launch_cli,
             commands::claude::switch_claude_account,
+            commands::claude_instance::claude_apply_cli_account_to_user_config,
             // Claude Instance Commands
             commands::claude_instance::claude_get_instance_defaults,
             commands::claude_instance::claude_list_instances,
@@ -1015,6 +1135,19 @@ pub fn run() {
             commands::system::read_auto_backup_file,
             commands::system::copy_auto_backup_file,
             commands::system::list_auto_backup_files,
+            commands::system::find_mfa_recovery_records,
+            commands::system::read_mfa_vault,
+            commands::system::create_mfa_recovery_checkpoint,
+            commands::system::verify_mfa_recovery_checkpoint,
+            commands::system::restore_mfa_recovery_checkpoint,
+            commands::system::read_legacy_webkit_vault,
+            commands::system::import_mfa_vault_batch,
+            commands::system::change_mfa_vault,
+            commands::system::load_apikey_fun_vault,
+            commands::system::write_apikey_fun_vault,
+            commands::system::schedule_apikey_fun_recovery_checkpoint,
+            commands::system::restore_apikey_fun_vault,
+            commands::system::export_legacy_apikey_fun_vault,
             commands::system::delete_auto_backup_file,
             commands::system::cleanup_auto_backup_files,
             commands::system::open_auto_backup_dir,
@@ -1084,17 +1217,20 @@ pub fn run() {
             commands::system::mark_user_memory_dismissed,
             commands::system::save_user_memory_list,
             commands::system::load_ui_preferences,
+            commands::system::migrate_ui_preference_values,
+            commands::system::update_ui_preference,
             commands::system::save_ui_preferences,
             // Logs Commands
             commands::logs::logs_get_snapshot,
             commands::logs::logs_open_log_directory,
             // Wakeup Commands
             commands::wakeup::wakeup_ensure_runtime_ready,
-            commands::wakeup::wakeup_set_official_ls_version_mode,
             commands::wakeup::trigger_wakeup,
             commands::wakeup::fetch_available_models,
             commands::wakeup::wakeup_validate_crontab,
             commands::wakeup::wakeup_sync_state,
+            commands::wakeup::wakeup_load_state,
+            commands::wakeup::wakeup_initialize_state,
             commands::wakeup::wakeup_run_enabled_tasks,
             commands::wakeup::wakeup_load_history,
             commands::wakeup::wakeup_add_history,
@@ -1189,10 +1325,20 @@ pub fn run() {
             commands::codex::confirm_codex_batch_import,
             commands::codex::refresh_codex_quota,
             modules::codex_quota_sync::set_codex_quota_sync_disabled_emails,
+            modules::codex_quota_history::get_codex_quota_history,
+            modules::codex_quota_history::management::codex_quota_history_settings,
+            modules::codex_quota_history::management::set_codex_quota_history_settings,
+            modules::codex_quota_history::management::codex_quota_history_stats,
+            modules::codex_quota_history::management::codex_quota_history_cleanup_preview,
+            modules::codex_quota_history::management::codex_quota_history_cleanup,
+            modules::codex_quota_recovery::codex_quota_recovery_enabled,
+            modules::codex_quota_recovery::codex_quota_recovery_set_token,
             modules::codex_device_restrictions::codex_list_device_restrictions,
             modules::codex_device_restrictions::codex_allow_device_restriction_retry,
             commands::codex::refresh_codex_quotas_batch,
             commands::codex::get_codex_reset_credits,
+            commands::codex::get_codex_reset_credit_history,
+            commands::codex::get_codex_reset_usage_history,
             commands::codex::consume_codex_reset_credit,
             commands::codex::get_codex_reset_automation,
             commands::codex::save_codex_reset_public_rule,
@@ -1260,6 +1406,8 @@ pub fn run() {
             commands::codex_proxy_engine::codex_proxy_activity_set_enabled,
             commands::codex_proxy_engine::codex_proxy_activity_clear,
             commands::codex_client_proxy::codex_proxy_target_get,
+            commands::codex_client_proxy::codex_proxy_direct_hosts_get,
+            commands::codex_client_proxy::codex_proxy_direct_hosts_save,
             commands::codex_unified_proxy::codex_unified_proxy_get,
             commands::codex_unified_proxy::codex_unified_proxy_preview,
             commands::codex_unified_proxy::codex_unified_proxy_apply,
@@ -1278,9 +1426,12 @@ pub fn run() {
             commands::codex::create_pending_codex_oauth_account,
             commands::codex::fetch_codex_account_note_mail_url,
             commands::codex::codex_wakeup_get_cli_status,
+            #[cfg(any(unix, windows))]
+            modules::codex_cli_daemon::codex_restart_cli_daemon,
             commands::codex::codex_wakeup_update_runtime_config,
             commands::codex::codex_wakeup_get_overview,
             commands::codex::codex_wakeup_get_state,
+            commands::codex::codex_wakeup_get_pool_accounts,
             commands::codex::codex_wakeup_save_state,
             commands::codex::codex_wakeup_load_history,
             commands::codex::codex_wakeup_clear_history,
@@ -1307,6 +1458,9 @@ pub fn run() {
             commands::codex::codex_discover_remote_service,
             commands::codex::codex_query_remote_key_data,
             commands::codex::codex_local_access_get_state,
+            commands::codex::codex_local_access_preview_claude_code_settings,
+            commands::codex::codex_local_access_apply_claude_code_settings,
+            commands::codex::codex_local_access_restore_claude_code_settings,
             commands::codex::codex_local_access_get_overload_status,
             commands::codex::codex_local_access_update_overload_retry,
             commands::codex::codex_local_access_query_overload_counts,
@@ -1445,7 +1599,8 @@ pub fn run() {
             commands::ssh_server::list_ssh_servers,
             commands::ssh_server::upsert_ssh_server,
             commands::ssh_server::delete_ssh_server,
-            commands::ssh_server::select_ssh_server,
+            commands::ssh_server::select_ssh_servers,
+            commands::ssh_server::set_ssh_server_selected,
             commands::ssh_server::test_ssh_server_connection,
             commands::ssh_server::sync_current_codex_account_to_ssh_server,
             // CodeBuddy CN Commands
@@ -1495,8 +1650,11 @@ pub fn run() {
             commands::workbuddy::migrate_workbuddy_auto_checkin_config,
             commands::workbuddy::save_workbuddy_auto_checkin_config,
             commands::workbuddy::get_workbuddy_auto_checkin_logs,
+            commands::workbuddy::stage_workbuddy_auto_checkin_legacy_logs,
             commands::workbuddy::clear_workbuddy_auto_checkin_logs,
             commands::workbuddy::run_workbuddy_auto_checkin_now,
+            commands::workbuddy::probe_workbuddy_model,
+            commands::workbuddy::fetch_workbuddy_cloud_models,
             // MiniMax Code Commands
             commands::minimax_code::list_minimax_code_accounts,
             commands::minimax_code::delete_minimax_code_account,
@@ -1517,6 +1675,7 @@ pub fn run() {
             commands::minimax_code::get_checkin_status_minimax_code,
             commands::minimax_code::checkin_minimax_code,
             commands::minimax_code::get_minimax_code_auto_checkin_config,
+            commands::minimax_code::migrate_minimax_code_auto_checkin_config,
             commands::minimax_code::save_minimax_code_auto_checkin_config,
             commands::minimax_code::get_minimax_code_auto_checkin_logs,
             commands::minimax_code::clear_minimax_code_auto_checkin_logs,
@@ -1659,6 +1818,7 @@ pub fn run() {
             commands::trae::get_trae_checkin_status,
             commands::trae::claim_trae_checkin,
             commands::trae::get_trae_auto_checkin_config,
+            commands::trae::migrate_trae_auto_checkin_config,
             commands::trae::save_trae_auto_checkin_config,
             commands::trae::get_trae_auto_checkin_logs,
             commands::trae::clear_trae_auto_checkin_logs,
@@ -1682,6 +1842,7 @@ pub fn run() {
             commands::cursor::export_cursor_accounts,
             commands::cursor::refresh_cursor_token,
             commands::cursor::refresh_all_cursor_tokens,
+            commands::cursor::retry_cursor_failed_quotas,
             commands::cursor::add_cursor_account_with_token,
             commands::cursor::update_cursor_account_tags,
             commands::cursor::get_cursor_accounts_index_path,
@@ -1785,6 +1946,7 @@ pub fn run() {
             commands::codex_instance::codex_open_session_rollout,
             commands::codex_instance::codex_create_instance,
             commands::codex_instance::codex_update_instance,
+            commands::codex_instance::profile_switch::codex_switch_instance_account,
             commands::codex_instance::codex_delete_instance,
             commands::codex_instance::codex_start_instance,
             commands::codex_instance::codex_cancel_instance_start,
@@ -1817,11 +1979,18 @@ pub fn run() {
             commands::antigravity_legacy_instance::antigravity_legacy_open_instance_window,
             commands::antigravity_legacy_instance::antigravity_legacy_close_all_instances,
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
         match &event {
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::Destroyed,
+                ..
+            } if label == "main" => {
+                modules::floating_card_window::resume_requested_main_window_restore(app_handle);
+            }
             RunEvent::ExitRequested { code, api, .. } => {
                 if should_prevent_exit_after_main_window_destroyed(
                     *code,
@@ -1852,6 +2021,9 @@ pub fn run() {
                         }
                     }
                     if first_shutdown {
+                        if let Some(main) = app_handle.get_webview_window("main") {
+                            modules::main_window_state::capture_and_save_main_window(&main);
+                        }
                         commands::codex_instance::restore_mixed_model_profiles_for_app_exit();
                     }
                     modules::codex_app_injection::stop_all();

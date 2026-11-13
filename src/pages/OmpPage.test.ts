@@ -69,39 +69,39 @@ function harness() {
 
 test('switch requires confirmation, passes account identity and suppresses duplicate mutations', async () => {
   const h = harness(); await settlePromises();
-  click(h.button('omp.account.switch', 'one@example.invalid'));
+  click(h.button('dashboard.switch', 'one@example.invalid'));
   assert.equal(h.calls.length, 0);
   void h.confirm(); void h.confirm();
   assert.deepEqual(h.calls, [{ kind: 'account', id: 1, identity: 'one', action: 'switch' }]);
-  assert.equal(h.button('omp.account.switch', 'two@example.invalid').props.disabled, true);
+  assert.equal(h.button('dashboard.switch', 'two@example.invalid').props.disabled, true);
   h.pending.resolve(); await settlePromises();
-  assert.equal(h.button('omp.account.switch', 'one@example.invalid').props.disabled, true);
+  assert.equal(h.button('dashboard.switch', 'one@example.invalid').props.disabled, true);
   assert.match(text(h.card('one@example.invalid')), /omp.account.providerSelected/);
   assert.match(text(h.h.flush()), /omp.account.switched/); h.h.unmount();
 });
 
 test('failed account writes remain visible without a success notice or changed current marker', async () => {
   const h = harness(); await settlePromises();
-  click(h.button('omp.account.switch', 'two@example.invalid')); void h.confirm();
+  click(h.button('dashboard.switch', 'two@example.invalid')); void h.confirm();
   h.pending.reject(new Error('fixture refresh lease busy')); await settlePromises();
   assert.match(text(h.h.flush()), /fixture refresh lease busy/);
   assert.doesNotMatch(text(h.h.flush()), /omp.account.switched/);
-  assert.equal(h.button('omp.account.switch', 'two@example.invalid').props.disabled, false); h.h.unmount();
+  assert.equal(h.button('dashboard.switch', 'two@example.invalid').props.disabled, false); h.h.unmount();
 });
 
 test('trash is hidden from the default account list and restore is a distinct confirmed action', async () => {
   const h = harness(); await settlePromises(); assert.equal(h.card('four@example.invalid'), undefined);
-  click(h.button('omp.account.recycleBin')); assert.ok(h.card('four@example.invalid'));
-  click(h.button('omp.account.restore', 'four@example.invalid')); void h.confirm();
+  click(h.button('common.recycleBin.title')); assert.ok(h.card('four@example.invalid'));
+  click(h.button('common.recycleBin.restore', 'four@example.invalid')); void h.confirm();
   assert.equal(h.calls[0].action, 'restore'); h.pending.resolve(); await settlePromises();
-  assert.equal(h.card('four@example.invalid'), undefined); click(h.button('omp.account.all'));
+  assert.equal(h.card('four@example.invalid'), undefined); click(h.button('settings.general.autoSwitchAccountScopeAll'));
   assert.ok(h.card('four@example.invalid')); assert.match(text(h.card('four@example.invalid')), /omp.account.standby/); h.h.unmount();
 });
 
 test('search, provider filtering and identity masking operate on account cards, not profiles', async () => {
   const h = harness(); await settlePromises();
-  change(h.input('omp.account.search'), 'two@'); assert.ok(h.card('two@example.invalid')); assert.equal(h.card('one@example.invalid'), undefined);
-  change(h.input('omp.account.search'), '');
+  change(h.input('pelican.search'), 'two@'); assert.ok(h.card('two@example.invalid')); assert.equal(h.card('one@example.invalid'), undefined);
+  change(h.input('pelican.search'), '');
   (h.filter().props.onChange as (value: string) => void)('anthropic');
   assert.ok(h.card('three@example.invalid')); assert.equal(h.card('one@example.invalid'), undefined);
   click(h.button('omp.account.hideIdentity')); assert.doesNotMatch(text(h.h.flush()), /three@example.invalid/);
@@ -120,7 +120,7 @@ test('default layout is compact and separates selection by provider without glob
   assert.doesNotMatch(text(tree), /omp.account.current/);
   assert.ok(nodes(tree).some((n) => n.type === 'OmpIcon'));
   assert.ok(nodes(tree).every((n) => n.type !== 'select'));
-  click(h.button('omp.account.cardView'));
+  click(h.button('common.shared.view.grid'));
   assert.ok(nodes(h.h.flush()).some((n) => n.props.className === 'omp-account-groups cards'));
   assert.deepEqual(h.calls, []); h.h.unmount();
 });
@@ -133,14 +133,14 @@ test('custom provider filter can be cleared and does not render empty provider g
   assert.equal(nodes(h.h.flush()).filter((n) => n.props.className === 'omp-provider-group').length, 1);
   assert.equal(h.card('three@example.invalid'), undefined);
   choose(''); assert.ok(h.card('three@example.invalid'));
-  change(h.input('omp.account.search'), 'nothing matches');
+  change(h.input('pelican.search'), 'nothing matches');
   assert.equal(nodes(h.h.flush()).filter((n) => n.props.className === 'omp-provider-group').length, 0);
-  assert.match(text(h.h.flush()), /omp.account.noMatches/);
+  assert.match(text(h.h.flush()), /common\.shared\.noMatch\.title/);
   assert.deepEqual(h.calls, []); h.h.unmount();
 });
 
 test('native login needs only executable, never a profile or project directory, and does not claim completion', async () => {
-  const h = harness(); await settlePromises(); click(h.button('common.addAccount'));
+  const h = harness(); await settlePromises(); click(h.button('common.shared.addAccount'));
   click(h.button('omp.account.nativeLogin'));
   assert.deepEqual(h.calls, [{ kind: 'login', executable: '/fixture/omp' }]);
   h.pending.resolve(); await settlePromises();
@@ -148,7 +148,7 @@ test('native login needs only executable, never a profile or project directory, 
 });
 
 test('a committed mutation with a failed reread explicitly asks the user to refresh', async () => {
-  const h = harness(); await settlePromises(); click(h.button('omp.account.switch', 'one@example.invalid'));
+  const h = harness(); await settlePromises(); click(h.button('dashboard.switch', 'one@example.invalid'));
   void h.confirm(); h.failRead(); h.pending.resolve(); await settlePromises();
   assert.match(text(h.h.flush()), /omp.account.reloadAfterWrite/); h.h.unmount();
 });
@@ -156,6 +156,6 @@ test('a committed mutation with a failed reread explicitly asks the user to refr
 test('incompatible native stores disable account mutations without hiding their warning', async () => {
   const h = harness(); h.state.warning = 'fixture unsupported schema'; await settlePromises();
   click(h.button('common.refresh')); await settlePromises();
-  assert.equal(h.button('omp.account.switch', 'one@example.invalid').props.disabled, true);
+  assert.equal(h.button('dashboard.switch', 'one@example.invalid').props.disabled, true);
   assert.match(text(h.h.flush()), /fixture unsupported schema/); h.h.unmount();
 });
