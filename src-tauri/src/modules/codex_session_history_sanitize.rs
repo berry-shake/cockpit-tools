@@ -29,7 +29,6 @@ const HISTORY_DB_STEM: &str = "thread_history";
 const HISTORY_DB_EXTENSION: &str = "sqlite";
 const SQLITE_DIR_NAME: &str = "sqlite";
 const BACKUP_DIR_NAME: &str = "cockpit-history-sanitize-backup";
-const MAX_BACKUP_FILES: usize = 3;
 const BUSY_TIMEOUT_SECONDS: u64 = 5;
 /// 单批扫描的行数与字节上限：避免整库 reasoning 行同时驻留内存。
 const HISTORY_SANITIZE_BATCH_ROWS: usize = 200;
@@ -671,7 +670,7 @@ impl HistoryBackupWriter {
         result
     }
 
-    /// 所有数据库成功后收尾；只在此时清理旧的受管备份。
+    /// 所有数据库成功后收尾。v1.4.0 起保留历次备份，所以这里不再清理旧文件。
     fn finish(mut self) -> Result<Option<(PathBuf, usize, u64)>, String> {
         if self.writer.is_none() {
             self.finished = true;
@@ -682,7 +681,6 @@ impl HistoryBackupWriter {
         fs::remove_file(&self.temp_path)
             .map_err(|error| format!("移除会话历史备份临时文件失败: {}", error))?;
         self.finished = true;
-        prune_backup_files(&self.backup_root, "sanitize-");
         Ok(Some((
             self.backup_file.clone(),
             self.rows_written,
@@ -745,36 +743,6 @@ fn table_has_column(connection: &Connection, table: &str, column: &str) -> Resul
         }
     }
     Ok(false)
-}
-
-pub(super) fn prune_rollout_signature_backups(data_dir: &Path) {
-    prune_backup_files(&data_dir.join(BACKUP_DIR_NAME), "rollout-signatures-");
-}
-
-fn prune_backup_files(backup_root: &Path, prefix: &str) {
-    let Ok(entries) = fs::read_dir(backup_root) else {
-        return;
-    };
-    let mut files = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.is_file()
-                && path.extension().and_then(|ext| ext.to_str()) == Some("json")
-                && path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.starts_with(prefix))
-        })
-        .collect::<Vec<_>>();
-    if files.len() <= MAX_BACKUP_FILES {
-        return;
-    }
-    files.sort();
-    let remove_count = files.len() - MAX_BACKUP_FILES;
-    for path in files.into_iter().take(remove_count) {
-        let _ = fs::remove_file(path);
-    }
 }
 
 #[cfg(test)]
@@ -876,6 +844,12 @@ mod tests {
     #[test]
     fn clears_third_party_reasoning_content_and_is_idempotent() {
         let dir = make_temp_dir("codex-history-sanitize-test");
+        let backup_root = dir.join(BACKUP_DIR_NAME);
+        fs::create_dir_all(&backup_root).unwrap();
+        let previous = ["rollout-signatures-1.json", "sanitize-1.json", "sanitize-2.json"];
+        for name in previous {
+            fs::write(backup_root.join(name), name).unwrap();
+        }
         let db = create_history_db(&dir);
         let connection = Connection::open(&db).expect("open db");
         insert_item(
@@ -931,10 +905,22 @@ mod tests {
         assert!(!second.changed_anything());
 
         let backups = backup_files(&dir);
-        assert_eq!(backups.len(), 1, "应生成一份可回滚备份");
+        assert_eq!(backups.len(), previous.len() + 1);
+        for name in previous {
+            assert_eq!(fs::read_to_string(backup_root.join(name)).unwrap(), name);
+        }
+        let fresh = backups.iter()
+            .find(|path| !previous.contains(&path.file_name().unwrap().to_str().unwrap()))
+            .unwrap();
         let payload: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&backups[0]).expect("read backup"))
+            serde_json::from_str(&fs::read_to_string(fresh).expect("read backup"))
                 .expect("parse backup");
+        write_rollout_signature_backup(&dir, &[], &mut None).unwrap();
+        assert_eq!(backup_files(&dir).len(), previous.len() + 2);
+        for name in previous {
+            assert_eq!(fs::read_to_string(backup_root.join(name)).unwrap(), name);
+        }
+        assert!(fresh.is_file());
         assert_eq!(
             payload["databases"][0]["rows"][0]["item_json"].as_str(),
             Some(r#"{"type":"reasoning","id":"r1","summary":[],"content":["thinking text"]}"#),
@@ -1223,20 +1209,23 @@ mod tests {
     }
 
     #[test]
-    fn backups_are_unique_and_do_not_prune_before_success() {
+    fn every_backup_is_kept_across_runs() {
         let dir = make_temp_dir("codex-history-sanitize-backup-retention");
         let parent = dir.join(BACKUP_DIR_NAME);
         fs::create_dir_all(&parent).unwrap();
-        for index in 0..MAX_BACKUP_FILES {
-            fs::write(parent.join(format!("sanitize-000{index}.json")), "{}").expect("old backup");
+        let old_backups = ["sanitize-0000.json", "sanitize-0001.json", "sanitize-0002.json"];
+        for name in old_backups {
+            fs::write(parent.join(name), "{}").expect("old backup");
         }
         let unrelated = parent.join("manual-backup.json");
         fs::write(&unrelated, "{}").expect("unrelated backup");
         let old_snapshot = parent.join("sanitize-old-snapshot");
         fs::create_dir_all(&old_snapshot).unwrap();
-        let mut first_writer = HistoryBackupWriter::create(&dir);
-        let mut second_writer = HistoryBackupWriter::create(&dir);
-        for writer in [&mut first_writer, &mut second_writer] {
+        let mut published = Vec::new();
+        for mut writer in [
+            HistoryBackupWriter::create(&dir),
+            HistoryBackupWriter::create(&dir),
+        ] {
             writer
                 .write_row(
                     &dir.join("thread_history_1.sqlite"),
@@ -1247,28 +1236,24 @@ mod tests {
                     "{}",
                 )
                 .unwrap();
-            writer.checkpoint().unwrap();
+            let file = writer.backup_file.clone();
+            writer.finish().unwrap();
+            published.push(file);
         }
-        let first = first_writer.backup_file.clone();
-        let second = second_writer.backup_file.clone();
-        drop(first_writer);
-        drop(second_writer);
+        let [first, second] = <[PathBuf; 2]>::try_from(published).unwrap();
         assert_ne!(first, second);
-        for index in 0..MAX_BACKUP_FILES {
-            assert!(parent.join(format!("sanitize-000{index}.json")).is_file());
+        // v1.4.0 keeps every published backup so history cleaning can always be rolled back.
+        for name in old_backups {
+            assert!(parent.join(name).is_file(), "{name} must be retained");
         }
-
-        prune_backup_files(&parent, "sanitize-");
-        assert!(unrelated.is_file(), "only managed backups may be pruned");
-        assert!(
-            old_snapshot.is_dir(),
-            "preserve legacy full-database snapshots"
-        );
+        assert!(unrelated.is_file());
+        assert!(old_snapshot.is_dir());
         assert!(first.is_file());
         assert!(second.is_file());
         assert_eq!(
             fs::read_dir(parent).expect("backup parent").count(),
-            MAX_BACKUP_FILES + 2
+            old_backups.len() + 4,
+            "old backups, unrelated file, legacy snapshot dir and both new backups stay"
         );
     }
 
@@ -1330,7 +1315,7 @@ mod tests {
         insert_item(&connection, "thread", "item", original);
         let parent = dir.join(BACKUP_DIR_NAME);
         fs::create_dir_all(&parent).unwrap();
-        for index in 0..MAX_BACKUP_FILES {
+        for index in 0..3 {
             fs::write(parent.join(format!("sanitize-000{index}.json")), "{}").unwrap();
         }
         fs::write(
@@ -1349,7 +1334,7 @@ mod tests {
         let backups = backup_files(&dir);
         assert_eq!(
             backups.len(),
-            MAX_BACKUP_FILES + 1,
+            4,
             "failure must not prune old backups"
         );
         let published: Vec<Value> = backups

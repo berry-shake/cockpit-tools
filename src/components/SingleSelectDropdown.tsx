@@ -5,10 +5,13 @@ import { Check, ChevronDown } from "lucide-react";
 import "./SingleSelectDropdown.css";
 import { dropdownLayer, dropdownPlacement, type DropdownPlacement } from "../utils/dropdownPlacement";
 
+const ENABLED_OPTION_SELECTOR = '[role="option"]:not(:disabled)';
+
 export interface SingleSelectOption {
   value: string;
   label: string;
   badge?: ReactNode;
+  disabled?: boolean;
 }
 
 interface SingleSelectDropdownProps {
@@ -119,9 +122,11 @@ export function SingleSelectDropdown({
   const menuReady = menuStyle !== null;
   useEffect(() => {
     if (!open || !menuReady) return;
-    const items = menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
+    const items = menuRef.current?.querySelectorAll<HTMLButtonElement>(ENABLED_OPTION_SELECTOR);
     if (!items?.length) return;
-    const selected = menuRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    const selected = menuRef.current?.querySelector<HTMLButtonElement>(
+      `${ENABLED_OPTION_SELECTOR}[aria-selected="true"]`,
+    );
     (selected ?? items[entryFocus.current === "last" ? items.length - 1 : 0])?.focus();
   }, [open, menuReady]);
 
@@ -138,7 +143,9 @@ export function SingleSelectDropdown({
     }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const items = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>(ENABLED_OPTION_SELECTOR) ?? [],
+    );
     if (!items.length) return;
     const index = items.findIndex((item) => item === document.activeElement);
     const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
@@ -220,13 +227,16 @@ export function SingleSelectDropdown({
                     key={option.value}
                     type="button"
                     className={`single-select-dropdown-item${active ? " active" : ""}`}
+                    disabled={option.disabled}
                     onClick={() => {
+                      if (option.disabled) return;
                       onChange(option.value);
                       closeMenu();
                     }}
                     role="option"
                     tabIndex={-1}
                     aria-selected={active}
+                    aria-disabled={option.disabled || undefined}
                   >
                     <span
                       className="single-select-dropdown-item-label"

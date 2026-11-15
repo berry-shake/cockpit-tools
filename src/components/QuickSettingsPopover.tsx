@@ -23,6 +23,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useEscClose } from '../hooks/useEscClose';
+import { AntigravityClientTabs } from './AntigravityClientIcon';
 import { antigravityAppPathTarget, DEFAULT_ANTIGRAVITY_RUNTIME_TARGET, type AntigravityRuntimeTarget } from '../utils/antigravityRuntimeTarget';
 import * as accountService from '../services/accountService';
 import * as codexService from '../services/codexService';
@@ -174,6 +175,9 @@ interface GeneralConfig {
   auto_switch_threshold: number;
   auto_switch_credits_enabled: boolean;
   auto_switch_credits_threshold: number;
+  auto_switch_window_thresholds_enabled?: boolean;
+  auto_switch_five_hour_threshold?: number;
+  auto_switch_weekly_threshold?: number;
   auto_switch_scope_mode: string;
   auto_switch_selected_group_ids: string[];
   auto_switch_account_scope_mode?: string;
@@ -308,7 +312,9 @@ type CodexWindowThresholdKey =
   | 'codex_auto_switch_primary_threshold'
   | 'codex_auto_switch_secondary_threshold'
   | 'codex_quota_alert_primary_threshold'
-  | 'codex_quota_alert_secondary_threshold';
+  | 'codex_quota_alert_secondary_threshold'
+  | 'auto_switch_five_hour_threshold'
+  | 'auto_switch_weekly_threshold';
 
 type AppLaunchCandidate = {
   target_type: string;
@@ -441,8 +447,13 @@ export function QuickSettingsPopover({
     );
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<GeneralConfig | null>(null);
+  const [pathClient, setPathClient] = useState<AntigravityRuntimeTarget>();
+  const antigravityPathTarget = pathClient ?? antigravityRuntimeTarget;
   const [pathDetecting, setPathDetecting] = useState(false);
   const [appLaunchCandidates, setAppLaunchCandidates] = useState<AppLaunchCandidate[]>([]);
+  useEffect(() => {
+    if (!isOpen) setPathClient(undefined);
+  }, [isOpen]);
   const [openingCodexConfig, setOpeningCodexConfig] = useState(false);
   const [codexModelManagementConfig, setCodexModelManagementConfig] =
     useState<CodexQuickConfig | null>(null);
@@ -472,6 +483,8 @@ export function QuickSettingsPopover({
   const [codexAutoSwitchSecondaryCustomThreshold, setCodexAutoSwitchSecondaryCustomThreshold] = useState('');
   const [codexQuotaAlertPrimaryCustomThreshold, setCodexQuotaAlertPrimaryCustomThreshold] = useState('');
   const [codexQuotaAlertSecondaryCustomThreshold, setCodexQuotaAlertSecondaryCustomThreshold] = useState('');
+  const [agFiveHourCustomThreshold, setAgFiveHourCustomThreshold] = useState('');
+  const [agWeeklyCustomThreshold, setAgWeeklyCustomThreshold] = useState('');
   const [autoSwitchDisplayGroups, setAutoSwitchDisplayGroups] = useState<DisplayGroup[]>([]);
   const [antigravityAccounts, setAntigravityAccounts] = useState<Account[]>([]);
   const [antigravityAccountGroups, setAntigravityAccountGroups] = useState<AccountGroup[]>([]);
@@ -804,6 +817,8 @@ export function QuickSettingsPopover({
       setCodexAutoSwitchSecondaryCustomThreshold(String(cfg.codex_auto_switch_secondary_threshold));
       setCodexQuotaAlertPrimaryCustomThreshold(String(cfg.codex_quota_alert_primary_threshold));
       setCodexQuotaAlertSecondaryCustomThreshold(String(cfg.codex_quota_alert_secondary_threshold));
+      setAgFiveHourCustomThreshold(String(cfg.auto_switch_five_hour_threshold ?? 5));
+      setAgWeeklyCustomThreshold(String(cfg.auto_switch_weekly_threshold ?? 5));
       setAppLaunchCandidates([]);
     } catch (err) {
       if (loadVersion !== configLoadVersionRef.current) {
@@ -818,8 +833,11 @@ export function QuickSettingsPopover({
   };
 
   useEffect(() => {
-    if (!isOpen || type !== 'codex') return;
-    const reload = () => { void loadConfig(); };
+    if (!isOpen || (type !== 'codex' && type !== 'antigravity')) return;
+    const reload = (event: Event) => {
+      if ((event as CustomEvent).detail === configSaveQueueRef) return;
+      void loadConfig();
+    };
     window.addEventListener('config-updated', reload);
     return () => window.removeEventListener('config-updated', reload);
   }, [isOpen, type]);
@@ -868,7 +886,7 @@ export function QuickSettingsPopover({
           configRef.current = merged;
           setConfig(merged);
         }
-        window.dispatchEvent(new Event('config-updated'));
+        window.dispatchEvent(new CustomEvent('config-updated', { detail: configSaveQueueRef }));
       }).catch((err) => {
         console.error('Failed to save config:', err);
         setError(t('quickSettings.error.saveFailed', {
@@ -1192,7 +1210,7 @@ export function QuickSettingsPopover({
     if (!config) return '';
     switch (type) {
       case 'antigravity':
-        return antigravityRuntimeTarget === 'antigravity'
+        return antigravityPathTarget === 'antigravity'
           ? config.antigravity_legacy_app_path
           : config.antigravity_app_path;
       case 'codex':
@@ -1239,9 +1257,7 @@ export function QuickSettingsPopover({
   const getAppPathLabel = () => {
     switch (type) {
       case 'antigravity':
-        return t('settings.general.antigravityAppPath', {
-          appName: antigravityRuntimeTarget === 'antigravity' ? 'Antigravity' : 'Antigravity IDE',
-        });
+        return t('antigravityLaunch.pathLabel');
       case 'codex':
         return t('quickSettings.codex.appPath', '启动路径');
       case 'claude':
@@ -1284,7 +1300,7 @@ export function QuickSettingsPopover({
   const getAppTarget = (): AppPathTarget => {
     switch (type) {
       case 'antigravity':
-        return antigravityAppPathTarget(antigravityRuntimeTarget);
+        return antigravityAppPathTarget(antigravityPathTarget);
       case 'codex':
         return 'codex';
       case 'claude':
@@ -1366,6 +1382,9 @@ export function QuickSettingsPopover({
   const codexAutoSwitchSecondaryThresholdValue = config
     ? Number(config.codex_auto_switch_secondary_threshold)
     : 20;
+  const agWindowThresholdsEnabled = config?.auto_switch_window_thresholds_enabled ?? false;
+  const agFiveHourThresholdValue = Number(config?.auto_switch_five_hour_threshold ?? 5);
+  const agWeeklyThresholdValue = Number(config?.auto_switch_weekly_threshold ?? 5);
   const codexQuotaAlertPrimaryThresholdValue = config
     ? Number(config.codex_quota_alert_primary_threshold)
     : 20;
@@ -2341,6 +2360,40 @@ export function QuickSettingsPopover({
               </div>
             </div>
 
+            {type === 'antigravity' && config && (
+              <div className="qs-section">
+                <div className="qs-row">
+                  <div className="qs-row-label">
+                    <span>
+                      {t(
+                        'settings.general.antigravityLaunchOnSwitch',
+                        '切换时启动 Antigravity',
+                  )}
+                    </span>
+                  </div>
+                  <div className="qs-row-control">
+                    <label className="qs-switch">
+                      <input
+                        type="checkbox"
+                        checked={antigravityLaunchOnSwitch}
+                        onChange={(event) =>
+                          saveConfig({
+                            antigravity_launch_on_switch: event.target.checked,
+                          })
+                        }
+                      />
+                      <span className="qs-switch-slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <div className="qs-hint">
+                  {t(
+                    'antigravityLaunch.quickSwitchSetting',
+              )}
+                </div>
+              </div>
+            )}
+
             {/* ─── App Path ─── */}
             {showAppPathSection && (
               <div className="qs-section">
@@ -2393,41 +2446,19 @@ export function QuickSettingsPopover({
                     <div className="qs-hint">{t('settings.general.codexAutoRestoreTakeoverOnLaunchDesc')}</div>
                   </>
                 )}
-                {type === 'antigravity' && config && (
-                  <>
-                    <div className="qs-row">
-                      <div className="qs-row-label">
-                        <span>
-                          {t(
-                            'settings.general.antigravityLaunchOnSwitch',
-                            '切换时启动 Antigravity',
-                          )}
-                        </span>
-                      </div>
-                      <div className="qs-row-control">
-                        <label className="qs-switch">
-                          <input
-                            type="checkbox"
-                            checked={antigravityLaunchOnSwitch}
-                            onChange={(event) =>
-                              saveConfig({
-                                antigravity_launch_on_switch: event.target.checked,
-                              })
-                            }
-                          />
-                          <span className="qs-switch-slider"></span>
-                        </label>
-                      </div>
-                    </div>
-                    <div className="qs-hint">
-                      {t(
-                        'settings.general.antigravityLaunchOnSwitchDesc',
-                        '关闭后切号只写入 Antigravity 默认账号数据，不会关闭、启动或重启应用。',
-                      )}
-                    </div>
-                  </>
+                {type === 'antigravity' && (
+                  <AntigravityClientTabs
+                    selected={antigravityPathTarget}
+                    label={getAppPathLabel()}
+                    disabled={pathDetecting}
+                    onSelect={(target) => {
+                      setPathClient(target);
+                      setAppLaunchCandidates([]);
+                      setError(null);
+                    }}
+                  />
                 )}
-                {config && (type !== 'antigravity' || antigravityLaunchOnSwitch) && (
+                {config && (
 	                <div className="qs-path-control">
                   <input
                     type="text"
@@ -3214,6 +3245,86 @@ export function QuickSettingsPopover({
                         )}
                       </div>
                     </div>
+
+                    <div className="qs-row">
+                      <div className="qs-row-label">
+                        <span>
+                          {t('quickSettings.autoSwitch.windowThresholdsEnable', '按 5h / 周额度分别设阈值')}
+                        </span>
+                      </div>
+                      <div className="qs-row-control">
+                        <label className="qs-switch">
+                          <input
+                            type="checkbox"
+                            checked={agWindowThresholdsEnabled}
+                            onChange={(e) =>
+                              saveConfig({ auto_switch_window_thresholds_enabled: e.target.checked })
+                            }
+                          />
+                          <span className="qs-switch-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {agWindowThresholdsEnabled && (
+                      <>
+                        {(
+                          [
+                            [
+                              'auto_switch_five_hour_threshold',
+                              t('quickSettings.autoSwitch.fiveHourThreshold', '5h 额度切号阈值'),
+                              agFiveHourCustomThreshold,
+                              setAgFiveHourCustomThreshold,
+                              agFiveHourThresholdValue,
+                            ],
+                            [
+                              'auto_switch_weekly_threshold',
+                              t('quickSettings.autoSwitch.weeklyThreshold', '周额度切号阈值'),
+                              agWeeklyCustomThreshold,
+                              setAgWeeklyCustomThreshold,
+                              agWeeklyThresholdValue,
+                            ],
+                          ] as const
+                        ).map(([key, label, value, setValue, fallback]) => (
+                          <div className="qs-row" key={key}>
+                            <div className="qs-row-label">
+                              <span>{label}</span>
+                            </div>
+                            <div className="qs-row-control">
+                              <div className="qs-inline-input">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  className="qs-select qs-select--input-mode qs-select--with-unit"
+                                  value={value}
+                                  placeholder={t('quickSettings.inputPercent', '输入百分比')}
+                                  onChange={(e) =>
+                                    handleCodexWindowThresholdInputChange(e.target.value, setValue)
+                                  }
+                                  onBlur={() =>
+                                    handleCodexWindowCustomThresholdApply(value, setValue, key, fallback)
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleCodexWindowCustomThresholdApply(value, setValue, key, fallback);
+                                    }
+                                  }}
+                                />
+                                <span className="qs-input-unit">%</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="qs-hint" style={{ marginTop: 0 }}>
+                          {t(
+                            'quickSettings.autoSwitch.windowThresholdsHint',
+                            '5h 或周额度任一低于各自阈值即切号（满足任一条件即触发）；上方「切号阈值」仅用于模型级额度。'
+                          )}
+                        </div>
+                      </>
+                    )}
 
                     <div className="qs-row">
                       <div className="qs-row-label">
