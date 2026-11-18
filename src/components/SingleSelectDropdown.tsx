@@ -23,6 +23,7 @@ interface SingleSelectDropdownProps {
   disabled?: boolean;
   ariaLabel?: string;
   placeholder?: string;
+  search?: { label: string; emptyLabel: string };
   menuPlacement?: "down" | "up";
   menuWidth?: number;
   menuMaxHeight?: number;
@@ -37,20 +38,26 @@ export function SingleSelectDropdown({
   disabled = false,
   ariaLabel,
   placeholder,
+  search,
   menuPlacement = "down",
   menuWidth,
   menuMaxHeight = 280,
 }: SingleSelectDropdownProps) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [menuStyle, setMenuStyle] = useState<DropdownPlacement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
   const entryFocus = useRef<"selected" | "last">("selected");
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   const closeMenu = () => { setOpen(false); triggerRef.current?.focus(); };
   useEscCloseTopmost(open, closeMenu, menuRef);
+  useEffect(() => {
+    if (!open) setQuery("");
+  }, [open]);
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? null,
@@ -122,6 +129,10 @@ export function SingleSelectDropdown({
   const menuReady = menuStyle !== null;
   useEffect(() => {
     if (!open || !menuReady) return;
+    if (searchRef.current) {
+      searchRef.current.focus();
+      return;
+    }
     const items = menuRef.current?.querySelectorAll<HTMLButtonElement>(ENABLED_OPTION_SELECTOR);
     if (!items?.length) return;
     const selected = menuRef.current?.querySelector<HTMLButtonElement>(
@@ -141,19 +152,38 @@ export function SingleSelectDropdown({
       triggerRef.current?.focus();
       return;
     }
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
     const items = Array.from(
       menuRef.current?.querySelectorAll<HTMLButtonElement>(ENABLED_OPTION_SELECTOR) ?? [],
     );
+    // Typing in the search box stays untouched; only arrows leave it for the list.
+    const inSearch = Boolean(searchRef.current) && document.activeElement === searchRef.current;
+    if (inSearch) {
+      if (event.nativeEvent.isComposing) return;
+      if (event.key === "Enter") event.preventDefault();
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
     if (!items.length) return;
     const index = items.findIndex((item) => item === document.activeElement);
+    if (inSearch && event.key === "ArrowUp") {
+      items[items.length - 1].focus();
+      return;
+    }
+    if (!inSearch && searchRef.current && index === 0 && event.key === "ArrowUp") {
+      searchRef.current.focus();
+      return;
+    }
     const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
       : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
     items[next]?.focus();
   }
 
   const currentLabel = selectedOption?.label ?? placeholder ?? "";
+  const normalizedQuery = search ? query.trim().toLowerCase() : "";
+  const visibleOptions = normalizedQuery
+    ? options.filter((option) => option.label.toLowerCase().includes(normalizedQuery))
+    : options;
 
   return (
     <div
@@ -173,7 +203,7 @@ export function SingleSelectDropdown({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
+        aria-controls={open && menuStyle ? menuId : undefined}
         onKeyDown={(event) => {
           if (disabled || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
           event.preventDefault();
@@ -200,9 +230,9 @@ export function SingleSelectDropdown({
         ? createPortal(
             <div
               ref={menuRef}
-              id={menuId}
               className={[
                 "single-select-dropdown-menu",
+                search ? "searchable" : "",
                 menuClassName ?? "",
               ]
                 .filter(Boolean)
@@ -216,41 +246,57 @@ export function SingleSelectDropdown({
                 maxHeight: `${menuStyle.maxHeight}px`,
                 zIndex: menuStyle.zIndex,
               }}
-              role="listbox"
-              aria-label={ariaLabel}
               onKeyDown={handleMenuKeyDown}
             >
-              {options.map((option) => {
-                const active = option.value === value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`single-select-dropdown-item${active ? " active" : ""}`}
-                    disabled={option.disabled}
-                    onClick={() => {
-                      if (option.disabled) return;
-                      onChange(option.value);
-                      closeMenu();
-                    }}
-                    role="option"
-                    tabIndex={-1}
-                    aria-selected={active}
-                    aria-disabled={option.disabled || undefined}
-                  >
-                    <span
-                      className="single-select-dropdown-item-label"
-                      title={option.label}
+              {search && (
+                <div className="single-select-dropdown-search">
+                  <input
+                    ref={searchRef}
+                    type="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={search.label}
+                    aria-label={search.label}
+                    aria-controls={menuId}
+                  />
+                </div>
+              )}
+              <div id={menuId} role="listbox" aria-label={ariaLabel}>
+                {visibleOptions.map((option) => {
+                  const active = option.value === value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`single-select-dropdown-item${active ? " active" : ""}`}
+                      disabled={option.disabled}
+                      onClick={() => {
+                        if (option.disabled) return;
+                        onChange(option.value);
+                        closeMenu();
+                      }}
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={active}
+                      aria-disabled={option.disabled || undefined}
                     >
-                      {option.label}
-                    </span>
-                    {option.badge}
-                    <span className="single-select-dropdown-item-check">
-                      {active ? <Check size={15} /> : null}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span
+                        className="single-select-dropdown-item-label"
+                        title={option.label}
+                      >
+                        {option.label}
+                      </span>
+                      {option.badge}
+                      <span className="single-select-dropdown-item-check">
+                        {active ? <Check size={15} /> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {search && visibleOptions.length === 0 && (
+                <div className="single-select-dropdown-empty" role="status">{search.emptyLabel}</div>
+              )}
             </div>,
             document.body,
           )

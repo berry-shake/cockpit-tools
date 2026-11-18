@@ -41,21 +41,26 @@ function harness(value = 'b') {
   h.render(() => {
     const tree = h.exports.SingleSelectDropdown(props);
     const elements = nodes(tree);
-    elements.find((n) => n.type === 'div' && n.props.ref)!.props.ref.current = root;
+    const divRefs = elements.filter((n) => n.type === 'div' && n.props.ref);
+    divRefs[0].props.ref.current = root;
     elements.find((n) => n.type === 'button' && n.props['aria-haspopup'])!.props.ref.current = trigger;
-    const listbox = elements.find((n) => n.props.role === 'listbox');
-    if (listbox) listbox.props.ref.current = menu;
+    // The portal container owns the menu ref; it wraps the searchable listbox.
+    if (divRefs.length > 1) divRefs[1].props.ref.current = menu;
     elements.filter((n) => n.props.role === 'option').forEach((n, index) => { items[index].selected = n.props['aria-selected']; });
     return tree;
   });
   const button = () => nodes(h.flush()).find((n) => n.type === 'button' && n.props['aria-haspopup'])!;
   const listbox = () => nodes(h.flush()).find((n) => n.props.role === 'listbox');
+  const menuEl = () => nodes(h.flush()).find(
+    (n) => n.type === 'div' && typeof n.props.className === 'string'
+      && n.props.className.includes('single-select-dropdown-menu'),
+  );
   function key(element: Element, name: string) {
     const event = { key: name, prevented: false, stopped: false,
       preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
     element.props.onKeyDown(event); h.flush(); return event;
   }
-  return { h, props, button, listbox, key, items, calls, document, trigger, listeners,
+  return { h, props, button, listbox, menuEl, key, items, calls, document, trigger, listeners,
     open() { button().props.onClick(); h.flush(); },
   };
 }
@@ -70,11 +75,11 @@ test('select opens with the selected option focused and exposes a linked listbox
 
 test('arrow keys, Home and End navigate without changing the selection', () => {
   const h = harness(); h.key(h.button(), 'ArrowDown');
-  h.key(h.listbox()!, 'ArrowDown'); assert.equal(h.document.activeElement, h.items[2]);
-  h.key(h.listbox()!, 'ArrowDown'); assert.equal(h.document.activeElement, h.items[0]);
-  h.key(h.listbox()!, 'ArrowUp'); assert.equal(h.document.activeElement, h.items[2]);
-  h.key(h.listbox()!, 'Home'); assert.equal(h.document.activeElement, h.items[0]);
-  h.key(h.listbox()!, 'End'); assert.equal(h.document.activeElement, h.items[2]);
+  h.key(h.menuEl()!, 'ArrowDown'); assert.equal(h.document.activeElement, h.items[2]);
+  h.key(h.menuEl()!, 'ArrowDown'); assert.equal(h.document.activeElement, h.items[0]);
+  h.key(h.menuEl()!, 'ArrowUp'); assert.equal(h.document.activeElement, h.items[2]);
+  h.key(h.menuEl()!, 'Home'); assert.equal(h.document.activeElement, h.items[0]);
+  h.key(h.menuEl()!, 'End'); assert.equal(h.document.activeElement, h.items[2]);
   assert.deepEqual(h.calls, []); h.h.unmount();
 });
 
@@ -84,14 +89,14 @@ test('ArrowUp falls back to the last option when no value is selected', () => {
 });
 
 test('Escape dismisses without selecting and restores focus to the trigger', () => {
-  const h = harness(); h.open(); const event = h.key(h.listbox()!, 'Escape');
+  const h = harness(); h.open(); const event = h.key(h.menuEl()!, 'Escape');
   assert.equal(event.prevented, true); assert.equal(event.stopped, true);
   assert.equal(h.listbox(), undefined); assert.equal(h.document.activeElement, h.trigger);
   assert.deepEqual(h.calls, []); h.h.unmount();
 });
 
 test('Tab closes from the trigger without preventing normal keyboard traversal', () => {
-  const h = harness(); h.open(); const event = h.key(h.listbox()!, 'Tab');
+  const h = harness(); h.open(); const event = h.key(h.menuEl()!, 'Tab');
   assert.equal(event.prevented, false); assert.equal(h.listbox(), undefined);
   assert.equal(h.document.activeElement, h.trigger); h.h.unmount();
 });
@@ -160,7 +165,7 @@ test('portaled menus stay above their overlay and skip disabled options for focu
     menu.props.onKeyDown({ key, preventDefault() {} });
     assert.equal(document.activeElement, items[index], key);
   }
-  menu.props.children[3].props.onClick(); tree = h.flush();
+  menu.props.children[1].props.children[3].props.onClick(); tree = h.flush();
   assert.deepEqual(chosen, ['1']);
   assert.equal(tree.props.children[1], null);
   assert.equal(triggerFocus, 1);
@@ -168,5 +173,59 @@ test('portaled menus stay above their overlay and skip disabled options for focu
   escape?.(); tree = h.flush();
   assert.equal(tree.props.children[1], null);
   assert.equal(triggerFocus, 2);
+  h.unmount();
+});
+
+test('search filters visible labels while preserving the current value and resetting on reopen', () => {
+  const h = loadHookModule(new URL('./SingleSelectDropdown.tsx', import.meta.url), {
+    'react-dom': { createPortal: (tree: unknown) => tree },
+    '../hooks/useEscClose': { useEscCloseTopmost() {} },
+  }, {
+    document: { body: {}, addEventListener() {}, removeEventListener() {} },
+    window: {
+      innerWidth: 900, innerHeight: 600,
+      getComputedStyle: () => ({ zIndex: 'auto' }),
+      setTimeout: () => 1, clearTimeout() {}, addEventListener() {}, removeEventListener() {},
+    },
+  });
+  const chosen: string[] = [];
+  const props = {
+    value: 'daily',
+    options: [
+      { value: '', label: 'Enter a new key' },
+      { value: 'daily', label: 'Daily (sk-d…ab12)' },
+      { value: 'work', label: 'Work (sk-w…cd34)' },
+    ],
+    onChange: (value: string) => chosen.push(value),
+    search: { label: 'Search keys', emptyLabel: 'No results' },
+  };
+  let tree = h.render(() => h.exports.SingleSelectDropdown(props));
+  const trigger = tree.props.children[0];
+  trigger.props.ref.current = {
+    getBoundingClientRect: () => ({ left: 40, top: 30, bottom: 76, width: 300 }),
+    focus() {},
+  };
+  trigger.props.onClick();
+  tree = h.flush();
+  const filter = (value: string) => {
+    tree.props.children[1].props.children[0].props.children.props.onChange({ target: { value } });
+    tree = h.flush();
+  };
+  const shown = () => Array.from(tree.props.children[1].props.children[1].props.children,
+    (option: any) => option.props.children[0].props.children);
+  filter(' CD34 ');
+  assert.deepEqual(shown(), ['Work (sk-w…cd34)']);
+  assert.equal(tree.props.children[0].props.children[0].props.children, 'Daily (sk-d…ab12)');
+  assert.deepEqual(chosen, []);
+  filter('missing');
+  assert.deepEqual(shown(), []);
+  assert.equal(tree.props.children[1].props.children[2].props.children, 'No results');
+  filter('work');
+  tree.props.children[1].props.children[1].props.children[0].props.onClick();
+  tree = h.flush();
+  assert.deepEqual(chosen, ['work']);
+  tree.props.children[0].props.onClick();
+  tree = h.flush();
+  assert.equal(shown().length, 3);
   h.unmount();
 });

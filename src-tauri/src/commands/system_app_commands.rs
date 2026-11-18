@@ -553,6 +553,7 @@ pub async fn open_folder(path: String) -> Result<(), String> {
         std::process::Command::new("open")
             .arg(&path)
             .spawn()
+            .map(crate::modules::process::background_child_pid)
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
 
@@ -561,6 +562,7 @@ pub async fn open_folder(path: String) -> Result<(), String> {
         std::process::Command::new("explorer")
             .arg(&path)
             .spawn()
+            .map(crate::modules::process::background_child_pid)
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
 
@@ -569,6 +571,7 @@ pub async fn open_folder(path: String) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(&path)
             .spawn()
+            .map(crate::modules::process::background_child_pid)
             .map_err(|e| format!("打开文件夹失败: {}", e))?;
     }
 
